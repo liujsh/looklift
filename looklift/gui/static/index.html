@@ -61,6 +61,26 @@
 
           <p class="eyebrow analyze-section-label">基本面板参数</p>
           <div id="analyze-basic" class="analyze-basic"></div>
+
+          <p class="eyebrow analyze-section-label">收藏到风格库</p>
+          <div class="field-inline">
+            <input type="text" id="save-look-name" placeholder="给这个风格起个名字" />
+            <button type="button" id="save-look-btn" class="btn btn-secondary">收藏</button>
+          </div>
+
+          <p class="eyebrow analyze-section-label">导出</p>
+          <div class="field-inline">
+            <button type="button" id="export-preset-btn" class="btn btn-secondary" disabled>
+              导出预设（.xmp）
+            </button>
+          </div>
+          <div class="field-inline field-inline-muted">
+            <input type="text" id="export-sidecar-path" placeholder="RAW 文件路径（可选，生成 sidecar）" />
+            <button type="button" id="export-sidecar-btn" class="btn btn-secondary" disabled>
+              导出 sidecar
+            </button>
+          </div>
+          <p class="field-help">先收藏起个名字，才能导出——导出用的正是收藏那一刻的强度。</p>
         </div>
 
         <div id="preview-card" class="card" hidden>
@@ -93,8 +113,10 @@
       <section id="panel-looks" class="panel" hidden>
         <div class="card">
           <h2>风格库</h2>
-          <p class="body-muted">收藏的分析结果会出现在这里，可按当前强度导出为预设或 sidecar。待后续任务填充。</p>
+          <p class="body-muted">收藏的分析结果会出现在这里，可按当前强度导出为预设或 sidecar。</p>
         </div>
+        <p id="looks-empty" class="body-muted looks-empty" hidden>风格库还是空的，去分析第一张照片吧。</p>
+        <div id="looks-grid" class="looks-grid"></div>
       </section>
 
       <section id="panel-settings" class="panel" hidden>
@@ -156,5 +178,6 @@
     <script src="/static/js/app.js" defer></script>
     <script src="/static/js/panels/analyze.js" defer></script>
     <script src="/static/js/panels/preview.js" defer></script>
+    <script src="/static/js/panels/looks.js" defer></script>
   </body>
 </html>

@@ -25,7 +25,11 @@
   /**
    * 切换到指定面板：显示 #panel-<name>、隐藏其余面板（用 hidden 属性），
    * 同步导航按钮的激活态（aria-current），并把当前面板记进 sessionStorage
-   * 供下次打开时恢复。未知面板名会退回默认面板。
+   * 供下次打开时恢复。未知面板名会退回默认面板。派发自定义事件
+   * `looklift:panel-shown`（detail: {name}）——与 `looklift:drop`/
+   * `looklift:analysis-ready` 同一种"自定义事件解耦面板"模式，供
+   * panels/looks.js 在进入风格库面板时拉取 `GET /api/looks` 刷新列表，不用
+   * app.js 反过来认识某个具体面板的业务逻辑。
    * @param {string} name 面板名：analyze / looks / settings
    */
   App.show = function (name) {
@@ -50,6 +54,7 @@
     } catch (err) {
       /* sessionStorage 不可用（如隐私模式）时静默忽略，不影响面板切换本身 */
     }
+    document.dispatchEvent(new CustomEvent("looklift:panel-shown", { detail: { name: name } }));
   };
 
   /**

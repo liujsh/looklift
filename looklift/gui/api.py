@@ -8,27 +8,29 @@ handler 收到的不再只是段参数，而是一个请求上下文 dict：
 的 handler（如 `/api/upload`）和只需要段参数的 handler 用同一套签名，不必再
 分裂成两种 Handler 类型。
 
-本文件只放 handler 表和已落地的业务 handler；未落地的路由（`/api/preview`
-`/api/looks` 等，见 design.md「API 路由一览」）留给对应任务实现，不预先
-占位。
+本文件只放 handler 表和业务 handler；design.md「API 路由一览」列出的路由
+到 GUI-T10（风格库 + 报告页）为止已全部落地。
 """
 from __future__ import annotations
 
 import io
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import Any, Callable
 
 from PIL import Image
 
-from .. import analyzer, config, intensity, render
+from .. import analyzer, config, intensity, render, report, xmp_writer
+from . import lookstore
 from . import tasks
 from . import upload
 
 # handler 返回 `(status, dict)`（JSON 响应）或 `(status, bytes, content_type)`
-# （二进制响应，目前只有 `/api/preview` 用）；`server.py` 按返回值长度分发。
+# （二进制响应，`/api/preview` 的 JPEG 字节、`/report/<name>` 的 HTML 字节）；
+# `server.py` 按返回值长度分发。
 Handler = Callable[[dict], "tuple[int, dict] | tuple[int, bytes, str]"]
 
 _VALID_PROVIDERS = {"auto", "cli", "api"}
@@ -56,6 +58,45 @@ def _validate_image_path(path: Any) -> "tuple[Path, None] | tuple[None, tuple[in
     if image_path.suffix.lower() not in _ANALYZE_ALLOWED_EXTS:
         return None, (400, {"error": f"不支持的图片格式：{image_path.suffix or '（无扩展名）'}"})
     return image_path, None
+
+
+_UNSAFE_LOOK_NAME_CHARS_RE = re.compile(r'[\\/<>:"|?*\x00-\x1f]')
+
+
+def _validate_look_name(name: Any) -> str | None:
+    """风格库名称安全校验：非空、≤100 字符、不含路径分隔符/“..”/Windows 保留
+    字符。不安全字符集与 `upload.py` 的 `sanitize_filename` 一致，但语义相
+    反——那边清洗的是用户看不到、不关心具体字符的上传文件名；这里的名字是
+    用户自己起的、要在 UI 上原样展示出来，静默改写会让"存的名字"和"看到的
+    名字"对不上，所以选择直接拒绝并提示中文原因，而不是静默清洗。所有
+    `/api/looks*` 与 `/report/<name>` 路由入口统一调用这个函数。
+
+    返回 `None` 表示校验通过；否则返回中文错误信息，调用方直接包成
+    `(400, {"error": ...})`。
+    """
+    if not name or not isinstance(name, str):
+        return "风格名称不能为空"
+    if len(name) > 100:
+        return "风格名称过长（最多 100 字符）"
+    if ".." in name:
+        return "风格名称不能包含“..”"
+    if _UNSAFE_LOOK_NAME_CHARS_RE.search(name):
+        return '风格名称包含非法字符（不能有 / \\ < > : " | ? * 等）'
+    return None
+
+
+def _validate_factor(value: Any) -> "tuple[float, None] | tuple[None, tuple[int, dict]]":
+    """校验 0-1 强度 factor 的类型 + 范围。`/api/preview`、`/api/looks`、
+    `/api/looks/<name>/export` 三处都要校验同一份规则，抽成共享函数避免
+    错误文案在三处慢慢漂移。字段本身是否必填由调用方各自决定（`/api/preview`
+    必填；`/api/looks`/`export` 可选，缺省行为各不相同）。
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None, (400, {"error": f"factor 必须是 0-1 之间的数字，收到：{value!r}"})
+    value = float(value)
+    if not (0.0 <= value <= 1.0):
+        return None, (400, {"error": f"factor 必须在 0-1 之间，收到：{value}"})
+    return value, None
 
 
 def _ping(ctx: dict) -> tuple[int, dict]:
@@ -147,9 +188,134 @@ def _get_task(ctx: dict) -> tuple[int, dict]:
     return 200, task
 
 
-def _report_placeholder(ctx: dict) -> tuple[int, dict]:
-    """`GET /report/<name>`：占位。真正的报告渲染在后续任务接入 `report.render_report`。"""
-    return 501, {"error": "报告页尚未实现"}
+def _post_looks(ctx: dict) -> tuple[int, dict]:
+    """`POST /api/looks`：收藏当前分析结果到风格库（tasks.md T13 + design.md
+    API 路由一览、requirements.md U4）。
+
+    body：`name`（必填）、`analysis`（必填，完整分析结果 dict）、`factor`
+    （可选，缺省 1.0——即滑杆在 100% 时收藏，与 CLI `analyze --name` 原样
+    存下 AI 分析结果的行为一致）。收藏前先过 `intensity.scale_analysis` 把
+    当前滑杆强度"烤"进落盘的 json/xmp（U20 验收"滑杆强度带入导出"）——这样
+    后续导出/报告页直接读库里的 analysis，就是用户收藏那一刻看到的强度，
+    不用在导出时再问一遍"要哪个强度"。重名一律拒绝（409），不静默覆盖：
+    收藏是用户主动命名的操作，覆盖用户以为还在的旧风格是危险的静默行为。
+    """
+    body = ctx.get("body")
+    try:
+        payload = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        return 400, {"error": "请求体不是合法 JSON"}
+    if not isinstance(payload, dict):
+        return 400, {"error": "请求体必须是 JSON 对象"}
+
+    name = payload.get("name")
+    name_err = _validate_look_name(name)
+    if name_err:
+        return 400, {"error": name_err}
+
+    analysis = payload.get("analysis")
+    if not isinstance(analysis, dict):
+        return 400, {"error": "缺少 analysis 字段"}
+
+    factor, factor_err = _validate_factor(payload.get("factor", 1.0))
+    if factor_err is not None:
+        return factor_err
+
+    looks_dir = config.looks_dir()
+    if lookstore.exists(looks_dir, name):
+        return 409, {"error": f"风格库中已存在同名条目：{name}"}
+
+    scaled = intensity.scale_analysis(analysis, factor)
+    lookstore.save(looks_dir, name, scaled)
+    return 200, {"name": name}
+
+
+def _get_looks(ctx: dict) -> tuple[int, dict]:
+    """`GET /api/looks`：列出风格库，风格库面板卡片网格的数据源。
+
+    响应包成 `{"looks": [...]}` 而不是裸数组——和本文件其余路由的响应形状
+    （都是 JSON 对象）保持一致，也给以后加分页/总数之类的元数据留了口子，
+    不用破坏性改响应的顶层类型。列表遍历/损坏 json 容错在 `lookstore.py`。
+    """
+    return 200, {"looks": lookstore.list_entries(config.looks_dir())}
+
+
+def _get_look(ctx: dict) -> tuple[int, dict]:
+    """`GET /api/looks/<name>`：读取某个风格的完整 analysis。"""
+    name = ctx["params"]["name"]
+    err = _validate_look_name(name)
+    if err:
+        return 400, {"error": err}
+    analysis = lookstore.load(config.looks_dir(), name)
+    if analysis is None:
+        return 404, {"error": f"风格库中找不到：{name}"}
+    return 200, analysis
+
+
+def _export_look(ctx: dict) -> tuple[int, dict]:
+    """`POST /api/looks/<name>/export`：按（可选覆盖的）强度导出预设/sidecar
+    （tasks.md T13）。
+
+    body：`factor`（可选——不传就直接用库里已经"烤"好的强度，传了就在那基础
+    上再按 `intensity.scale_analysis` 缩放一次）、`sidecar`（可选，RAW 文件
+    路径；给了就在其旁写同名 sidecar，不给就重新生成库内同名 `.xmp` 预设）。
+    两种输出都先过 `xmp_writer.analysis_to_crs`，与 CLI `apply` 命令走的是
+    同一条转换路径，产出的 crs 参数值理应逐字段相等。
+    """
+    name = ctx["params"]["name"]
+    err = _validate_look_name(name)
+    if err:
+        return 400, {"error": err}
+
+    body = ctx.get("body")
+    try:
+        payload = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        return 400, {"error": "请求体不是合法 JSON"}
+    if not isinstance(payload, dict):
+        return 400, {"error": "请求体必须是 JSON 对象"}
+
+    looks_dir = config.looks_dir()
+    analysis = lookstore.load(looks_dir, name)
+    if analysis is None:
+        return 404, {"error": f"风格库中找不到：{name}"}
+
+    if payload.get("factor") is not None:
+        factor, factor_err = _validate_factor(payload["factor"])
+        if factor_err is not None:
+            return factor_err
+        analysis = intensity.scale_analysis(analysis, factor)
+
+    sidecar = payload.get("sidecar")
+    if sidecar:
+        raw_path = Path(sidecar)
+        if not raw_path.is_file():
+            return 400, {"error": f"RAW 文件不存在：{sidecar}"}
+        crs = xmp_writer.analysis_to_crs(analysis)
+        out = xmp_writer.write_sidecar(crs, raw_path)
+        return 200, {"sidecar": str(out.resolve())}
+
+    out = lookstore.export_preset(looks_dir, name, analysis)
+    return 200, {"preset": str(out.resolve())}
+
+
+def _report(ctx: dict) -> "tuple[int, dict] | tuple[int, bytes, str]":
+    """`GET /report/<name>`：独立报告页（U8）——直接是 `report.render_report`
+    产出的自包含 HTML，不在 SPA 里重新实现一遍渲染逻辑（design.md 决策 3）。
+    前端"打开报告"按钮用 `window.open` 打开这个路径：pywebview 窗口模式下
+    WebView2 支持 `window.open` 弹出原生新窗口，browser 模式下就是普通新
+    标签，两种模式前端写同一行代码，不必调用 Python 侧的
+    `webview.create_window`（那样就要区分模式，维护两套前端逻辑）。
+    """
+    name = ctx["params"]["name"]
+    err = _validate_look_name(name)
+    if err:
+        return 400, {"error": err}
+    analysis = lookstore.load(config.looks_dir(), name)
+    if analysis is None:
+        return 404, {"error": f"风格库中找不到：{name}"}
+    html = report.render_report(analysis, name)
+    return 200, html.encode("utf-8"), "text/html; charset=utf-8"
 
 
 def _upload(ctx: dict) -> tuple[int, dict]:
@@ -265,12 +431,9 @@ def _preview(ctx: dict) -> "tuple[int, dict] | tuple[int, bytes, str]":
 
     if "factor" not in payload:
         return 400, {"error": "缺少 factor 字段"}
-    factor = payload["factor"]
-    if isinstance(factor, bool) or not isinstance(factor, (int, float)):
-        return 400, {"error": f"factor 必须是 0-1 之间的数字，收到：{factor!r}"}
-    factor = float(factor)
-    if not (0.0 <= factor <= 1.0):
-        return 400, {"error": f"factor 必须在 0-1 之间，收到：{factor}"}
+    factor, err = _validate_factor(payload["factor"])
+    if err is not None:
+        return err
 
     jpeg_bytes = _render_preview(image_path, analysis, factor)
     return 200, jpeg_bytes, "image/jpeg"
@@ -284,5 +447,9 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("POST", "/api/upload"): _upload,
     ("POST", "/api/analyze"): _analyze,
     ("POST", "/api/preview"): _preview,
-    ("GET", "/report/<name>"): _report_placeholder,
+    ("POST", "/api/looks"): _post_looks,
+    ("GET", "/api/looks"): _get_looks,
+    ("GET", "/api/looks/<name>"): _get_look,
+    ("POST", "/api/looks/<name>/export"): _export_look,
+    ("GET", "/report/<name>"): _report,
 }

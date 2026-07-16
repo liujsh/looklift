@@ -123,9 +123,13 @@ def test_api_ping(running_server):
     assert json.loads(body) == {"ok": True}
 
 
-def test_report_placeholder_is_501(running_server):
-    status, _, body = _get(running_server, "/report/some-look")
-    assert status == 501
+def test_report_route_unknown_name_returns_404(running_server):
+    """GUI-T10 落地后 `/report/<name>` 不再是占位 501——server 层只验证路由确实
+    分发到了真实 handler（未知风格名 → 404 中文错误）；`report.render_report`
+    等价性的详细断言在 tests/test_gui_looks_api.py（那边用 monkeypatch.chdir
+    隔离了 looks_dir，这里不重复）。"""
+    status, _, body = _get(running_server, "/report/definitely-not-a-real-look-xyz123")
+    assert status == 404
     assert "error" in json.loads(body)
 
 

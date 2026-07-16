@@ -359,6 +359,84 @@
   accent-color: var(--accent);
 }
 
+/* ─── 分析结果:收藏到风格库 / 导出(GUI-T10)──────────────────────────────
+ * 控件物理上长在分析结果卡片里,业务逻辑在 panels/looks.js(风格库领域,见
+ * 该文件顶部注释)。一行输入 + 按钮的紧凑排布,sidecar 那一行用
+ * .field-inline-muted 弱化(字号更小、透明度更低),呼应它是"弱化,一行"的
+ * 次要操作。
+ */
+.field-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.field-inline input[type="text"] {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+}
+
+.field-inline-muted {
+  margin-block-start: var(--space-2);
+  opacity: 0.85;
+}
+
+.field-inline-muted input,
+.field-inline-muted button {
+  font-size: var(--text-xs);
+}
+
+.btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ─── 风格库面板:卡片网格(GUI-T10,U4/U8)────────────────────────────────
+ * 名字用衬线标题(继承 .card h3 的 --font-display),[预设✓] 徽标复用
+ * vendor/claude 的 .badge-success 配方,不额外定义新的徽标样式。
+ */
+.looks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-4);
+}
+
+.looks-empty {
+  padding: var(--space-8) 0;
+  text-align: center;
+}
+
+.look-card-name {
+  margin: 0;
+}
+
+.look-card-badges {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.look-card-summary {
+  font-size: var(--text-sm);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.look-card-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-block-start: auto;
+  padding-block-start: var(--space-2);
+}
+
 /* ─── 工具类：提示条（App.toast）────────────────────────────────────── */
 .toast-root {
   position: fixed;
