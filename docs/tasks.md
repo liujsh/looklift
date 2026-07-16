@@ -9,6 +9,7 @@
 ### T1 Provider 抽象重构
 - [ ] `providers.py`:VisionProvider 接口;现有 cli/api 后端迁入(行为不变,测试回归)
 - [ ] `~/.looklift/config.toml` 配置读取(provider/key/base_url/model),env 覆盖
+- [ ] 风格库默认目录迁至 `~/.looklift/looks/`(cwd 下有 looks/ 时优先,向后兼容)
 
 ### T2 本地近似渲染 preview
 - [ ] `render.py`:按设计文档顺序实现参数→图像的近似渲染(Pillow+numpy)

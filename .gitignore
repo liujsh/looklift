@@ -20,3 +20,5 @@ looks/
 
 # 构建产物
 *.egg-info/
+
+test-assets/
