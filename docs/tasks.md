@@ -1,50 +1,39 @@
 # looklift 任务清单
 
-## v0.2(本迭代)
+> 路线图与验收标准见 [requirements.md](requirements.md)。这里只放当前迭代的可执行任务和历史记录。
 
-### T1 打包
-- [x] pyproject.toml(metadata、依赖、console script `looklift`)
-- [x] 验证 `pip install -e .` 后 `looklift --help` 可用
+## v0.3(下一迭代):像 —— 精度闭环
 
-### T2 多图合成风格
-- [x] `analyzer.analyze` 支持 `edited: list`,多图 prompt(cli/api 两后端)
-- [x] CLI `analyze` 改 `nargs="+"`,>5 张报错,多图 + `--original` 报错
-- [x] 冒烟测试(单图路径回归 + 多图一次真实调用)
+### T1 Provider 抽象重构
+- [ ] `providers.py`:VisionProvider 接口;现有 cli/api 后端迁入(行为不变,测试回归)
+- [ ] `~/.looklift/config.toml` 配置读取(provider/key/base_url/model),env 覆盖
 
-### T3 HTML 风格报告
-- [x] 新模块 `report.py`:`render_report(analysis, name) -> html`
-- [x] SVG 曲线图(参考线、平滑曲线、控制点)
-- [x] 基本面板/HSL/颜色分级表格,色块可视化
-- [x] CLI `report <风格名>` 子命令,输出 `looks/<名字>.html`
-- [x] 用 grassland 模版实测,浏览器检查渲染
+### T2 本地近似渲染 preview
+- [ ] `render.py`:按设计文档顺序实现参数→图像的近似渲染(Pillow+numpy)
+- [ ] `looklift preview <look> <照片> [-o 输出]`:渲染套用效果图
+- [ ] 还原度评分 `score(rendered, target) -> 0-100`
+- [ ] 单元测试:各调整项方向正确(如 exposure>0 → 更亮)
 
-### T4 测试与 CI
-- [x] tests/test_xmp_writer.py
-- [x] tests/test_xmp_reader.py
-- [x] tests/test_analyzer.py(_normalize/_extract_json/resolve_backend)
-- [x] tests/test_cli.py(_resolve_template/_expand_raws/apply 端到端)
-- [x] .github/workflows/ci.yml(ubuntu+windows)
-- [x] 本地 pytest 全绿
+### T3 refine 自动闭环
+- [ ] `refine --auto [N] --source 原片 --target 目标`:渲染→评分→AI 修正循环
+- [ ] 收敛判定(提升<阈值提前停止),每轮打印评分
+- [ ] 真实照片端到端验证:3 轮内评分上升
 
-### T5 收尾
-- [x] README 同步新命令/安装方式
-- [x] 版本号 0.2.0
-- [x] 提交推送,确认 CI 通过
+### T4 收尾
+- [ ] README/文档同步,版本 0.3.0,CI 绿,推送
 
 ## Backlog(未排期)
 
-- 本地近似渲染预览(`preview` 命令,Pillow 模拟曲线/白平衡/饱和度,效果打折需验证)
-- 批量分析目录并自动聚类风格
-- 风格报告加 before/after 对比图(需用户提供可公开图片)
-- GUI(拖拽图片出报告)
+- 手机 DNG 预设(LR Mobile 免费版可用)(U18)
+- 风格报告 before/after 对比图(需可公开图片)
 - Capture One 风格文件导出
+- 目录批量分析自动聚类(排在 v0.5+)
 
-## 已完成(v0.1,2026-07-16)
+## 历史
 
-- [x] analyze:AI 逆向推断(单图/原片对照),中文讲解
-- [x] 双后端:本地 claude CLI(stdin 传 prompt)/ Anthropic API(结构化输出)
-- [x] read:JPEG 内嵌 XMP 精确提取
-- [x] xmp_writer:LR 预设 + RAW sidecar 生成
-- [x] looks/ 风格库、apply、list、sidecar 通配符
-- [x] refine:迭代校准(备份+重生成预设)
-- [x] GitHub 仓库(MIT,topics,README)
+### v0.2(2026-07-16)✅
+打包(looklift 命令)/ 多图合成风格 / HTML 风格报告(SVG 曲线)/ 23 pytest + 双平台 CI / docs 三件套
+
+### v0.1(2026-07-16)✅
+analyze(单图/原片对照,双后端)/ read(内嵌 XMP 提取)/ 预设+sidecar 生成 /
+looks/ 风格库 + apply/list / refine 手动校准 / GitHub 仓库(MIT)
