@@ -9,7 +9,7 @@ def _flat_gray(v=0.5, size=(32, 32)):
 
 def _zero_analysis(sample_analysis):
     """把 fixture 里的所有调整清零,便于单项测试。"""
-    import copy, json
+    import copy
     a = copy.deepcopy(sample_analysis)
     a["basic"] = {k: 0 for k in a["basic"]}
     a["tone_curve"] = []
@@ -113,3 +113,21 @@ def test_hsv_gray_has_zero_saturation():
     hsv = render._rgb_to_hsv(arr)
     assert np.allclose(hsv[..., 1], 0.0, atol=1e-3)
     assert np.allclose(hsv[..., 2], 0.4, atol=1e-3)
+
+
+# --- 补充:color_grading 回归测试(reviewer 发现的两处问题) ---
+
+def test_color_grading_saturation_keeps_float32(sample_analysis):
+    """_apply_color_grading 混色分支不得把 dtype 提升为 float64。"""
+    a = _zero_analysis(sample_analysis)
+    a["color_grading"]["shadows"] = {"hue": 210, "saturation": 40, "luminance": 0}
+    out = render._apply_color_ops(_flat_gray(0.3), a)
+    assert out.dtype == np.float32
+
+
+def test_color_grading_luminance_only_brightens_without_saturation(sample_analysis):
+    """saturation=0 时 luminance 调整不应被跳过(阴影区 +80 应提亮暗部)。"""
+    a = _zero_analysis(sample_analysis)
+    a["color_grading"]["shadows"] = {"hue": 0, "saturation": 0, "luminance": 80}
+    out = render._apply_color_ops(_flat_gray(0.15), a)
+    assert out.mean() > 0.15 + 0.03

@@ -147,7 +147,7 @@ def _apply_color_ops(arr: np.ndarray, analysis: dict) -> np.ndarray:
 
     # 9) 颜色分级:亮度加权叠色(shadows/midtones/highlights/global_)
     arr = _apply_color_grading(arr, analysis.get("color_grading", {}))
-    return np.clip(arr, 0, 1)
+    return np.clip(arr, 0, 1).astype(np.float32)
 
 
 def _apply_color_grading(arr, cg):
@@ -159,12 +159,16 @@ def _apply_color_grading(arr, cg):
     for zone, w in weights.items():
         z = cg.get(zone, {})
         s = z.get("saturation", 0)
-        if not s:
-            continue
-        hue = np.deg2rad(z.get("hue", 0))
-        tint = np.array([np.cos(hue), np.cos(hue - 2.0944), np.cos(hue - 4.1888)]) * 0.5 + 0.5
-        arr = arr + w * (s / 100) * 0.3 * (tint - arr)
         lum = z.get("luminance", 0)
+        if not s and not lum:
+            continue  # 饱和度与明亮度都为 0 才整体跳过,二者应可独立生效
+        if s:
+            hue = np.deg2rad(z.get("hue", 0))
+            tint = (np.array(
+                [np.cos(hue), np.cos(hue - 2.0944), np.cos(hue - 4.1888)],
+                dtype=np.float32,
+            ) * 0.5 + 0.5)
+            arr = arr + w * (s / 100) * 0.3 * (tint - arr)
         if lum:
             arr = arr + w * lum / 100 * 0.2
     return arr
