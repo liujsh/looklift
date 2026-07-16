@@ -131,6 +131,33 @@ def test_post_looks_missing_analysis_returns_400(running_server):
     assert "error" in data
 
 
+def test_post_looks_partial_write_failure_does_not_orphan_name(running_server, tmp_path, sample_analysis):
+    """fold-in 回归（v0.4 收尾）：`basic.exposure` 混进非数值这类
+    `_validate_analysis` 结构校验挡不住的坏值（那层只挡"会被当受信任枚举/
+    固定类型使用"的字段，不重新实现完整 schema），会一路走到
+    `lookstore.save` → `xmp_writer.analysis_to_crs` 才报错。`save` 修复前
+    先落 json 再算 crs，这里会在目录里留下孤儿 `.json`，导致这个名字被
+    `lookstore.exists()` 永久判定为"已占用"，用带修正值的合法 analysis
+    重试同一个名字会被 409 挡死、没有恢复手段。"""
+    broken = json.loads(json.dumps(sample_analysis))
+    broken["basic"]["exposure"] = "x"
+
+    status, data = _request(running_server, "POST", "/api/looks", {"name": "recoverable", "analysis": broken})
+    assert status >= 400
+    assert "error" in data
+
+    looks_dir = tmp_path / "looks"
+    assert not (looks_dir / "recoverable.json").exists()
+    assert not (looks_dir / "recoverable.xmp").exists()
+
+    # 名字没有被孤儿文件占用：用合法 analysis 重试同一个名字必须成功（不是 409）。
+    status2, data2 = _request(
+        running_server, "POST", "/api/looks", {"name": "recoverable", "analysis": sample_analysis}
+    )
+    assert status2 == 200
+    assert data2["name"] == "recoverable"
+
+
 # ─── POST /api/looks：analysis 结构校验（code review Critical/XSS 修复）────
 #
 # `GET /report/<name>` 现在是活路由，`report.py` 的 `_HSL_CN.get(color,

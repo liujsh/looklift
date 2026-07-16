@@ -35,10 +35,13 @@ def exists(looks_dir: Path, name: str) -> bool:
     return json_path(looks_dir, name).is_file()
 
 
-def _write_preset(looks_dir: Path, name: str, analysis: dict[str, Any]) -> Path:
+def _write_preset_from_crs(looks_dir: Path, name: str, crs: dict[str, Any]) -> Path:
     looks_dir.mkdir(parents=True, exist_ok=True)
-    crs = xmp_writer.analysis_to_crs(analysis)
     return xmp_writer.write_preset(crs, name, xmp_path(looks_dir, name))
+
+
+def _write_preset(looks_dir: Path, name: str, analysis: dict[str, Any]) -> Path:
+    return _write_preset_from_crs(looks_dir, name, xmp_writer.analysis_to_crs(analysis))
 
 
 def save(looks_dir: Path, name: str, analysis: dict[str, Any]) -> None:
@@ -46,12 +49,20 @@ def save(looks_dir: Path, name: str, analysis: dict[str, Any]) -> None:
     滑杆强度 `intensity.scale_analysis` 缩放过的结果——这里不做缩放，只管
     写）+ 对应的 `<name>.xmp` 预设。调用方需自行做好重名校验，这里不检查、
     不静默覆盖（`Path.write_text` 本身就是覆盖写，交给调用方在写之前挡住）。
+
+    fold-in 修复（v0.4 收尾）：`analysis_to_crs` 提前到任何落盘动作之前调用
+    ——若 `analysis` 混进非数值字段（如 `basic.exposure = "x"`），这里会在
+    两个文件都还没写之前就抛出 `ValueError`，不会出现"json 已落盘、xmp 报错
+    半路失败"的孤儿文件；`lookstore.exists()` 只看 `.json` 是否存在，孤儿
+    json 会让这个名字永久占用、重试同一个名字会被 `POST /api/looks` 的 409
+    重名检查挡死，用户没有任何办法恢复。
     """
+    crs = xmp_writer.analysis_to_crs(analysis)
     looks_dir.mkdir(parents=True, exist_ok=True)
     json_path(looks_dir, name).write_text(
         json.dumps(analysis, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    _write_preset(looks_dir, name, analysis)
+    _write_preset_from_crs(looks_dir, name, crs)
 
 
 def load(looks_dir: Path, name: str) -> dict[str, Any] | None:
