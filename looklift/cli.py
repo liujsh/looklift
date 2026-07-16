@@ -26,9 +26,11 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import analyzer, report, xmp_reader, xmp_writer
+from . import analyzer, config, lut, render, report, xmp_reader, xmp_writer
 
-LOOKS_DIR = Path("looks")  # 风格库目录(相对当前工作目录)
+
+def _looks_dir() -> Path:
+    return config.looks_dir()
 
 
 def _resolve_template(name_or_path: str) -> Path:
@@ -36,10 +38,11 @@ def _resolve_template(name_or_path: str) -> Path:
     p = Path(name_or_path)
     if p.is_file():
         return p
-    candidate = LOOKS_DIR / f"{name_or_path}.json"
+    looks_dir = _looks_dir()
+    candidate = looks_dir / f"{name_or_path}.json"
     if candidate.is_file():
         return candidate
-    raise FileNotFoundError(f"找不到模版: {name_or_path}(也不在 {LOOKS_DIR}/ 风格库中)")
+    raise FileNotFoundError(f"找不到模版: {name_or_path}(也不在 {looks_dir}/ 风格库中)")
 
 
 def _expand_raws(patterns: list[str] | None) -> list[str]:
@@ -102,8 +105,9 @@ def _emit_outputs(crs: dict, args) -> None:
         if args.preset:
             out = Path(args.preset)
         else:
-            LOOKS_DIR.mkdir(exist_ok=True)
-            out = LOOKS_DIR / f"{name}.xmp"
+            d = _looks_dir()
+            d.mkdir(parents=True, exist_ok=True)
+            out = d / f"{name}.xmp"
         path = xmp_writer.write_preset(crs, name, out)
         print(f"\n[预设] 已生成: {path}  (Lightroom → 预设面板 → 导入预设)")
     for raw in _expand_raws(getattr(args, "sidecar", None)):
@@ -121,8 +125,9 @@ def cmd_analyze(args) -> int:
 
     json_out = args.json
     if not json_out and args.name:
-        LOOKS_DIR.mkdir(exist_ok=True)
-        json_out = str(LOOKS_DIR / f"{args.name}.json")
+        d = _looks_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        json_out = str(d / f"{args.name}.json")
     if json_out:
         Path(json_out).write_text(
             json.dumps(analysis, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -165,14 +170,15 @@ def cmd_apply(args) -> int:
 
 
 def cmd_list(args) -> int:
-    if not LOOKS_DIR.is_dir():
-        print(f"风格库为空({LOOKS_DIR}/ 不存在)。用 analyze --name 某某 来收藏第一个风格。")
+    looks_dir = _looks_dir()
+    if not looks_dir.is_dir():
+        print(f"风格库为空({looks_dir}/ 不存在)。用 analyze --name 某某 来收藏第一个风格。")
         return 0
-    templates = sorted(LOOKS_DIR.glob("*.json"))
+    templates = sorted(looks_dir.glob("*.json"))
     if not templates:
         print("风格库为空。用 analyze --name 某某 来收藏第一个风格。")
         return 0
-    print(f"风格库({LOOKS_DIR}/,共 {len(templates)} 个):\n")
+    print(f"风格库({looks_dir}/,共 {len(templates)} 个):\n")
     for t in templates:
         try:
             data = json.loads(t.read_text(encoding="utf-8"))
@@ -198,11 +204,48 @@ def cmd_report(args) -> int:
     return 0
 
 
+def cmd_preview(args) -> int:
+    from PIL import Image
+    template = _resolve_template(args.template)
+    analysis = json.loads(template.read_text(encoding="utf-8"))
+    img = Image.open(args.photo)
+    out = Path(args.out) if args.out else Path(args.photo).with_stem(Path(args.photo).stem + "_preview")
+    render.render(img, analysis).save(out, quality=92)
+    print(f"[preview] 已生成: {out}  (本地近似渲染,方向参考,不等于 LR 效果)")
+    if args.target:
+        s = render.score(Image.open(out), Image.open(args.target))
+        print(f"[评分] 与目标图相似度: {s}/100")
+    return 0
+
+
+def cmd_export_lut(args) -> int:
+    template = _resolve_template(args.template)
+    analysis = json.loads(template.read_text(encoding="utf-8"))
+    out = Path(args.out) if args.out else template.with_suffix(".cube")
+    lut.export_cube(analysis, out, size=args.size)
+    print(f"[LUT] 已生成: {out}  (达芬奇/剪映导入;曝光等全局色彩已包含,暗角/颗粒不进 LUT)")
+    return 0
+
+
 def cmd_refine(args) -> int:
     template = _resolve_template(args.template)
     current = json.loads(template.read_text(encoding="utf-8"))
-    print(f"正在校准 {template.stem} ...(后端: {analyzer.resolve_backend(args.backend)})")
-    updated = analyzer.refine(current, args.attempt, args.target, backend=args.backend)
+    if args.auto is not None:
+        if not args.source:
+            print("错误: --auto 需要同时提供 --source 原片。", file=sys.stderr)
+            return 1
+        from . import autorefine
+        print(f"自动校准 {template.stem}(最多 {args.auto} 轮,后端: {analyzer.resolve_backend(args.backend)})")
+        updated, history = autorefine.auto_refine(
+            current, args.source, args.target, rounds=args.auto, backend=args.backend,
+            on_round=lambda i, s: print(f"  第 {i} 轮评分: {s}/100"))
+        print(f"评分曲线: {' → '.join(f'{s:g}' for s in history)}")
+    else:
+        if not args.attempt:
+            print("错误: 手动模式需要 --attempt 效果图(或改用 --auto N --source 原片)。", file=sys.stderr)
+            return 1
+        print(f"正在校准 {template.stem} ...(后端: {analyzer.resolve_backend(args.backend)})")
+        updated = analyzer.refine(current, args.attempt, args.target, backend=args.backend)
     _print_analysis(updated)
 
     backup = template.with_suffix(".json.bak")
@@ -270,10 +313,26 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("-o", "--out", help="输出路径,默认与模版同名 .html")
     p.set_defaults(func=cmd_report)
 
+    p = sub.add_parser("preview", help="本地近似渲染:预览模版套用效果(不开 LR)")
+    p.add_argument("template", help="模版文件路径,或风格库中的名字")
+    p.add_argument("photo", help="要套用的照片(sRGB JPEG/PNG)")
+    p.add_argument("-o", "--out", help="输出路径,默认 <照片>_preview.jpg")
+    p.add_argument("--target", help="可选:目标成片,输出相似度评分")
+    p.set_defaults(func=cmd_preview)
+
+    p = sub.add_parser("export-lut", help="导出 .cube 3D LUT(达芬奇/剪映给视频调色)")
+    p.add_argument("template", help="模版文件路径,或风格库中的名字")
+    p.add_argument("-o", "--out", help="输出路径,默认与模版同名 .cube")
+    p.add_argument("--size", type=int, default=33, help="LUT 网格大小,默认 33")
+    p.set_defaults(func=cmd_export_lut)
+
     p = sub.add_parser("refine", help="迭代校准:对比套用效果和目标成片,修正模版参数")
     p.add_argument("template", help="要校准的模版(路径或风格库名字)")
-    p.add_argument("--attempt", required=True, help="套用当前参数后导出的效果图")
+    p.add_argument("--attempt", help="套用当前参数后导出的效果图(手动模式必需;--auto 模式下不需要)")
     p.add_argument("--target", required=True, help="想要达到的目标成片")
+    p.add_argument("--auto", type=int, nargs="?", const=3, default=None, metavar="N",
+                   help="自动闭环:本地渲染→评分→AI 修正,循环最多 N 轮(不带值默认 3),需配 --source")
+    p.add_argument("--source", help="原片(--auto 自动模式的渲染起点,配合 --auto 使用)")
     p.add_argument("--sidecar", action="append", metavar="RAW", help="顺便用新参数生成 sidecar")
     p.add_argument("--backend", choices=["auto", "cli", "api"], default="auto")
     p.set_defaults(func=cmd_refine)
