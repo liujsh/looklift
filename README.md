@@ -1,6 +1,7 @@
 # looklift 📷
 
 > Lift the look — 把大师作品的"look"提取出来。
+> LUT 工具给你黑盒,looklift 给你白盒:参数可改、原理可学、预设可攒。100% 本地,照片不上传。
 
 分析照片的调色/影调参数,生成 Lightroom 可导入的预设和 RAW sidecar。
 喂一张喜欢的成片,AI(Claude 视觉模型)逆向推断出基本面板、HSL、颜色分级、曲线等全套参数,
