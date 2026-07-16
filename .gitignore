@@ -17,3 +17,6 @@ TestLook.xmp
 
 # 个人风格库
 looks/
+
+# 构建产物
+*.egg-info/

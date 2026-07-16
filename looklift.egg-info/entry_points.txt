@@ -1,2 +1,0 @@
-[console_scripts]
-looklift = looklift.cli:main
