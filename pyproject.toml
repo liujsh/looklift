@@ -23,5 +23,11 @@ Repository = "https://github.com/liujsh/looklift"
 [project.scripts]
 looklift = "looklift.cli:main"
 
+[project.optional-dependencies]
+gui = ["pywebview>=5,<6"]
+
 [tool.setuptools]
-packages = ["looklift"]
+packages = ["looklift", "looklift.gui"]
+
+[tool.setuptools.package-data]
+looklift = ["gui/static/**"]
