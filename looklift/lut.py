@@ -19,7 +19,7 @@ def export_cube(analysis: dict, out: str | Path, size: int = 33) -> Path:
     mapped = _apply_color_ops(grid, analysis).reshape(-1, 3)
 
     lines = [
-        f'TITLE "looklift"',
+        'TITLE "looklift"',
         f"LUT_3D_SIZE {size}",
         "DOMAIN_MIN 0.0 0.0 0.0",
         "DOMAIN_MAX 1.0 1.0 1.0",

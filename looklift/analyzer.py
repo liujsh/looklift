@@ -2,8 +2,9 @@
 
 两种后端:
 - "cli": 调用本地 Claude Code CLI(`claude -p`),走 Claude Code 登录额度,无需 API key
-- "api": 调用 Anthropic API(需要 ANTHROPIC_API_KEY),有结构化输出保证
-- "auto": 有 ANTHROPIC_API_KEY 则用 api,否则用 cli
+- "api": 调用 Anthropic API(需要 API key),有结构化输出保证
+- "auto": config.toml 显式指定 provider 时优先;否则有 API key(环境变量或 config.toml)
+  则用 api,没有则退回本地 claude CLI
 """
 
 from __future__ import annotations

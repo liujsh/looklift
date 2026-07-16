@@ -132,6 +132,9 @@ def test_refine_auto_end_to_end(tmp_path, sample_analysis, monkeypatch, capsys):
     monkeypatch.setattr(autorefine.render, "score", lambda rendered, target_img: next(scores))
     monkeypatch.setattr(autorefine.analyzer, "refine",
                         lambda current, attempt, target, backend="auto": copy.deepcopy(current))
+    # cmd_refine 打印进度横幅前会调 analyzer.resolve_backend() 探测后端;
+    # CI 机器上既无 claude CLI 也无 ANTHROPIC_API_KEY,不 mock 会导致 RuntimeError。
+    monkeypatch.setattr(cli.analyzer, "resolve_backend", lambda b="auto": "cli")
 
     rc = cli.main(["refine", str(template), "--target", str(tgt), "--source", str(src), "--auto", "3"])
     assert rc == 0

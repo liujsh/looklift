@@ -90,8 +90,9 @@ class AnthropicProvider:
             else:
                 content.append({"type": "text", "text": f"这是{b['label']}:"})
                 content.append(_image_block(b["path"]))
-        client = anthropic.Anthropic()
-        model = config.load_config()["model"] or MODEL
+        cfg = config.load_config()
+        client = anthropic.Anthropic(api_key=cfg["api_key"] or None, base_url=cfg["base_url"] or None)
+        model = cfg["model"] or MODEL
         with client.messages.stream(
             model=model,
             max_tokens=16000,
@@ -133,7 +134,7 @@ def get_provider(backend: str = "auto") -> VisionProvider:
         if configured in ("cli", "api"):
             backend = configured
     if backend == "auto":
-        if os.environ.get("ANTHROPIC_API_KEY"):
+        if os.environ.get("ANTHROPIC_API_KEY") or config.load_config()["api_key"]:
             backend = "api"
         elif shutil.which("claude"):
             backend = "cli"
