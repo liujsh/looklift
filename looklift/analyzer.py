@@ -8,17 +8,12 @@
 
 from __future__ import annotations
 
-import base64
-import io
 import json
-import os
-import shutil
-import subprocess
 from pathlib import Path
 from typing import Any
 
-MODEL = "claude-opus-4-8"
-MAX_EDGE = 1568  # 控制图片 token 消耗;分析色调影调无需原始分辨率
+from . import providers
+from .providers import MODEL, MAX_EDGE, _extract_json  # 兼容旧引用
 
 _COLOR_KEYS = ["red", "orange", "yellow", "green", "aqua", "blue", "purple", "magenta"]
 
@@ -148,15 +143,9 @@ SYSTEM_PROMPT = """你是一位资深的摄影后期调色师,精通 Adobe Light
 # ---------------------------------------------------------------- 后端选择
 
 def resolve_backend(backend: str = "auto") -> str:
-    if backend == "auto":
-        if os.environ.get("ANTHROPIC_API_KEY"):
-            return "api"
-        if shutil.which("claude"):
-            return "cli"
-        raise RuntimeError(
-            "未找到可用后端:请设置 ANTHROPIC_API_KEY,或安装 Claude Code CLI(claude 命令)。"
-        )
-    return backend
+    """兼容入口:返回 auto 解析后的后端名(测试与 cli 打印用)。"""
+    p = providers.get_provider(backend)
+    return "api" if isinstance(p, providers.AnthropicProvider) else "cli"
 
 
 MAX_IMAGES = 5
@@ -179,11 +168,27 @@ def analyze(
     if len(images) > 1 and original is not None:
         raise ValueError("多张成片模式下不支持 --original 原片对照。")
 
-    backend = resolve_backend(backend)
-    if backend == "cli":
-        result = _analyze_via_cli(images, original, style_hint)
+    blocks: list[dict] = []
+    if original is not None:
+        blocks += [
+            {"type": "image", "path": Path(original), "label": "修图前的原片"},
+            {"type": "image", "path": Path(images[0]), "label": "后期完成的成片"},
+            {"type": "text", "text": "请精确对比原片和成片,推断出从原片调到成片所用的 Lightroom 参数。"},
+        ]
+    elif len(images) == 1:
+        blocks += [
+            {"type": "image", "path": Path(images[0]), "label": "后期完成的照片"},
+            {"type": "text", "text": "请分析这张后期完成的照片,推断出复现这种色调风格所需的 Lightroom 参数。"},
+        ]
     else:
-        result = _analyze_via_api(images, original, style_hint)
+        blocks += [
+            {"type": "image", "path": Path(p), "label": f"成片 {i}"} for i, p in enumerate(images, 1)
+        ]
+        blocks.append({"type": "text", "text": _MULTI_TASK})
+    if style_hint:
+        blocks.append({"type": "text", "text": f"补充信息:{style_hint}"})
+
+    result = providers.get_provider(backend).complete(SYSTEM_PROMPT, blocks, ANALYSIS_SCHEMA)
     return _normalize(result)
 
 
@@ -219,151 +224,6 @@ def _normalize(analysis: dict[str, Any]) -> dict[str, Any]:
     return analysis
 
 
-# ---------------------------------------------------------------- CLI 后端
-
-def _analyze_via_cli(
-    images: list[str | Path],
-    original: str | Path | None,
-    style_hint: str | None,
-) -> dict[str, Any]:
-    """通过本地 Claude Code CLI 分析,走 Claude Code 登录额度。"""
-    claude = shutil.which("claude")
-    if not claude:
-        raise RuntimeError("未找到 claude 命令,请先安装 Claude Code CLI。")
-
-    parts = [SYSTEM_PROMPT, ""]
-    if original is not None:
-        parts.append(f"请先用 Read 工具查看原片: {Path(original).resolve()}")
-        parts.append(f"再用 Read 工具查看成片: {Path(images[0]).resolve()}")
-        parts.append("然后精确对比两者,推断出从原片调到成片所用的 Lightroom 参数。")
-    elif len(images) == 1:
-        parts.append(f"请用 Read 工具查看这张后期完成的照片: {Path(images[0]).resolve()}")
-        parts.append("然后推断出复现这种色调风格所需的 Lightroom 参数。")
-    else:
-        parts.append(f"请用 Read 工具依次查看这 {len(images)} 张后期完成的成片:")
-        parts.extend(f"  {i + 1}. {Path(p).resolve()}" for i, p in enumerate(images))
-        parts.append(_MULTI_TASK)
-    if style_hint:
-        parts.append(f"补充信息:{style_hint}")
-    return _run_cli(claude, parts)
-
-
-def _run_cli(claude: str, parts: list[str]) -> dict[str, Any]:
-    """拼上 schema 要求后调用 claude CLI,返回解析出的 JSON。"""
-    parts = parts + [
-        "最终回答必须且只能是一个 JSON 对象(不要 markdown 代码块),严格符合以下 JSON Schema:\n"
-        + json.dumps(ANALYSIS_SCHEMA, ensure_ascii=False)
-    ]
-    prompt = "\n".join(parts)
-
-    # prompt 从 stdin 传入:Windows 上 claude 是 .CMD 包装,命令行参数有 ~8K 长度上限,
-    # 带完整 JSON Schema 的 prompt 会被截断
-    proc = subprocess.run(
-        [claude, "-p", "--output-format", "json", "--allowedTools", "Read"],
-        input=prompt,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        timeout=600,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(f"claude CLI 调用失败:\n{proc.stderr or proc.stdout}")
-
-    try:
-        envelope = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        raise RuntimeError(
-            f"claude CLI 返回了非 JSON 输出:\nstdout: {proc.stdout[:500]}\nstderr: {proc.stderr[:500]}"
-        ) from None
-    result_text = envelope.get("result", "")
-    return _extract_json(result_text)
-
-
-def _extract_json(text: str) -> dict[str, Any]:
-    """从文本中提取第一个完整的 JSON 对象。"""
-    text = text.strip()
-    if text.startswith("```"):
-        text = text.strip("`")
-        if text.startswith("json"):
-            text = text[4:]
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1:
-        raise ValueError(f"未能从模型输出中解析出 JSON:\n{text[:500]}")
-    return json.loads(text[start : end + 1])
-
-
-# ---------------------------------------------------------------- API 后端
-
-def _encode_image(path: str | Path) -> tuple[str, str]:
-    """读取图片,必要时缩小,返回 (base64, media_type)。"""
-    from PIL import Image
-
-    img = Image.open(path)
-    if img.mode not in ("RGB", "L"):
-        img = img.convert("RGB")
-    if max(img.size) > MAX_EDGE:
-        img.thumbnail((MAX_EDGE, MAX_EDGE), Image.LANCZOS)
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=90)
-    return base64.standard_b64encode(buf.getvalue()).decode(), "image/jpeg"
-
-
-def _image_block(path: str | Path) -> dict[str, Any]:
-    data, media_type = _encode_image(path)
-    return {
-        "type": "image",
-        "source": {"type": "base64", "media_type": media_type, "data": data},
-    }
-
-
-def _analyze_via_api(
-    images: list[str | Path],
-    original: str | Path | None,
-    style_hint: str | None,
-) -> dict[str, Any]:
-    content: list[dict[str, Any]] = []
-    if original is not None:
-        content.append({"type": "text", "text": "这是修图前的原片:"})
-        content.append(_image_block(original))
-        content.append({"type": "text", "text": "这是后期完成的成片:"})
-        content.append(_image_block(images[0]))
-        prompt = "请精确对比原片和成片,推断出从原片调到成片所用的 Lightroom 参数。"
-    elif len(images) == 1:
-        content.append(_image_block(images[0]))
-        prompt = "请分析这张后期完成的照片,推断出复现这种色调风格所需的 Lightroom 参数。"
-    else:
-        for i, p in enumerate(images, 1):
-            content.append({"type": "text", "text": f"成片 {i}:"})
-            content.append(_image_block(p))
-        prompt = _MULTI_TASK
-
-    if style_hint:
-        prompt += f"\n补充信息:{style_hint}"
-    content.append({"type": "text", "text": prompt})
-    return _run_api(content)
-
-
-def _run_api(content: list[dict[str, Any]]) -> dict[str, Any]:
-    import anthropic
-
-    client = anthropic.Anthropic()
-    with client.messages.stream(
-        model=MODEL,
-        max_tokens=16000,
-        system=SYSTEM_PROMPT,
-        output_config={"format": {"type": "json_schema", "schema": ANALYSIS_SCHEMA}},
-        messages=[{"role": "user", "content": content}],
-    ) as stream:
-        response = stream.get_final_message()
-
-    if response.stop_reason == "refusal":
-        raise RuntimeError("模型拒绝了本次请求,请换一张照片重试。")
-
-    text = next(b.text for b in response.content if b.type == "text")
-    return json.loads(text)
-
-
 # ---------------------------------------------------------------- 迭代校准
 
 _REFINE_TASK = """这是一次迭代校准:用户之前用下面的参数模版处理了照片,但和目标成片还有差距。
@@ -379,31 +239,11 @@ def refine(
     backend: str = "auto",
 ) -> dict[str, Any]:
     """对比套用当前参数后的效果图与目标成片,返回修正后的完整参数。"""
-    backend = resolve_backend(backend)
-    params_json = json.dumps(current_params, ensure_ascii=False)
-
-    if backend == "cli":
-        claude = shutil.which("claude")
-        if not claude:
-            raise RuntimeError("未找到 claude 命令,请先安装 Claude Code CLI。")
-        parts = [
-            SYSTEM_PROMPT,
-            "",
-            _REFINE_TASK,
-            f"当前参数模版:\n{params_json}",
-            f"请用 Read 工具查看套用当前参数后导出的效果图: {Path(attempt).resolve()}",
-            f"再用 Read 工具查看想要达到的目标成片: {Path(target).resolve()}",
-        ]
-        result = _run_cli(claude, parts)
-    else:
-        content: list[dict[str, Any]] = [
-            {"type": "text", "text": _REFINE_TASK},
-            {"type": "text", "text": f"当前参数模版:\n{params_json}"},
-            {"type": "text", "text": "这是套用当前参数后导出的效果图:"},
-            _image_block(attempt),
-            {"type": "text", "text": "这是想要达到的目标成片:"},
-            _image_block(target),
-        ]
-        result = _run_api(content)
-
+    blocks = [
+        {"type": "text", "text": _REFINE_TASK},
+        {"type": "text", "text": f"当前参数模版:\n{json.dumps(current_params, ensure_ascii=False)}"},
+        {"type": "image", "path": Path(attempt), "label": "套用当前参数后导出的效果图"},
+        {"type": "image", "path": Path(target), "label": "想要达到的目标成片"},
+    ]
+    result = providers.get_provider(backend).complete(SYSTEM_PROMPT, blocks, ANALYSIS_SCHEMA)
     return _normalize(result)
