@@ -159,18 +159,31 @@ def resolve_backend(backend: str = "auto") -> str:
     return backend
 
 
+MAX_IMAGES = 5
+
+_MULTI_TASK = """这些成片来自同一种风格(同一位摄影师/同一套预设)。
+请归纳它们**共同**的风格特征——忽略单张的题材、光线差异,关注反复出现的
+色调倾向、影调结构、染色方式;参数给出能同时逼近各张的折中值。"""
+
+
 def analyze(
-    edited: str | Path,
+    edited: str | Path | list[str | Path],
     original: str | Path | None = None,
     style_hint: str | None = None,
     backend: str = "auto",
 ) -> dict[str, Any]:
-    """分析成片(可选对照原片),返回符合 ANALYSIS_SCHEMA 的参数字典。"""
+    """分析一张或多张成片(单张时可选对照原片),返回符合 ANALYSIS_SCHEMA 的参数字典。"""
+    images = [edited] if isinstance(edited, (str, Path)) else list(edited)
+    if len(images) > MAX_IMAGES:
+        raise ValueError(f"一次最多分析 {MAX_IMAGES} 张成片(收到 {len(images)} 张)。")
+    if len(images) > 1 and original is not None:
+        raise ValueError("多张成片模式下不支持 --original 原片对照。")
+
     backend = resolve_backend(backend)
     if backend == "cli":
-        result = _analyze_via_cli(edited, original, style_hint)
+        result = _analyze_via_cli(images, original, style_hint)
     else:
-        result = _analyze_via_api(edited, original, style_hint)
+        result = _analyze_via_api(images, original, style_hint)
     return _normalize(result)
 
 
@@ -209,7 +222,7 @@ def _normalize(analysis: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------- CLI 后端
 
 def _analyze_via_cli(
-    edited: str | Path,
+    images: list[str | Path],
     original: str | Path | None,
     style_hint: str | None,
 ) -> dict[str, Any]:
@@ -218,16 +231,18 @@ def _analyze_via_cli(
     if not claude:
         raise RuntimeError("未找到 claude 命令,请先安装 Claude Code CLI。")
 
-    edited_path = str(Path(edited).resolve())
     parts = [SYSTEM_PROMPT, ""]
     if original is not None:
-        original_path = str(Path(original).resolve())
-        parts.append(f"请先用 Read 工具查看原片: {original_path}")
-        parts.append(f"再用 Read 工具查看成片: {edited_path}")
+        parts.append(f"请先用 Read 工具查看原片: {Path(original).resolve()}")
+        parts.append(f"再用 Read 工具查看成片: {Path(images[0]).resolve()}")
         parts.append("然后精确对比两者,推断出从原片调到成片所用的 Lightroom 参数。")
-    else:
-        parts.append(f"请用 Read 工具查看这张后期完成的照片: {edited_path}")
+    elif len(images) == 1:
+        parts.append(f"请用 Read 工具查看这张后期完成的照片: {Path(images[0]).resolve()}")
         parts.append("然后推断出复现这种色调风格所需的 Lightroom 参数。")
+    else:
+        parts.append(f"请用 Read 工具依次查看这 {len(images)} 张后期完成的成片:")
+        parts.extend(f"  {i + 1}. {Path(p).resolve()}" for i, p in enumerate(images))
+        parts.append(_MULTI_TASK)
     if style_hint:
         parts.append(f"补充信息:{style_hint}")
     return _run_cli(claude, parts)
@@ -303,24 +318,25 @@ def _image_block(path: str | Path) -> dict[str, Any]:
 
 
 def _analyze_via_api(
-    edited: str | Path,
+    images: list[str | Path],
     original: str | Path | None,
     style_hint: str | None,
 ) -> dict[str, Any]:
-    import anthropic
-
-    client = anthropic.Anthropic()
-
     content: list[dict[str, Any]] = []
     if original is not None:
         content.append({"type": "text", "text": "这是修图前的原片:"})
         content.append(_image_block(original))
         content.append({"type": "text", "text": "这是后期完成的成片:"})
-        content.append(_image_block(edited))
+        content.append(_image_block(images[0]))
         prompt = "请精确对比原片和成片,推断出从原片调到成片所用的 Lightroom 参数。"
-    else:
-        content.append(_image_block(edited))
+    elif len(images) == 1:
+        content.append(_image_block(images[0]))
         prompt = "请分析这张后期完成的照片,推断出复现这种色调风格所需的 Lightroom 参数。"
+    else:
+        for i, p in enumerate(images, 1):
+            content.append({"type": "text", "text": f"成片 {i}:"})
+            content.append(_image_block(p))
+        prompt = _MULTI_TASK
 
     if style_hint:
         prompt += f"\n补充信息:{style_hint}"

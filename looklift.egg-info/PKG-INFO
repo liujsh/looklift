@@ -1,3 +1,18 @@
+Metadata-Version: 2.4
+Name: looklift
+Version: 0.2.0
+Summary: Lift the look: AI analyzes a photo's color grade and generates Lightroom presets / RAW sidecars
+Author: liujsh
+License: MIT
+Project-URL: Repository, https://github.com/liujsh/looklift
+Keywords: lightroom,photography,color-grading,preset,xmp,claude
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: anthropic>=0.116.0
+Requires-Dist: Pillow>=10.0.0
+Dynamic: license-file
+
 # looklift 📷
 
 > Lift the look — 把大师作品的"look"提取出来。
@@ -20,11 +35,8 @@
 ## 安装
 
 ```
-git clone https://github.com/liujsh/looklift && cd looklift
-pip install -e .
+pip install -r requirements.txt
 ```
-
-之后直接使用 `looklift` 命令(下面示例中的 `python -m looklift` 同样可用)。
 
 AI 分析二选一:
 - **本地 Claude Code CLI**(推荐,走 Claude Code 登录额度,无需 API key):已安装 `claude` 命令即可
@@ -36,13 +48,7 @@ AI 分析二选一:
 
 ```sh
 # 分析大师成片 → 打印参数讲解,预设+模版自动收入 looks/ 风格库
-looklift analyze master.jpg --name "胶片青橙"
-
-# 多张同风格成片一起分析,归纳共同风格(降低单张偶然性,上限 5 张)
-looklift analyze a.jpg b.jpg c.jpg --name "某摄影师风格"
-
-# 生成 HTML 风格报告(概述+步骤+参数表+曲线图),可直接分享
-looklift report "胶片青橙"
+python -m looklift analyze master.jpg --name "胶片青橙"
 
 # 有原片对照(分析更准)
 python -m looklift analyze after.jpg --original before.jpg --name "我的风格"

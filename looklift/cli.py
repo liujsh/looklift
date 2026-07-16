@@ -26,7 +26,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import analyzer, xmp_reader, xmp_writer
+from . import analyzer, report, xmp_reader, xmp_writer
 
 LOOKS_DIR = Path("looks")  # 风格库目录(相对当前工作目录)
 
@@ -112,7 +112,8 @@ def _emit_outputs(crs: dict, args) -> None:
 
 
 def cmd_analyze(args) -> int:
-    print(f"正在分析 {args.edited} ...(后端: {analyzer.resolve_backend(args.backend)})")
+    label = args.edited[0] if len(args.edited) == 1 else f"{len(args.edited)} 张成片(归纳共同风格)"
+    print(f"正在分析 {label} ...(后端: {analyzer.resolve_backend(args.backend)})")
     analysis = analyzer.analyze(
         args.edited, original=args.original, style_hint=args.hint, backend=args.backend
     )
@@ -188,6 +189,15 @@ def cmd_list(args) -> int:
     return 0
 
 
+def cmd_report(args) -> int:
+    template = _resolve_template(args.template)
+    analysis = json.loads(template.read_text(encoding="utf-8"))
+    out = Path(args.out) if args.out else template.with_suffix(".html")
+    out.write_text(report.render_report(analysis, template.stem), encoding="utf-8")
+    print(f"[报告] 已生成: {out}  (浏览器打开查看)")
+    return 0
+
+
 def cmd_refine(args) -> int:
     template = _resolve_template(args.template)
     current = json.loads(template.read_text(encoding="utf-8"))
@@ -224,8 +234,9 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("analyze", help="AI 分析成片的调色参数")
-    p.add_argument("edited", help="后期完成的成片")
-    p.add_argument("--original", help="修图前的原片(可选,提供后分析更准)")
+    p.add_argument("edited", nargs="+",
+                   help="后期完成的成片(可多张,多张时归纳共同风格,上限 5 张)")
+    p.add_argument("--original", help="修图前的原片(仅单张成片时可用)")
     p.add_argument("--hint", help="风格提示,如摄影师名字、胶片型号等")
     p.add_argument("--name", help="风格名称:预设和模版自动存入 looks/ 风格库")
     p.add_argument("--preset", help="预设输出路径(.xmp),覆盖默认的 looks/ 位置")
@@ -253,6 +264,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("list", help="列出风格库(looks/)中收藏的风格")
     p.set_defaults(func=cmd_list)
+
+    p = sub.add_parser("report", help="生成 HTML 风格报告(参数表+曲线图+讲解)")
+    p.add_argument("template", help="模版文件路径,或风格库中的名字")
+    p.add_argument("-o", "--out", help="输出路径,默认与模版同名 .html")
+    p.set_defaults(func=cmd_report)
 
     p = sub.add_parser("refine", help="迭代校准:对比套用效果和目标成片,修正模版参数")
     p.add_argument("template", help="要校准的模版(路径或风格库名字)")
