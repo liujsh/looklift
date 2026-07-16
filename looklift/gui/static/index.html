@@ -9,7 +9,45 @@
     <link rel="stylesheet" href="css/app.css" />
   </head>
   <body>
-    <main id="app"></main>
-    <script src="js/app.js"></script>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <span class="brand-word">looklift</span>
+          <span class="brand-tagline">AI 调色助手 · 一键生成 Lightroom 预设</span>
+        </div>
+        <nav class="nav" aria-label="主导航">
+          <button class="nav-item" type="button" data-panel="analyze">分析</button>
+          <button class="nav-item" type="button" data-panel="looks">风格库</button>
+          <button class="nav-item" type="button" data-panel="settings">设置</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="main">
+      <section id="panel-analyze" class="panel">
+        <div class="card">
+          <h2>分析</h2>
+          <p class="body-muted">拖入一张照片，AI 会给出调色分析、后期步骤与基本参数。待后续任务填充。</p>
+        </div>
+      </section>
+
+      <section id="panel-looks" class="panel" hidden>
+        <div class="card">
+          <h2>风格库</h2>
+          <p class="body-muted">收藏的分析结果会出现在这里，可按当前强度导出为预设或 sidecar。待后续任务填充。</p>
+        </div>
+      </section>
+
+      <section id="panel-settings" class="panel" hidden>
+        <div class="card">
+          <h2>设置</h2>
+          <p class="body-muted">配置 AI provider 与密钥，也可以跳过稍后再配置。待后续任务填充。</p>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+    <script src="js/app.js" defer></script>
   </body>
 </html>

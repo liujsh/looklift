@@ -53,6 +53,35 @@ def test_root_serves_index_html(running_server):
     assert b"looklift" in body
 
 
+def test_root_response_contains_panel_ids(running_server):
+    """GUI-T5 冒烟：GET / 返回 200，且 body 里三个面板容器 id 都在。"""
+    status, _, body = _get(running_server, "/")
+    assert status == 200
+    text = body.decode("utf-8")
+    assert 'id="panel-analyze"' in text
+    assert 'id="panel-looks"' in text
+    assert 'id="panel-settings"' in text
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/vendor/claude/tokens.css",
+        "/vendor/claude/components.css",
+        "/css/app.css",
+        "/js/app.js",
+    ],
+)
+def test_index_html_relative_asset_paths_resolve(running_server, path):
+    """index.html 用的是相对路径（无 /static/ 前缀），浏览器据 "/" 解析后请求的
+    正是这些不带前缀的路径；回归测试确保 server 的兜底静态路由覆盖了它们
+    （否则页面会加载不到 CSS/JS，视觉核对必挂）。
+    """
+    status, content_type, body = _get(running_server, path)
+    assert status == 200
+    assert len(body) > 0
+
+
 def test_unknown_path_returns_404_json(running_server):
     status, content_type, body = _get(running_server, "/nonexistent")
     assert status == 404

@@ -1,1 +1,148 @@
-/* 只用 tokens.css 里的 token 变量，禁止裸 hex。 */
+/* 只用 tokens.css 里的 token 变量，禁止裸 hex。
+ * SPA 壳样式：顶栏 + 导航 + 三个面板容器的布局，业务面板内容由后续任务填充。
+ * 分区：布局 / 顶栏 / 导航 / 面板 / 工具类。
+ */
+
+/* ─── 布局 ──────────────────────────────────────────────────────────── */
+.topbar-inner {
+  max-width: var(--container-max);
+  margin-inline: auto;
+  padding-inline: var(--container-gutter-desktop);
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+.main {
+  max-width: var(--container-max);
+  margin-inline: auto;
+  padding: var(--space-8) var(--container-gutter-desktop);
+}
+
+@media (max-width: 639px) {
+  .topbar-inner {
+    padding-inline: var(--container-gutter-phone);
+    flex-wrap: wrap;
+    row-gap: var(--space-3);
+  }
+  .main {
+    padding: var(--space-6) var(--container-gutter-phone);
+  }
+}
+
+/* ─── 顶栏（产品名衬线 wordmark + 小字 tagline）──────────────────────── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.brand-word {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+  color: var(--fg);
+  letter-spacing: var(--tracking-display);
+}
+
+.brand-tagline {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--meta);
+}
+
+/* ─── 导航（三个页签，激活态用 --accent）────────────────────────────── */
+.nav {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.nav-item {
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-4);
+  cursor: pointer;
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard);
+}
+
+.nav-item:hover {
+  color: var(--fg);
+  background: var(--surface-warm);
+}
+
+.nav-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.nav-item[aria-current="page"] {
+  color: var(--accent-on);
+  background: var(--accent);
+}
+
+/* ─── 面板容器 ─────────────────────────────────────────────────────── */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.panel .card h2 {
+  margin-bottom: var(--space-1);
+}
+
+/* ─── 工具类：提示条（App.toast）────────────────────────────────────── */
+.toast-root {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-6);
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+
+.toast {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--accent-on);
+  background: var(--fg);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elev-raised);
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity var(--motion-base) var(--ease-standard),
+    transform var(--motion-base) var(--ease-standard);
+}
+
+.toast.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
