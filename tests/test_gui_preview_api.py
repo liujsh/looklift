@@ -95,8 +95,11 @@ def test_preview_factor_zero_matches_input_thumbnail(running_server, tmp_path, s
     assert rendered.shape == original.shape
 
     diff = np.abs(rendered - original)
-    assert diff.mean() < 4, f"factor=0 预览与原图差异过大（均值 {diff.mean()}）"
-    assert diff.max() < 30, f"factor=0 预览与原图存在离谱像素差异（max {diff.max()}）"
+    # 收紧自 GUI-T9 review:render.py 曲线域外外推修复后(fix render.py 曲线
+    # 端点夹平问题),factor=0 的还原度显著提高——实测 mean≈0.48、max=4,
+    # 收紧到 mean<1.5 / max<10 仍留有余量,同时能捕捉真实回归。
+    assert diff.mean() < 1.5, f"factor=0 预览与原图差异过大（均值 {diff.mean()}）"
+    assert diff.max() < 10, f"factor=0 预览与原图存在离谱像素差异（max {diff.max()}）"
 
 
 # ─── factor 校验 ───────────────────────────────────────────────────────────
@@ -220,3 +223,10 @@ def test_preview_js_contains_clip_path_logic():
     assert "clip-path" in text
     assert "clipPath" in text
     assert "currentFactor" in text
+
+
+def test_preview_js_aborts_in_flight_request():
+    """GUI-T9 review follow-up:发起新预览请求前应 abort 掉上一个未完成的请求
+    （并发渲染内存峰值 + 过期响应覆盖新结果）。"""
+    text = _static_text("js/panels/preview.js")
+    assert "AbortController" in text

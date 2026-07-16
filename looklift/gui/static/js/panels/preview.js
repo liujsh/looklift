@@ -24,6 +24,12 @@
   var beforeObjectUrl = null;
   var afterObjectUrl = null;
   var debounceTimer = null;
+  // 各自未完成的 /api/preview 请求(before/after 分开记录——handleAnalysisReady
+  // 会同时发起两者,若共用一个 controller 会互相 abort 掉对方);发起新请求前
+  // 先 abort 同一路上一个还没回来的请求——避免拖动滑杆连续触发多个渲染同时
+  // 占内存(并发峰值),也避免慢请求的响应在快请求之后才回来,把新预览图又
+  // 覆盖回旧的(过期响应覆盖新结果)。
+  var inFlightControllers = { before: null, after: null };
 
   /** 撤销旧的 blob objectURL，防止预览图切换时内存泄漏。 */
   function revokeIfSet(url) {
@@ -32,12 +38,24 @@
     }
   }
 
+  /** 请求被 abort（新请求顶掉旧请求）是预期行为，不算失败，不弹 toast。 */
+  function isAbortError(err) {
+    return err && err.name === "AbortError";
+  }
+
   /**
    * `POST /api/preview` 拿到渲染后的 JPEG 字节，转成 objectURL。
    * @param {number} factor 0-1
+   * @param {"before"|"after"} kind 走哪条 in-flight 请求记录（before/after 互不干扰）
    * @returns {Promise<string>} objectURL
    */
-  function fetchPreviewBlobUrl(factor) {
+  function fetchPreviewBlobUrl(factor, kind) {
+    if (inFlightControllers[kind]) {
+      inFlightControllers[kind].abort(); // 丢弃这条同名上一张还没回来的预览请求
+    }
+    var controller = new AbortController();
+    inFlightControllers[kind] = controller;
+
     var payload = {
       path: App.state.currentPhotoPath,
       analysis: App.state.currentAnalysis,
@@ -47,6 +65,7 @@
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     }).then(function (resp) {
       if (!resp.ok) {
         return resp
@@ -66,7 +85,7 @@
 
   /** 重新取 after 图（当前强度）。失败时提示，但保留旧图不清空，避免闪烁到空白。 */
   function refreshAfter(factor) {
-    fetchPreviewBlobUrl(factor)
+    fetchPreviewBlobUrl(factor, "after")
       .then(function (url) {
         var old = afterObjectUrl;
         afterObjectUrl = url;
@@ -76,6 +95,9 @@
         revokeIfSet(old);
       })
       .catch(function (err) {
+        if (isAbortError(err)) {
+          return; // 被更新的请求顶掉，旧图什么都不用做
+        }
         App.toast(err.message);
       });
   }
@@ -83,7 +105,7 @@
   /** 取 before 图：factor=0，语义即"无调整渲染"，与 after 走同一条缩放
    * 管线，尺寸天然对齐；只在每次新分析结果到来时取一次，滑杆变化不影响它。 */
   function refreshBefore() {
-    fetchPreviewBlobUrl(0)
+    fetchPreviewBlobUrl(0, "before")
       .then(function (url) {
         var old = beforeObjectUrl;
         beforeObjectUrl = url;
@@ -93,6 +115,9 @@
         revokeIfSet(old);
       })
       .catch(function (err) {
+        if (isAbortError(err)) {
+          return;
+        }
         App.toast(err.message);
       });
   }
