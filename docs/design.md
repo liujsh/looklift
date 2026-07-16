@@ -115,9 +115,10 @@ effects: {vignette_amount, grain_amount}
   - `test_xmp_writer.py`:analysis→crs 映射(符号前缀、HSL 字段、曲线 Seq)、
     预设/sidecar XML 合法性(minidom 解析)、往返(写出→xmp_reader 读回一致)
   - `test_xmp_reader.py`:属性式+元素式 crs 提取、无 XMP 返回 None
-  - `test_analyzer.py`:`_normalize` 补全稀疏输出(prompt/schema/normalize 归属analyzer)
+  - `test_analyzer.py`:`_normalize` 补全稀疏输出、`_extract_json` 容错(裸 JSON/
+    代码块/前后杂文)、`resolve_backend` 三分支
   - `test_config.py`:TOML+env 覆盖优先级、`looks_dir()` 三级 fallback(cwd → config → 默认)
-  - `test_providers.py`:Block 组装、`_extract_json` 容错(裸 JSON/代码块/前后杂文)、
+  - `test_providers.py`:CLI provider 的 Block→Read 指令拼装、
     `get_provider` 解析顺序(config → env key → which claude)
   - `test_render.py`:各调整项方向正确性(如 exposure>0 更亮)、HSV 往返、float32 契约
   - `test_autorefine.py`:收敛判定(提升<阈值提前停止)、最佳参数不一定是最后一轮
@@ -161,7 +162,7 @@ prompt/schema/normalize,组装 blocks 后交给 provider。
 ### 12. 渲染管线(render.py)
 
 定位是「方向正确的近似」,不承诺与 Lightroom 一致。输入假设 sRGB;内部统一用
-float32 0-1 numpy 数组,每步后 clip 回 `[0,1]`。`_apply_color_ops` 只含全局色彩
+float32 0-1 numpy 数组,在关键节点 clip 回 `[0,1]`(高光/阴影蒙版前、白/黑场后、函数末尾)。`_apply_color_ops` 只含全局色彩
 映射(供 lut.py 的 3D 网格采样直接复用),空间效果单独在 `_apply_spatial_ops`。
 
 `_apply_color_ops` 固定顺序:

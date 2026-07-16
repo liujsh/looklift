@@ -8,7 +8,7 @@
 喂一张喜欢的成片,AI(Claude 视觉模型)逆向推断出基本面板、HSL、颜色分级、曲线等全套参数,
 并用中文讲解这种风格是怎么调出来的。
 
-![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## 三条路径
