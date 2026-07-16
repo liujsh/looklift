@@ -191,3 +191,28 @@ def render(image: Image.Image, analysis: dict) -> Image.Image:
     arr = _apply_color_ops(arr, analysis)
     arr = _apply_spatial_ops(arr, analysis)
     return Image.fromarray((arr * 255 + 0.5).astype(np.uint8), "RGB")
+
+
+def _ab_stats(arr):
+    """近似 Lab 的 a/b 通道均值与标准差(色彩倾向指纹)。"""
+    a = arr[..., 0] - arr[..., 1]          # 红绿轴
+    b_ = arr[..., 1] - arr[..., 2]         # 黄蓝轴
+    return np.array([a.mean(), b_.mean(), a.std(), b_.std()])
+
+
+def score(rendered: Image.Image, target: Image.Image) -> float:
+    """还原度 0-100。只用于同一目标的迭代趋势判断,不做跨风格比较。"""
+    def prep(im):
+        im = im.convert("RGB"); im.thumbnail((256, 256))
+        return np.asarray(im, dtype=np.float32) / 255.0
+    r, t = prep(rendered), prep(target)
+
+    hr, _ = np.histogram(_luminance(r), bins=64, range=(0, 1), density=True)
+    ht, _ = np.histogram(_luminance(t), bins=64, range=(0, 1), density=True)
+    denom = np.linalg.norm(hr) * np.linalg.norm(ht)
+    hist_sim = float(hr @ ht / denom) if denom else 0.0   # 余弦相似度 0-1
+
+    d = np.abs(_ab_stats(r) - _ab_stats(t))
+    color_sim = float(np.clip(1 - d.mean() / 0.15, 0, 1))
+
+    return round(100 * (0.6 * hist_sim + 0.4 * color_sim), 1)

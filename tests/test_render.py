@@ -131,3 +131,34 @@ def test_color_grading_luminance_only_brightens_without_saturation(sample_analys
     a["color_grading"]["shadows"] = {"hue": 0, "saturation": 0, "luminance": 80}
     out = render._apply_color_ops(_flat_gray(0.15), a)
     assert out.mean() > 0.15 + 0.03
+
+
+# --- 还原度评分 score() ---
+
+def _noise_img(seed, size=(64, 64)):
+    rng = np.random.default_rng(seed)
+    return Image.fromarray((rng.random((*size, 3)) * 255).astype(np.uint8), "RGB")
+
+
+def test_score_identical_is_high():
+    img = _noise_img(1)
+    assert render.score(img, img) > 95
+
+
+def test_score_monotonic_under_known_perturbation(sample_analysis):
+    """扰动越大分越低——评分单调性,auto-refine 的可用性前提。"""
+    base = _noise_img(2)
+    import copy
+    def perturbed(ev):
+        a = copy.deepcopy(sample_analysis)
+        a["basic"] = {k: 0 for k in a["basic"]}
+        a["tone_curve"] = []; a["hsl"] = []
+        for z in ("shadows", "midtones", "highlights", "global_"):
+            a["color_grading"][z] = {"hue": 0, "saturation": 0, "luminance": 0}
+        a["effects"] = {"vignette_amount": 0, "grain_amount": 0}
+        a["basic"]["exposure"] = ev
+        return render.render(base, a)
+    s_small = render.score(perturbed(0.3), base)
+    s_big = render.score(perturbed(1.5), base)
+    assert s_small > s_big
+    assert render.score(base, base) > s_small
