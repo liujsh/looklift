@@ -41,10 +41,56 @@
       <section id="panel-settings" class="panel" hidden>
         <div class="card">
           <h2>设置</h2>
-          <p class="body-muted">配置 AI provider 与密钥，也可以跳过稍后再配置。待后续任务填充。</p>
+          <p class="body-muted">配置 AI provider 与密钥；不填也能先逛逛风格库和报告页，真正点「分析」时才会用到。</p>
+          <form id="settings-form" class="form">
+            <div class="field">
+              <label>AI Provider</label>
+              <label class="radio-option">
+                <input type="radio" name="provider" value="auto" checked />
+                自动选择 —— 优先用已登录的本地 Claude CLI，没有再看是否配了 API key
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="provider" value="cli" />
+                本地 Claude CLI —— 用你的 Claude Code 订阅额度，零配置（需先安装并登录 claude 命令）
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="provider" value="api" />
+                Anthropic API —— 填写 API key，最稳定，按用量计费
+              </label>
+            </div>
+            <div class="field">
+              <label for="settings-model">模型（可选）</label>
+              <input id="settings-model" type="text" name="model" placeholder="留空使用默认模型" />
+            </div>
+            <div class="field">
+              <label for="settings-api-key">API Key</label>
+              <input id="settings-api-key" type="password" name="api_key" autocomplete="off" placeholder="sk-..." />
+              <p class="field-help">选择「Anthropic API」或「自动选择」且本机没装 CLI 时需要；已保存过的话留空提交不会清空它。</p>
+            </div>
+            <details class="field">
+              <summary>高级：自定义 base_url</summary>
+              <input type="text" name="base_url" placeholder="留空使用官方默认地址" />
+            </details>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+          </form>
         </div>
       </section>
     </main>
+
+    <div id="wizard" class="wizard-overlay" hidden>
+      <div class="wizard-card card">
+        <h2>欢迎使用 looklift</h2>
+        <p class="body-muted">
+          先配置一下 AI provider，「分析」面板才用得上；现在不想配也没关系，可以先跳过，去逛逛界面，随时回「设置」里补上。
+        </p>
+        <div id="wizard-form-slot"></div>
+        <div class="form-actions">
+          <button type="button" id="wizard-skip" class="btn btn-secondary">稍后配置</button>
+        </div>
+      </div>
+    </div>
 
     <div id="toast-root" class="toast-root" aria-live="polite"></div>
 

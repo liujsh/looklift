@@ -7,6 +7,7 @@
   var PANELS = ["analyze", "looks", "settings"];
   var DEFAULT_PANEL = "analyze";
   var STORAGE_KEY = "looklift.lastPanel";
+  var WIZARD_DISMISS_KEY = "looklift.wizardDismissed";
 
   var App = {};
 
@@ -219,6 +220,166 @@
   };
 
   /**
+   * 把 `GET /api/config` 返回的状态回填进一个配置表单：provider 单选项按
+   * `cfg.provider` 选中；model/base_url 回填当前值；api_key 输入框故意
+   * 保持空——后端从不把已保存的密钥吐回来（见 api._get_config 的注释），
+   * 这里只用 `cfg.has_key` 调整 placeholder 提示"已经存过一份"。
+   * @param {HTMLFormElement} form
+   * @param {{provider: string, model: string, has_key: boolean}} cfg
+   */
+  function applyConfigToForm(form, cfg) {
+    var providerInput = form.querySelector('[name="provider"][value="' + cfg.provider + '"]');
+    if (providerInput) {
+      providerInput.checked = true;
+    }
+    var modelInput = form.querySelector('[name="model"]');
+    if (modelInput) {
+      modelInput.value = cfg.model || "";
+    }
+    var apiKeyInput = form.querySelector('[name="api_key"]');
+    if (apiKeyInput) {
+      apiKeyInput.value = "";
+      apiKeyInput.placeholder = cfg.has_key ? "已保存 · 留空则不修改" : "sk-...";
+    }
+  }
+
+  /**
+   * 给一个配置表单（#settings-form 或向导里克隆出来的那份）挂 submit 处理：
+   * 读表单值 → POST /api/config → 成功后回调 `onSaved`，失败用 App.toast
+   * 提示错误（后端返回的中文 `error` 文案）。两处表单结构完全一致，共用同
+   * 一段绑定逻辑，避免维护两份几乎相同的 fetch 代码。
+   * @param {HTMLFormElement} form
+   * @param {() => void} onSaved
+   */
+  function bindConfigForm(form, onSaved) {
+    form.addEventListener("submit", function (evt) {
+      evt.preventDefault();
+      var data = new FormData(form);
+      var payload = {
+        provider: data.get("provider") || "auto",
+        model: data.get("model") || "",
+        api_key: data.get("api_key") || "",
+        base_url: data.get("base_url") || "",
+      };
+      App.api("/api/config", { method: "POST", body: payload })
+        .then(function () {
+          if (onSaved) {
+            onSaved();
+          }
+        })
+        .catch(function (err) {
+          App.toast(err.message);
+        });
+    });
+  }
+
+  /**
+   * 刷新「设置」面板表单当前显示的配置状态（初始化时、以及每次保存成功后
+   * 调用，保证 api_key 的 placeholder 随 has_key 变化）。
+   */
+  function refreshSettingsForm() {
+    var form = document.getElementById("settings-form");
+    if (!form) {
+      return;
+    }
+    App.api("/api/config")
+      .then(function (cfg) {
+        applyConfigToForm(form, cfg);
+      })
+      .catch(function () {
+        /* 配置探活失败不影响表单本身可用，静默忽略 */
+      });
+  }
+
+  /**
+   * 关闭首次配置向导：本次会话（sessionStorage）记住不再自动弹出，隐藏遮罩。
+   */
+  function dismissWizard() {
+    try {
+      sessionStorage.setItem(WIZARD_DISMISS_KEY, "1");
+    } catch (err) {
+      /* sessionStorage 不可用时静默忽略：本次会话内向导可能重复弹出一次 */
+    }
+    var wizard = document.getElementById("wizard");
+    if (wizard) {
+      wizard.hidden = true;
+    }
+  }
+
+  /**
+   * 展示首次配置向导：把 #settings-form 的表单结构克隆一份塞进向导容器
+   * （design.md 决策「首次配置向导内容复用 .form/.field 配方」——字段定义
+   * 只在 HTML 里写一份，向导用克隆节点而不是重复标记，避免两处表单字段
+   * 后续改动时漏改一处），回填当前配置状态，挂 submit 处理（保存成功即
+   * 关闭向导 + toast 提示）。
+   * @param {{provider: string, model: string, has_key: boolean}} cfg
+   */
+  function showWizard(cfg) {
+    var wizard = document.getElementById("wizard");
+    var slot = document.getElementById("wizard-form-slot");
+    var settingsForm = document.getElementById("settings-form");
+    if (!wizard || !slot || !settingsForm) {
+      return;
+    }
+    var clone = settingsForm.cloneNode(true);
+    clone.id = "wizard-form";
+    var submitBtn = clone.querySelector('button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.textContent = "保存并开始";
+    }
+    slot.innerHTML = "";
+    slot.appendChild(clone);
+    applyConfigToForm(clone, cfg);
+    bindConfigForm(clone, function () {
+      dismissWizard();
+      App.toast("已保存");
+      refreshSettingsForm();
+    });
+    wizard.hidden = false;
+  }
+
+  /**
+   * 配置向导 + 设置表单的初始化：绑定「设置」面板表单的保存；探活
+   * `GET /api/config`，未配置且本次会话没跳过过时弹首次配置向导（design.md
+   * 风险清单「首次配置向导卡死」——探活失败/超时也不阻塞主界面，直接跳过
+   * 弹窗，不影响库面板/报告浏览）。
+   */
+  function initConfig() {
+    var settingsForm = document.getElementById("settings-form");
+    if (settingsForm) {
+      bindConfigForm(settingsForm, function () {
+        App.toast("已保存");
+        refreshSettingsForm();
+      });
+    }
+    refreshSettingsForm();
+
+    var skipBtn = document.getElementById("wizard-skip");
+    if (skipBtn) {
+      skipBtn.addEventListener("click", dismissWizard);
+    }
+
+    var alreadyDismissed = false;
+    try {
+      alreadyDismissed = sessionStorage.getItem(WIZARD_DISMISS_KEY) === "1";
+    } catch (err) {
+      /* sessionStorage 不可用时视为未跳过，仍走探活弹窗逻辑 */
+    }
+    if (alreadyDismissed) {
+      return;
+    }
+    App.api("/api/config")
+      .then(function (cfg) {
+        if (!cfg.configured) {
+          showWizard(cfg);
+        }
+      })
+      .catch(function () {
+        /* 探活失败：不弹向导，不阻塞主界面（卡死是风险清单明确要避免的） */
+      });
+  }
+
+  /**
    * 初始化：绑定导航点击事件，恢复上次打开的面板（无记录则用默认面板）。
    */
   function init() {
@@ -234,6 +395,7 @@
       /* 忽略：退回默认面板 */
     }
     App.show(last || DEFAULT_PANEL);
+    initConfig();
   }
 
   document.addEventListener("DOMContentLoaded", init);

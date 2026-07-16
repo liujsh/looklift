@@ -8,21 +8,89 @@ handler 收到的不再只是段参数，而是一个请求上下文 dict：
 的 handler（如 `/api/upload`）和只需要段参数的 handler 用同一套签名，不必再
 分裂成两种 Handler 类型。
 
-本文件只放 handler 表和已落地的业务 handler；未落地的路由（`/api/config`、
-`/api/analyze` 等，见 design.md「API 路由一览」）留给对应任务实现，不预先占位。
+本文件只放 handler 表和已落地的业务 handler；未落地的路由（`/api/analyze`
+等，见 design.md「API 路由一览」）留给对应任务实现，不预先占位。
 """
 from __future__ import annotations
 
-from typing import Callable
+import json
+import shutil
+from typing import Any, Callable
 
+from .. import config
 from . import tasks
 from . import upload
 
 Handler = Callable[[dict], tuple[int, dict]]
 
+_VALID_PROVIDERS = {"auto", "cli", "api"}
+
 
 def _ping(ctx: dict) -> tuple[int, dict]:
     """`GET /api/ping`：连通性探活。"""
+    return 200, {"ok": True}
+
+
+def _analyze_would_work(cfg: dict[str, Any]) -> bool:
+    """纯函数：判断"分析请求现在发得出去"，即 GET /api/config 里的 `configured`。
+
+    三选一即算配好：provider 被显式指到 cli/api（用户已经做过选择）、config
+    里存了 api_key、或者本机 PATH 上有 claude 命令（等价于 providers.get_provider
+    在 backend="auto" 时走到底也能选出一个可用后端）。不直接依赖
+    `providers.get_provider`——那个函数在选不出后端时会抛异常，这里只想要一个
+    布尔值，抽成独立纯函数也方便不起 HTTP server 单测。
+    """
+    if cfg["provider"] in ("cli", "api"):
+        return True
+    if cfg["api_key"]:
+        return True
+    return shutil.which("claude") is not None
+
+
+def _get_config(ctx: dict) -> tuple[int, dict]:
+    """`GET /api/config`：配置向导/设置面板读取当前状态。
+
+    绝不在响应里带 `api_key` 原文——`has_key` 布尔值够前端判断"要不要提示
+    去填"，没必要把密钥吐回浏览器里。
+    """
+    cfg = config.load_config()
+    return 200, {
+        "configured": _analyze_would_work(cfg),
+        "provider": cfg["provider"],
+        "model": cfg["model"],
+        "has_key": bool(cfg["api_key"]),
+    }
+
+
+def _post_config(ctx: dict) -> tuple[int, dict]:
+    """`POST /api/config`：配置向导/设置面板保存。
+
+    body 的字段全部可选，缺省字段保持 `load_config()` 里的原值不变（partial
+    update）；`api_key` 有个特例——空字符串代表"保留原值"而不是"清空"，
+    因为前端出于安全考虑从不把已保存的密钥回填进输入框，用户不改密钥直接
+    点保存时，表单提交上来的就是空字符串，不能把这个当成"用户想清空密钥"。
+    真要清空密钥得走别的显式操作（当前 UI 未提供，也不在本任务范围）。
+    """
+    body = ctx.get("body")
+    try:
+        payload = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        return 400, {"error": "请求体不是合法 JSON"}
+    if not isinstance(payload, dict):
+        return 400, {"error": "请求体必须是 JSON 对象"}
+
+    provider = payload.get("provider")
+    if provider is not None and provider not in _VALID_PROVIDERS:
+        return 400, {"error": f"provider 必须是 auto/cli/api 之一，收到：{provider!r}"}
+
+    cfg = config.load_config()
+    for key in ("provider", "model", "base_url"):
+        if key in payload:
+            cfg[key] = payload[key]
+    if payload.get("api_key"):  # 空字符串／缺省字段 → 保留原值
+        cfg["api_key"] = payload["api_key"]
+
+    config.save_config(cfg)
     return 200, {"ok": True}
 
 
@@ -75,6 +143,8 @@ def _upload(ctx: dict) -> tuple[int, dict]:
 
 ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/ping"): _ping,
+    ("GET", "/api/config"): _get_config,
+    ("POST", "/api/config"): _post_config,
     ("GET", "/api/tasks/<id>"): _get_task,
     ("POST", "/api/upload"): _upload,
     ("GET", "/report/<name>"): _report_placeholder,
