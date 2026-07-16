@@ -2,8 +2,8 @@
 
 > 本文档是产品的"宪法":定位、用户、最终形态、路线图。每轮迭代前先对照/更新本文档。
 > 敲定于 2026-07-16(v0.2 发布后),与作者 brainstorm 确认。
-> 文档约定:每个迭代开工前在 `docs/specs/` 写一份该迭代的 spec(详细设计+验收),
-> [design.md](design.md) 只记录已实现的架构实况。
+> 文档约定:每个迭代一个 spec 文件夹 `docs/specs/v0.X/`,固定三份文档(需求/设计/任务),
+> 规范见 [specs/README.md](specs/README.md);[design.md](design.md) 只记录已实现的架构实况。
 
 ## 一句话定位
 
