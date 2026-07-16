@@ -63,6 +63,15 @@ python -m looklift apply 胶片青橙 --sidecar "D:/photos/*.CR3"
 
 # 迭代校准:在 LR 里套用预设导出效果图,和目标成片一起喂回去,AI 给出修正
 python -m looklift refine 胶片青橙 --attempt my-export.jpg --target master.jpg
+
+# 本地近似渲染预览(不开 LR),可选给目标成片打相似度分
+looklift preview 胶片青橙 my-photo.jpg --target master.jpg
+
+# 导出 3D LUT(.cube),给达芬奇/剪映等视频剪辑软件调色用
+looklift export-lut 胶片青橙 -o 胶片青橙.cube
+
+# 全自动校准:本地渲染→评分→AI 修正循环,不用手动导出效果图
+looklift refine 胶片青橙 --auto --source raw-export.jpg --target master.jpg
 ```
 
 ## 示例输出
@@ -109,6 +118,8 @@ python -m looklift refine 胶片青橙 --attempt my-export.jpg --target master.j
 - AI 推断的白平衡写成增量色温/色调(`IncrementalTemperature`),对 JPEG/TIFF 生效;RAW 文件的开尔文色温需在 LR 中微调
 - 局部调整(蒙版、径向/渐变滤镜)无法通过全局预设表达,分析结果的"后期步骤"里会用文字说明
 - AI 推断是估计值,建议套用后按讲解微调,或用 `refine` 命令迭代校准
+- `preview` 是本地近似渲染(sRGB 输入,Pillow+numpy 实现),用于快速预览方向和 `refine --auto` 打分,不等价于 Lightroom 的精确色彩管线
+- `export-lut` 只覆盖全局色彩(曝光/白平衡/对比/曲线/HSL/颜色分级),暗角、颗粒等空间效果不进 LUT
 
 ## License
 

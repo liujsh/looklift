@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "looklift"
-version = "0.2.0"
+version = "0.3.0"
 description = "Lift the look: AI analyzes a photo's color grade and generates Lightroom presets / RAW sidecars"
 readme = "README.md"
 license = { text = "MIT" }
