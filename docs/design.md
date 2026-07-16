@@ -98,7 +98,13 @@ effects: {vignette_amount, grain_amount}
   - **形态(2026-07-16 敲定)**:同一套 HTML 界面,发布默认 **pywebview 独立窗口**
     (Windows 依赖 WebView2,Win11 自带),`--browser` 参数走本地 web + 浏览器,
     用于开发调试和兜底;**不引入 Electron/Node 栈**,保持 Python 单语言
-  - 原则:GUI 只是壳,所有逻辑留在核心模块,CLI 与 GUI 永远共享同一实现
+  - **视觉基底(2026-07-16 敲定)**:vendored 的 Claude 风设计系统
+    `assets/design-system/claude/`(取自 Open Design 仓库,Apache 2.0,纯 CSS 变量
+    + 纯 HTML 组件配方,零框架依赖)。tokens.css 直接引入,组件优先照
+    components.html 配方写;复杂控件(滑杆/对话框)如配方不够再引入
+    Shoelace(Web Components,MIT,本地 vendored)
+  - 原则:GUI 只是壳,所有逻辑留在核心模块,CLI 与 GUI 永远共享同一实现;
+    零外部网络请求(字体/CSS/JS 全部本地)
   - 打包(v0.7):PyInstaller 单 exe
 
 ### 9. 测试与 CI
