@@ -76,6 +76,87 @@ def test_browser_mode_opens_url_and_server_is_live_before_shutdown(monkeypatch):
     _assert_no_leaked_threads(before)
 
 
+class _FakeDropEvents:
+    """模拟 pywebview `window.dom.document.events.drop`：`+=` 订阅一个 handler。"""
+
+    def __init__(self) -> None:
+        self.subscribed = None
+
+    def __iadd__(self, handler):
+        self.subscribed = handler
+        return self
+
+
+class _FakeDom:
+    def __init__(self) -> None:
+        self.document = types.SimpleNamespace(events=types.SimpleNamespace(drop=_FakeDropEvents()))
+
+
+class _FakeWindowWithDrop:
+    def __init__(self) -> None:
+        self.dom = _FakeDom()
+        self.evaluate_js_calls = []
+
+    def evaluate_js(self, script: str) -> None:
+        self.evaluate_js_calls.append(script)
+
+
+def test_register_drop_bridge_subscribes_and_forwards_pywebview_full_path():
+    """决策 4：注册 `window.dom.document.events.drop`，收到事件后只转发带
+    `pywebviewFullPath` 的文件，通过 `evaluate_js` 回推 `App.onNativeDrop`。"""
+    window = _FakeWindowWithDrop()
+
+    app._register_drop_bridge(window)
+
+    assert window.dom.document.events.drop.subscribed is not None
+
+    event = {
+        "dataTransfer": {
+            "files": [
+                {"pywebviewFullPath": "C:\\Users\\me\\a.jpg", "name": "a.jpg"},
+                {"name": "no-native-path.jpg"},  # 标准浏览器 File，没有这个扩展字段
+            ]
+        }
+    }
+    window.dom.document.events.drop.subscribed(event)
+
+    assert len(window.evaluate_js_calls) == 1
+    call = window.evaluate_js_calls[0]
+    assert call.startswith("App.onNativeDrop(")
+    assert "a.jpg" in call
+    assert "no-native-path.jpg" not in call
+
+
+def test_register_drop_bridge_degrades_gracefully_when_dom_bridge_missing(capsys):
+    """pywebview API 版本差异：`window` 没有 `.dom`（旧版本/桩对象）时不应抛出，
+    只打印中文提示——window 模式下浏览器式 `/api/upload` 上传依然可用。"""
+    window = object()  # 没有 .dom 属性
+
+    app._register_drop_bridge(window)  # 不应抛异常
+
+    out = capsys.readouterr().out
+    assert "拖" in out or "降级" in out or "失败" in out
+
+
+def test_window_mode_registers_drop_bridge_before_start(monkeypatch):
+    """`_run_window` 走通路径（create_window 成功、start 正常返回）时，应该把
+    创建出来的 window 对象交给 `_register_drop_bridge` 完成拖放桥注册。"""
+    fake_window = _FakeWindowWithDrop()
+    fake_webview = types.ModuleType("webview")
+    fake_webview.create_window = lambda *a, **k: fake_window
+    fake_webview.start = lambda *a, **k: None  # 正常返回，不阻塞
+    monkeypatch.setitem(sys.modules, "webview", fake_webview)
+
+    before = threading.active_count()
+    ev = threading.Event()
+    rc = app.main(browser=False, port=0, _ready_event=ev)
+
+    assert rc == 0
+    assert ev.is_set()
+    assert fake_window.dom.document.events.drop.subscribed is not None
+    _assert_no_leaked_threads(before)
+
+
 def test_window_mode_falls_back_to_browser_on_webview_start_exception(monkeypatch, capsys):
     """真实 WebView2 故障通常在 `webview.start()` 才炸（不是 `create_window()`），
     stub 还原这个更真实的失败位置，确认仍会降级到浏览器模式。"""

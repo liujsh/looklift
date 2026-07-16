@@ -8,7 +8,7 @@ import json
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from . import api
 
@@ -62,8 +62,28 @@ class _RequestHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.NOT_FOUND, {"error": f"未找到路径：{path}"})
             return
         handler, params = matched
-        status, body = handler(params)
+        context = {
+            "params": params,
+            "body": self._read_body(),
+            "content_type": self.headers.get("Content-Type", ""),
+            "query": {key: values[0] for key, values in parse_qs(urlsplit(self.path).query).items()},
+        }
+        status, body = handler(context)
         self._send_json(status, body)
+
+    def _read_body(self) -> bytes | None:
+        """按 `Content-Length` 读取请求体；没有该头（如大多数 GET 请求）时返回
+        `None`，与「有一个空 body」区分开。"""
+        length_header = self.headers.get("Content-Length")
+        if length_header is None:
+            return None
+        try:
+            length = int(length_header)
+        except ValueError:
+            return None
+        if length <= 0:
+            return None
+        return self.rfile.read(length)
 
     def _serve_static(self, rel_path: str) -> None:
         resolved = (STATIC_DIR / rel_path).resolve()

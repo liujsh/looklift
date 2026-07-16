@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import json
 import threading
 import webbrowser
 
@@ -59,7 +60,8 @@ def _run_window(srv, url: str, *, _ready_event: threading.Event | None) -> int:
         return _run_browser(srv, url, _ready_event=_ready_event)
 
     try:
-        webview.create_window("looklift", url)
+        window = webview.create_window("looklift", url)
+        _register_drop_bridge(window)
         if _ready_event is not None:  # 测试钩子：在真正调用 webview.start() 之前 set
             _ready_event.set()
         webview.start()
@@ -69,6 +71,33 @@ def _run_window(srv, url: str, *, _ready_event: threading.Event | None) -> int:
 
     _stop(srv)  # 窗口已关闭，回收本地 server
     return 0
+
+
+def _register_drop_bridge(window) -> None:
+    """按 design.md 决策 4 注册 pywebview 原生拖放桥。
+
+    `window.dom.document.events.drop` 是 pywebview 的 DOM 事件桥；收到的
+    `event['dataTransfer']['files'][i]` 里如果带 `pywebviewFullPath`（pywebview
+    专为拖放场景加的扩展字段，标准浏览器 JS 侧的 `File` 对象没有这个、出于
+    安全限制拿不到真实文件系统路径），就是我们要的绝对路径。拿到路径后用
+    `window.evaluate_js` 回推给前端 `App.onNativeDrop`，触发和「点击选择文件」
+    一样的 JS 流程，全程不拷贝原图。
+
+    pywebview 不同版本的 DOM 事件桥 API 有细微差异（本身就是相对新的扩展
+    能力），整体包一层 try/except：注册失败只打印中文提示、优雅降级——
+    window 模式下浏览器式的 `/api/upload` 上传依然可用，不影响窗口正常打开。
+    """
+    try:
+        def _on_drop(event: dict) -> None:
+            files = ((event or {}).get("dataTransfer") or {}).get("files") or []
+            paths = [f["pywebviewFullPath"] for f in files if "pywebviewFullPath" in f]
+            if not paths:
+                return
+            window.evaluate_js(f"App.onNativeDrop({json.dumps(paths)})")
+
+        window.dom.document.events.drop += _on_drop
+    except Exception:  # noqa: BLE001 —— pywebview API 版本差异一律归为「降级」，不崩溃
+        print("原生拖放桥注册失败，窗口内拖拽将退回浏览器式上传")
 
 
 def _run_browser(srv, url: str, *, _ready_event: threading.Event | None) -> int:

@@ -139,6 +139,88 @@
   };
 
   /**
+   * pywebview 窗口模式下，Python 侧收到原生拖放事件（决策 4：
+   * `window.dom.document.events.drop` 拿到 `pywebviewFullPath`）后，通过
+   * `window.evaluate_js` 回推调用这里，转发成一个 DOM 自定义事件
+   * `looklift:drop`，供 App.bindDropzone 消费。
+   * @param {string[]} paths 绝对文件路径列表
+   */
+  App.onNativeDrop = function (paths) {
+    document.dispatchEvent(new CustomEvent("looklift:drop", { detail: { paths: paths || [] } }));
+  };
+
+  /**
+   * 把一个 File 以 FormData 上传到 `POST /api/upload`（browser 模式专用，
+   * 见 design.md 决策 4：浏览器标签页拿不到真实文件系统路径，只能先落一份
+   * 临时文件）。不复用 App.api，因为 FormData 请求不能带 JSON 的
+   * Content-Type 头。
+   * @param {File} file
+   * @returns {Promise<{path: string}>}
+   */
+  App.uploadFile = function (file) {
+    var formData = new FormData();
+    formData.append("file", file, file.name);
+    return fetch("/api/upload", { method: "POST", body: formData }).then(function (resp) {
+      return resp
+        .json()
+        .catch(function () {
+          return {};
+        })
+        .then(function (data) {
+          if (!resp.ok) {
+            throw new Error((data && data.error) || "上传失败：" + resp.status);
+          }
+          return data;
+        });
+    });
+  };
+
+  /**
+   * 通用拖拽区绑定：window 模式下走 `looklift:drop` 拿到的原生绝对路径（零
+   * 拷贝），browser 模式下对每个拖入的 File 调 App.uploadFile 落临时文件再
+   * 拿路径。两种机制各自独立监听；pywebview 的原生桥转发要经一次 Python
+   * 往返，比浏览器自身的 drop 事件略晚到达，所以用一个短暂延时等它——等到
+   * 了就说明是 window 模式，跳过重复的浏览器式上传。
+   * @param {HTMLElement} el 拖拽区元素
+   * @param {(path: string) => void} onPath 拿到文件路径后的回调
+   */
+  App.bindDropzone = function (el, onPath) {
+    if (!el) {
+      return;
+    }
+    var nativeHandled = false;
+
+    document.addEventListener("looklift:drop", function (evt) {
+      nativeHandled = true;
+      (evt.detail.paths || []).forEach(onPath);
+    });
+
+    el.addEventListener("dragover", function (evt) {
+      evt.preventDefault();
+    });
+
+    el.addEventListener("drop", function (evt) {
+      evt.preventDefault();
+      var files = (evt.dataTransfer && evt.dataTransfer.files) || [];
+      setTimeout(function () {
+        if (nativeHandled) {
+          nativeHandled = false;
+          return;
+        }
+        Array.prototype.forEach.call(files, function (file) {
+          App.uploadFile(file)
+            .then(function (result) {
+              onPath(result.path);
+            })
+            .catch(function (err) {
+              App.toast(err.message);
+            });
+        });
+      }, 60);
+    });
+  };
+
+  /**
    * 初始化：绑定导航点击事件，恢复上次打开的面板（无记录则用默认面板）。
    */
   function init() {

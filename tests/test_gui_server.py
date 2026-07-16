@@ -164,3 +164,41 @@ def test_tasks_error_state_carries_chinese_message(running_server):
     assert data["status"] == "error"
     assert data["result"] is None
     assert "坏了：参数不对" in data["error"]
+
+
+def test_task_dict_carries_message_key(running_server):
+    """决策 2 的任务态形状是 `{status, message, result, error}`；`message` 在
+    运行中应为「运行中」，结束（done/error）后 None 也是合法值。"""
+    gate = threading.Event()
+    task_id = tasks.submit(lambda: gate.wait(timeout=5) or {"ok": True})
+
+    _, _, running_body = _get(running_server, f"/api/tasks/{task_id}")
+    running_data = json.loads(running_body)
+    assert "message" in running_data
+    assert running_data["message"] == "运行中"
+
+    gate.set()
+    done_data = _poll_until_finished(running_server, task_id)
+    assert "message" in done_data
+
+
+def test_route_handler_exception_returns_500_json(running_server, monkeypatch):
+    """500 兜底路径：临时注册一个必炸的路由，确认 `_dispatch` 的兜底 except
+    把异常转成 500 JSON `{"error"}`，而不是让 traceback 泄漏给客户端。"""
+    from looklift.gui import api
+
+    def _boom(ctx):
+        raise RuntimeError("路由 handler 内部炸了")
+
+    original_routes = dict(api.ROUTES)
+    api.ROUTES[("GET", "/api/__boom__")] = _boom
+    try:
+        status, content_type, body = _get(running_server, "/api/__boom__")
+        assert status == 500
+        assert "application/json" in content_type
+        data = json.loads(body)
+        assert "error" in data
+        assert "路由 handler 内部炸了" in data["error"]
+    finally:
+        api.ROUTES.clear()
+        api.ROUTES.update(original_routes)
