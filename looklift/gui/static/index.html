@@ -62,6 +62,32 @@
           <p class="eyebrow analyze-section-label">基本面板参数</p>
           <div id="analyze-basic" class="analyze-basic"></div>
         </div>
+
+        <div id="preview-card" class="card" hidden>
+          <h2>预览与强度</h2>
+          <p class="body-muted">拖动滑杆调整强度：0% 接近原图，100% 是分析给出的完整调整。</p>
+
+          <div class="preview-compare" id="preview-compare">
+            <img id="preview-before" class="preview-img" alt="原图预览" />
+            <img id="preview-after" class="preview-img" alt="调整后预览" />
+            <div id="preview-divider" class="preview-divider" aria-hidden="true"></div>
+          </div>
+
+          <div class="field preview-intensity">
+            <label for="preview-intensity-slider">
+              强度
+              <span id="preview-intensity-value">100%</span>
+            </label>
+            <input
+              type="range"
+              id="preview-intensity-slider"
+              min="0"
+              max="100"
+              step="1"
+              value="100"
+            />
+          </div>
+        </div>
       </section>
 
       <section id="panel-looks" class="panel" hidden>
@@ -129,5 +155,6 @@
 
     <script src="/static/js/app.js" defer></script>
     <script src="/static/js/panels/analyze.js" defer></script>
+    <script src="/static/js/panels/preview.js" defer></script>
   </body>
 </html>

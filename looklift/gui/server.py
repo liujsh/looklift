@@ -68,8 +68,16 @@ class _RequestHandler(BaseHTTPRequestHandler):
             "content_type": self.headers.get("Content-Type", ""),
             "query": {key: values[0] for key, values in parse_qs(urlsplit(self.path).query).items()},
         }
-        status, body = handler(context)
-        self._send_json(status, body)
+        result = handler(context)
+        # 一条干净的分发分支:handler 返回三元组即二进制响应（如
+        # `/api/preview` 的 JPEG 字节），两元组沿用原有 JSON 响应，不为此
+        # 拆两套 Handler 签名或额外的 content-type 协商机制。
+        if len(result) == 3:
+            status, data, content_type = result
+            self._send_binary(status, data, content_type)
+        else:
+            status, body = result
+            self._send_json(status, body)
 
     def _read_body(self) -> bytes | None:
         """按 `Content-Length` 读取请求体；没有该头（如大多数 GET 请求）时返回
@@ -94,6 +102,13 @@ class _RequestHandler(BaseHTTPRequestHandler):
         content_type = _CONTENT_TYPES.get(resolved.suffix.lower(), "application/octet-stream")
         data = resolved.read_bytes()
         self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _send_binary(self, status: int, data: bytes, content_type: str) -> None:
+        self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()

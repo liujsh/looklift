@@ -121,6 +121,9 @@
     if (els.result) {
       els.result.hidden = false;
     }
+    // 通知 panels/preview.js（GUI-T9）新分析结果就绪，可以取 before/after
+    // 预览了——与 app.js 的 `looklift:drop` 同一种"自定义事件解耦面板"模式。
+    document.dispatchEvent(new CustomEvent("looklift:analysis-ready"));
   }
 
   /**
@@ -138,6 +141,8 @@
     if (els.result) {
       els.result.hidden = true;
     }
+    // 旧的 before/after 预览属于上一张照片，先让 panels/preview.js 隐藏/清理掉。
+    document.dispatchEvent(new CustomEvent("looklift:analysis-reset"));
     setSubmitting(true);
 
     var hint = els.hint ? els.hint.value.trim() : "";

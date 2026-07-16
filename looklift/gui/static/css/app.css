@@ -304,6 +304,61 @@
   color: var(--muted);
 }
 
+/* ─── 分析结果:预览与强度(before/after 对比条 + 强度滑杆,U20)──────────
+ * 决策 5:原生 <input type="range"> + accent-color token 上色,两张 img
+ * 绝对叠放,上层 after 用 clip-path 由滑杆驱动,不引入 Shoelace。
+ */
+.preview-compare {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-warm);
+}
+
+.preview-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+
+#preview-after {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.preview-divider {
+  position: absolute;
+  inset-block: 0;
+  left: 100%;
+  width: 2px;
+  margin-inline-start: -1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.preview-intensity {
+  margin-block-start: var(--space-4);
+}
+
+.preview-intensity label {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+  color: var(--meta);
+  margin-block-end: var(--space-2);
+}
+
+.preview-intensity input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
 /* ─── 工具类：提示条（App.toast）────────────────────────────────────── */
 .toast-root {
   position: fixed;

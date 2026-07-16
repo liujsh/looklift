@@ -14,21 +14,48 @@ handler 收到的不再只是段参数，而是一个请求上下文 dict：
 """
 from __future__ import annotations
 
+import io
 import json
 import os
 import shutil
 from pathlib import Path
 from typing import Any, Callable
 
-from .. import analyzer, config
+from PIL import Image
+
+from .. import analyzer, config, intensity, render
 from . import tasks
 from . import upload
 
-Handler = Callable[[dict], tuple[int, dict]]
+# handler 返回 `(status, dict)`（JSON 响应）或 `(status, bytes, content_type)`
+# （二进制响应，目前只有 `/api/preview` 用）；`server.py` 按返回值长度分发。
+Handler = Callable[[dict], "tuple[int, dict] | tuple[int, bytes, str]"]
 
 _VALID_PROVIDERS = {"auto", "cli", "api"}
 
 _ANALYZE_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
+
+# `/api/preview` 风险清单「大图内存」缓解:预览统一缩到长边这个上限再渲染,
+# 不用原始分辨率做仅供观感的预览(见 design.md)。
+_PREVIEW_MAX_EDGE = 2048
+_PREVIEW_JPEG_QUALITY = 88
+
+
+def _validate_image_path(path: Any) -> "tuple[Path, None] | tuple[None, tuple[int, dict]]":
+    """校验图片路径:必填、文件存在、扩展名受支持。
+
+    `/api/analyze` 和 `/api/preview` 共用同一份规则,抽成一个函数避免两处
+    分别维护、容易漂移。返回 `(Path, None)` 表示校验通过;`(None, (status,
+    body))` 表示校验失败,调用方直接 `return err` 即可。
+    """
+    if not path:
+        return None, (400, {"error": "缺少 path 字段"})
+    image_path = Path(path)
+    if not image_path.is_file():
+        return None, (400, {"error": f"文件不存在：{path}"})
+    if image_path.suffix.lower() not in _ANALYZE_ALLOWED_EXTS:
+        return None, (400, {"error": f"不支持的图片格式：{image_path.suffix or '（无扩展名）'}"})
+    return image_path, None
 
 
 def _ping(ctx: dict) -> tuple[int, dict]:
@@ -177,14 +204,9 @@ def _analyze(ctx: dict) -> tuple[int, dict]:
     if not isinstance(payload, dict):
         return 400, {"error": "请求体必须是 JSON 对象"}
 
-    path = payload.get("path")
-    if not path:
-        return 400, {"error": "缺少 path 字段"}
-    image_path = Path(path)
-    if not image_path.is_file():
-        return 400, {"error": f"文件不存在：{path}"}
-    if image_path.suffix.lower() not in _ANALYZE_ALLOWED_EXTS:
-        return 400, {"error": f"不支持的图片格式：{image_path.suffix or '（无扩展名）'}"}
+    image_path, err = _validate_image_path(payload.get("path"))
+    if err is not None:
+        return err
 
     original = payload.get("original") or None
     hint = payload.get("hint") or None
@@ -194,6 +216,66 @@ def _analyze(ctx: dict) -> tuple[int, dict]:
     return 200, {"task_id": task_id}
 
 
+def _render_preview(image_path: Path, analysis: dict, factor: float) -> bytes:
+    """预览渲染管线:开图 → 缩到长边 `_PREVIEW_MAX_EDGE`(风险清单「大图内存」)
+    → `intensity.scale_analysis` → `render.render` → JPEG 编码。抽成独立函数
+    而不是散在 handler 里——这是这个路由唯一的"业务逻辑"，`_preview` 只做
+    HTTP 参数校验和分发，图像管线细节集中在这一处，符合分层规范。
+    """
+    with Image.open(image_path) as opened:
+        img = opened.convert("RGB")
+    img.thumbnail((_PREVIEW_MAX_EDGE, _PREVIEW_MAX_EDGE), Image.LANCZOS)
+    scaled = intensity.scale_analysis(analysis, factor)
+    rendered = render.render(img, scaled)
+    buf = io.BytesIO()
+    rendered.save(buf, format="JPEG", quality=_PREVIEW_JPEG_QUALITY)
+    return buf.getvalue()
+
+
+def _preview(ctx: dict) -> "tuple[int, dict] | tuple[int, bytes, str]":
+    """`POST /api/preview`：按当前强度 `factor` 渲染 before/after 预览图
+    （design.md 强度缩放语义「GUI 侧用法」+ API 路由一览 `/api/preview` 行）。
+
+    body 字段：`path`（必填，图片路径，复用 `_validate_image_path`）、
+    `analysis`（必填，完整分析结果 dict）、`factor`（必填，0-1 浮点，对应
+    滑杆 0%-100%）。`factor=0` 时 `scale_analysis` 把所有偏移量归零，等价于
+    "无调整渲染"——前端用它同时取 before 图（尺寸经过同一条缩放管线，与
+    after 图对齐），不用另外维护一条不缩放的路径。
+
+    同步处理，不走 `tasks.py` 的后台任务队列：2048px 长边的渲染耗时约
+    1-2 秒，量级上远低于 `analyze` 的 30-120 秒——那才是必须后台线程 + 轮询
+    的场景（见 design.md 决策 2）。这里一次同步 HTTP 往返用户可接受，引入
+    task_id/轮询只会增加前端复杂度，不成比例。
+    """
+    body = ctx.get("body")
+    try:
+        payload = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        return 400, {"error": "请求体不是合法 JSON"}
+    if not isinstance(payload, dict):
+        return 400, {"error": "请求体必须是 JSON 对象"}
+
+    image_path, err = _validate_image_path(payload.get("path"))
+    if err is not None:
+        return err
+
+    analysis = payload.get("analysis")
+    if not isinstance(analysis, dict):
+        return 400, {"error": "缺少 analysis 字段"}
+
+    if "factor" not in payload:
+        return 400, {"error": "缺少 factor 字段"}
+    factor = payload["factor"]
+    if isinstance(factor, bool) or not isinstance(factor, (int, float)):
+        return 400, {"error": f"factor 必须是 0-1 之间的数字，收到：{factor!r}"}
+    factor = float(factor)
+    if not (0.0 <= factor <= 1.0):
+        return 400, {"error": f"factor 必须在 0-1 之间，收到：{factor}"}
+
+    jpeg_bytes = _render_preview(image_path, analysis, factor)
+    return 200, jpeg_bytes, "image/jpeg"
+
+
 ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/ping"): _ping,
     ("GET", "/api/config"): _get_config,
@@ -201,5 +283,6 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/tasks/<id>"): _get_task,
     ("POST", "/api/upload"): _upload,
     ("POST", "/api/analyze"): _analyze,
+    ("POST", "/api/preview"): _preview,
     ("GET", "/report/<name>"): _report_placeholder,
 }
