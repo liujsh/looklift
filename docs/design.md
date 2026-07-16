@@ -145,7 +145,8 @@ prompt/schema/normalize,组装 blocks 后交给 provider。
   行为不变(cli 走 stdin 传 prompt;api 用 json_schema 结构化输出,图片长边压到
   `MAX_EDGE=1568`)
 - `get_provider("auto")` 解析顺序:config.toml 显式指定 provider(cli/api)→
-  环境变量 `ANTHROPIC_API_KEY` → `which("claude")` → 报错
+  有 API key(环境变量 `ANTHROPIC_API_KEY` 或 config 的 `api_key`)→
+  `which("claude")` → 报错
 - `_extract_json`:cli 后端输出无 schema 硬约束,容错提取(剥 markdown 代码块、
   取首尾大括号)
 
