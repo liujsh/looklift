@@ -307,11 +307,32 @@
   }
 
   /**
+   * 代码评审修订（Important）：`cloneNode(true)` 会把 `id="settings-model"`/
+   * `id="settings-api-key"` 这些 id 原样复制一份，导致向导（用户首屏就看到
+   * 的东西）和隐藏的设置面板同时存在两份相同 id——点向导里的 `<label>` 有
+   * 概率把焦点带去隐藏面板里的同名 input。这里把克隆节点内部所有 `[id]`
+   * 元素的 id 换成不冲突的新值（`settings-` 前缀替换成 `wizard-`，没有该
+   * 前缀的就直接加 `wizard-` 前缀），并同步改写引用它们的 `label[for]`。
+   * @param {HTMLElement} clone 已从原表单克隆出来、尚未插入文档的节点
+   */
+  function _dedupeClonedIds(clone) {
+    clone.querySelectorAll("[id]").forEach(function (el) {
+      var oldId = el.id;
+      var newId = oldId.indexOf("settings-") === 0 ? "wizard-" + oldId.slice("settings-".length) : "wizard-" + oldId;
+      el.id = newId;
+      clone.querySelectorAll('label[for="' + oldId + '"]').forEach(function (label) {
+        label.setAttribute("for", newId);
+      });
+    });
+  }
+
+  /**
    * 展示首次配置向导：把 #settings-form 的表单结构克隆一份塞进向导容器
    * （design.md 决策「首次配置向导内容复用 .form/.field 配方」——字段定义
    * 只在 HTML 里写一份，向导用克隆节点而不是重复标记，避免两处表单字段
    * 后续改动时漏改一处），回填当前配置状态，挂 submit 处理（保存成功即
-   * 关闭向导 + toast 提示）。
+   * 关闭向导 + toast 提示）。克隆节点内部的 id 必须先经 `_dedupeClonedIds`
+   * 改写掉，再插入文档，避免和隐藏的设置面板出现重复 id。
    * @param {{provider: string, model: string, has_key: boolean}} cfg
    */
   function showWizard(cfg) {
@@ -323,6 +344,7 @@
     }
     var clone = settingsForm.cloneNode(true);
     clone.id = "wizard-form";
+    _dedupeClonedIds(clone);
     var submitBtn = clone.querySelector('button[type="submit"]');
     if (submitBtn) {
       submitBtn.textContent = "保存并开始";

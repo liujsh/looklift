@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import re
 import threading
 from pathlib import Path
 
@@ -74,6 +75,33 @@ def test_get_config_considers_cli_on_path_as_configured(running_server, monkeypa
 
     assert status == 200
     assert data["configured"] is True
+
+
+def test_get_config_considers_anthropic_api_key_env_as_configured(running_server, monkeypatch):
+    """代码评审(Important):providers.get_provider("auto") 把 ANTHROPIC_API_KEY
+    环境变量当成"api 可用"（providers.py:136-137，design.md §10 有文档化），
+    这里的 configured 判定必须跟它口径一致——否则只用环境变量配置的用户，
+    向导会每次启动都跳出来烦（违反 requirements.md 验收第 3 条"配置过一次后
+    再次启动直接进主界面"）。"""
+    monkeypatch.setattr(api.shutil, "which", lambda _: None)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-env-key")
+
+    status, data = _request(running_server, "GET", "/api/config")
+
+    assert status == 200
+    assert data["configured"] is True
+
+
+def test_get_config_unconfigured_when_anthropic_api_key_env_absent(running_server, monkeypatch):
+    """上一条的对照组：env 未设置时（显式 delenv，不依赖测试执行环境是否
+    本来就没设），其余条件皆无 → 仍然是 false，确认 env 检查没有引入误报。"""
+    monkeypatch.setattr(api.shutil, "which", lambda _: None)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    status, data = _request(running_server, "GET", "/api/config")
+
+    assert status == 200
+    assert data["configured"] is False
 
 
 # ─── POST /api/config ───────────────────────────────────────────────────
@@ -139,6 +167,26 @@ def test_post_config_partial_update_does_not_clobber_other_fields(running_server
     assert cfg["model"] == "claude-x"  # 未在这次请求里出现的字段保持不变
 
 
+def test_post_config_does_not_bake_transient_env_override_into_saved_file(running_server, monkeypatch):
+    """代码评审(Minor，env-baking):`_post_config` 拿 `load_config()` 当合并
+    基准会连带 LOOKLIFT_* 环境变量的临时覆盖一起写进 config.toml——环境变量
+    本该是"这次进程运行期间生效"，不该被一次保存动作意外固化成永久配置。
+    这里设一个 `LOOKLIFT_LOOKS_DIR` 环境变量（POST 请求体完全不碰这个字段），
+    保存后直接读磁盘文件内容，确认环境变量的值没有被写进去——`looks_dir`
+    这个 key 本身依然会出现（`save_config` 对 `_DEFAULTS` 里的字段一视同仁，
+    没配就写空字符串），断言点是"值不是环境变量那个"，不是"key 不存在"。
+    """
+    monkeypatch.setattr(api.shutil, "which", lambda _: None)
+    monkeypatch.setenv("LOOKLIFT_LOOKS_DIR", "/env/should/not/be/saved")
+
+    status, data = _request(running_server, "POST", "/api/config", {"provider": "cli"})
+
+    assert status == 200
+    saved_text = config.CONFIG_PATH.read_text(encoding="utf-8")
+    assert "/env/should/not/be/saved" not in saved_text
+    assert config.load_config(include_env=False)["looks_dir"] == ""
+
+
 # ─── 纯函数:analyze 是否可用 ────────────────────────────────────────────
 
 
@@ -151,8 +199,15 @@ def test_analyze_would_work_true_when_api_key_present():
     assert api._analyze_would_work({"provider": "auto", "api_key": "sk-x", "model": "", "base_url": ""}) is True
 
 
+def test_analyze_would_work_true_when_anthropic_api_key_env_present(monkeypatch):
+    monkeypatch.setattr(api.shutil, "which", lambda _: None)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-env")
+    assert api._analyze_would_work({"provider": "auto", "api_key": "", "model": "", "base_url": ""}) is True
+
+
 def test_analyze_would_work_false_when_nothing_available(monkeypatch):
     monkeypatch.setattr(api.shutil, "which", lambda _: None)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert api._analyze_would_work({"provider": "auto", "api_key": "", "model": "", "base_url": ""}) is False
 
 
@@ -178,3 +233,32 @@ def test_index_html_settings_form_has_all_config_field_names():
     text = _index_html_text()
     for field_name in ("provider", "model", "api_key", "base_url"):
         assert f'name="{field_name}"' in text, f"settings 表单缺少字段:{field_name}"
+
+
+def test_index_html_has_no_duplicate_ids():
+    """代码评审(Important，wizard cloneNode 重复 id):静态标记本身不能有重复
+    id——这条守住 index.html 这一份源头；运行时向导克隆 #settings-form 后
+    还得再做一次 id 改写（见 app.js 的 `_dedupeClonedIds`），那部分不经浏览器
+    没法直接单测，用下面 `test_app_js_wizard_clone_dedupes_cloned_ids` 从 JS
+    源码字符串层面守住"克隆后确实调用了改写逻辑"这件事。
+    """
+    text = _index_html_text()
+    ids = re.findall(r'\bid="([^"]+)"', text)
+    duplicates = {i for i in ids if ids.count(i) > 1}
+    assert not duplicates, f"index.html 出现重复 id：{duplicates}"
+
+
+def test_app_js_wizard_clone_dedupes_cloned_ids():
+    """向导表单是 `#settings-form` 的 `cloneNode(true)`，克隆前 DOM 里同时
+    存在两份 `id="settings-model"`/`id="settings-api-key"`（原表单 + 克隆），
+    首屏点标签会误聚焦到隐藏的设置面板输入框上。要求 `showWizard` 在插入
+    克隆节点前调用一个 id 改写函数，把克隆内部的 id（以及配套的
+    `label[for]`）全部换成不冲突的新值。"""
+    text = (Path(__file__).parent.parent / "looklift" / "gui" / "static" / "js" / "app.js").read_text(
+        encoding="utf-8"
+    )
+    assert "_dedupeClonedIds" in text, "app.js 缺少克隆 id 改写函数 _dedupeClonedIds"
+
+    show_wizard_start = text.index("function showWizard")
+    show_wizard_body = text[show_wizard_start : show_wizard_start + 2000]
+    assert "_dedupeClonedIds(clone" in show_wizard_body, "showWizard 必须在插入克隆节点前调用 _dedupeClonedIds"

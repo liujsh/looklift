@@ -14,6 +14,7 @@ handler 收到的不再只是段参数，而是一个请求上下文 dict：
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from typing import Any, Callable
 
@@ -34,15 +35,21 @@ def _ping(ctx: dict) -> tuple[int, dict]:
 def _analyze_would_work(cfg: dict[str, Any]) -> bool:
     """纯函数：判断"分析请求现在发得出去"，即 GET /api/config 里的 `configured`。
 
-    三选一即算配好：provider 被显式指到 cli/api（用户已经做过选择）、config
-    里存了 api_key、或者本机 PATH 上有 claude 命令（等价于 providers.get_provider
-    在 backend="auto" 时走到底也能选出一个可用后端）。不直接依赖
-    `providers.get_provider`——那个函数在选不出后端时会抛异常，这里只想要一个
-    布尔值，抽成独立纯函数也方便不起 HTTP server 单测。
+    四选一即算配好：provider 被显式指到 cli/api（用户已经做过选择）、config
+    里存了 api_key、环境变量 `ANTHROPIC_API_KEY` 有值（`providers.get_provider`
+    在 backend="auto" 时就是把这个环境变量当"api 可用"的判据之一，见
+    providers.py:136-137、design.md §10——这里的口径必须跟它保持一致，否则
+    只用环境变量配置的用户每次启动都会被向导烦一遍，违反 requirements.md
+    验收第 3 条"配置过一次后再次启动直接进主界面"）、或者本机 PATH 上有
+    claude 命令。不直接依赖 `providers.get_provider`——那个函数在选不出
+    后端时会抛异常，这里只想要一个布尔值，抽成独立纯函数也方便不起 HTTP
+    server 单测。
     """
     if cfg["provider"] in ("cli", "api"):
         return True
     if cfg["api_key"]:
+        return True
+    if os.environ.get("ANTHROPIC_API_KEY"):
         return True
     return shutil.which("claude") is not None
 
@@ -65,11 +72,17 @@ def _get_config(ctx: dict) -> tuple[int, dict]:
 def _post_config(ctx: dict) -> tuple[int, dict]:
     """`POST /api/config`：配置向导/设置面板保存。
 
-    body 的字段全部可选，缺省字段保持 `load_config()` 里的原值不变（partial
-    update）；`api_key` 有个特例——空字符串代表"保留原值"而不是"清空"，
-    因为前端出于安全考虑从不把已保存的密钥回填进输入框，用户不改密钥直接
-    点保存时，表单提交上来的就是空字符串，不能把这个当成"用户想清空密钥"。
-    真要清空密钥得走别的显式操作（当前 UI 未提供，也不在本任务范围）。
+    body 的字段全部可选，缺省字段保持磁盘上原有配置不变（partial update）；
+    `api_key` 有个特例——空字符串代表"保留原值"而不是"清空"，因为前端出于
+    安全考虑从不把已保存的密钥回填进输入框，用户不改密钥直接点保存时，
+    表单提交上来的就是空字符串，不能把这个当成"用户想清空密钥"。真要清空
+    密钥得走别的显式操作（当前 UI 未提供，也不在本任务范围）。
+
+    合并基准用 `config.load_config(include_env=False)`——不能用带
+    `LOOKLIFT_*` 环境变量覆盖的默认视图，否则这次进程运行期间生效的临时
+    环境变量会被这次保存动作意外固化进 config.toml（比如设了
+    `LOOKLIFT_LOOKS_DIR` 只是想临时换个目录跑一次，保存 provider 设置时却
+    把这个目录也永久写进了配置文件）。
     """
     body = ctx.get("body")
     try:
@@ -83,7 +96,7 @@ def _post_config(ctx: dict) -> tuple[int, dict]:
     if provider is not None and provider not in _VALID_PROVIDERS:
         return 400, {"error": f"provider 必须是 auto/cli/api 之一，收到：{provider!r}"}
 
-    cfg = config.load_config()
+    cfg = config.load_config(include_env=False)
     for key in ("provider", "model", "base_url"):
         if key in payload:
             cfg[key] = payload[key]
