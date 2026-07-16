@@ -1,6 +1,13 @@
 # looklift 📷
 
-把大师作品的"look"提取出来:分析照片的调色/影调参数,生成 Lightroom 可用的预设和 RAW sidecar。
+> Lift the look — 把大师作品的"look"提取出来。
+
+分析照片的调色/影调参数,生成 Lightroom 可导入的预设和 RAW sidecar。
+喂一张喜欢的成片,AI(Claude 视觉模型)逆向推断出基本面板、HSL、颜色分级、曲线等全套参数,
+并用中文讲解这种风格是怎么调出来的。
+
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 ## 三条路径
 
@@ -47,6 +54,33 @@ python -m looklift apply 胶片青橙 --sidecar "D:/photos/*.CR3"
 python -m looklift refine 胶片青橙 --attempt my-export.jpg --target master.jpg
 ```
 
+## 示例输出
+
+对一张草原风光成片运行 `analyze` 的真实输出(节选):
+
+```
+=== 风格分析 ===
+这是一张典型的『明快风光』风格照片……影调上黑场扎实不褪色(马群和电线接近纯黑剪影),
+白场干净,反差中等偏高、中间调明亮。白平衡中性略偏冷,保持天空的清爽蓝。核心色彩处理在于:
+草地绿色被明显提饱和并向翠绿偏移,天空蓝色饱和度提高、明度略压以增强蓝白层次……
+
+=== 后期步骤 ===
+1. 白平衡保持中性,色温略向蓝偏移 3-5,营造清爽通透的基调
+3. 高光 -25 左右压回云层和塔筒的细节,白色 +10 保持白场干净明亮
+8. HSL:绿色色相 -15(偏翠绿)、饱和度 +30,蓝色饱和度 +20、明度 -10 加深天空
+……
+
+=== 基本面板 ===
+  色温     -4        高光     -25       去朦胧    +10
+  曝光     +0.1      阴影     +10       自然饱和度  +25
+  对比度    +15       黑色     -10       饱和度    +8
+
+=== 曲线控制点 ===
+  (0,0)  (64,58)  (128,132)  (192,198)  (255,255)
+
+[预设] 已生成: looks\grassland.xmp  (Lightroom → 预设面板 → 导入预设)
+```
+
 ## 工作流
 
 1. `analyze` 大师成片,起个名字 → 存入 `looks/` 风格库
@@ -63,4 +97,8 @@ python -m looklift refine 胶片青橙 --attempt my-export.jpg --target master.j
 
 - AI 推断的白平衡写成增量色温/色调(`IncrementalTemperature`),对 JPEG/TIFF 生效;RAW 文件的开尔文色温需在 LR 中微调
 - 局部调整(蒙版、径向/渐变滤镜)无法通过全局预设表达,分析结果的"后期步骤"里会用文字说明
-- AI 推断是估计值,建议套用后按讲解微调
+- AI 推断是估计值,建议套用后按讲解微调,或用 `refine` 命令迭代校准
+
+## License
+
+MIT
