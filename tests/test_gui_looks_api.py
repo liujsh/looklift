@@ -114,8 +114,10 @@ def test_post_looks_duplicate_name_returns_409(running_server, sample_analysis):
     assert "error" in data2
 
 
-@pytest.mark.parametrize("bad_name", ["../x", "a/b", "a:b", ""])
+@pytest.mark.parametrize("bad_name", ["../x", "a/b", "a:b", "", " "])
 def test_post_looks_invalid_name_returns_400(running_server, sample_analysis, bad_name):
+    """`" "`（纯空白）是 code review follow-up 补的用例——`_validate_look_name`
+    此前只用 `not name` 判空，纯空白字符串是"真值"，会漏过去。"""
     status, data = _request(
         running_server, "POST", "/api/looks", {"name": bad_name, "analysis": sample_analysis}
     )
@@ -125,6 +127,49 @@ def test_post_looks_invalid_name_returns_400(running_server, sample_analysis, ba
 
 def test_post_looks_missing_analysis_returns_400(running_server):
     status, data = _request(running_server, "POST", "/api/looks", {"name": "no-analysis"})
+    assert status == 400
+    assert "error" in data
+
+
+# ─── POST /api/looks：analysis 结构校验（code review Critical/XSS 修复）────
+#
+# `GET /report/<name>` 现在是活路由，`report.py` 的 `_HSL_CN.get(color,
+# color)` 在 color 不是 8 个已知颜色之一时会原样回退（该文件已经补了
+# escape，见 tests/test_report.py）；这里补的是源头这一层：不让任意字符串
+# 混进 `hsl[].color` 这类"应该是受控枚举"的字段。
+
+
+def test_post_looks_rejects_hsl_color_outside_enum(running_server, sample_analysis):
+    """复现 reviewer 给的攻击载荷：`hsl[].color` 塞一段 `<script>`，收藏必须
+    被结构校验拦在 400，而不是落盘等着 `/report/<name>` 把它吐回浏览器。"""
+    malicious = json.loads(json.dumps(sample_analysis))
+    malicious["hsl"] = [{"color": "<script>alert(1)</script>", "hue": 0, "saturation": 0, "luminance": 0}]
+
+    status, data = _request(running_server, "POST", "/api/looks", {"name": "xss", "analysis": malicious})
+    assert status == 400
+    assert "error" in data
+
+
+def test_post_looks_rejects_unknown_top_level_key(running_server, sample_analysis):
+    malicious = dict(sample_analysis)
+    malicious["__proto__"] = "whatever"
+    status, data = _request(running_server, "POST", "/api/looks", {"name": "extra-key", "analysis": malicious})
+    assert status == 400
+    assert "error" in data
+
+
+def test_post_looks_rejects_non_string_summary(running_server, sample_analysis):
+    malicious = dict(sample_analysis)
+    malicious["summary"] = {"not": "a string"}
+    status, data = _request(running_server, "POST", "/api/looks", {"name": "bad-summary", "analysis": malicious})
+    assert status == 400
+    assert "error" in data
+
+
+def test_post_looks_rejects_non_string_steps_items(running_server, sample_analysis):
+    malicious = dict(sample_analysis)
+    malicious["steps"] = [{"nested": "object"}]
+    status, data = _request(running_server, "POST", "/api/looks", {"name": "bad-steps", "analysis": malicious})
     assert status == 400
     assert "error" in data
 
@@ -213,6 +258,39 @@ def test_export_factor_matches_scale_then_write_preset_pipeline(
     expected_crs = xmp_writer.analysis_to_crs(intensity.scale_analysis(sample_analysis, 0.6))
     for key, value in expected_crs.items():
         assert settings[key] == value, f"{key} 不等价：{settings.get(key)!r} != {value!r}"
+
+
+def test_export_factor_compounds_on_already_scaled_saved_analysis(running_server, sample_analysis):
+    """code review follow-up（Important）：上一条测试保存时用的是默认 factor
+    1.0（恒等缩放），没能钉住 `_export_look` docstring 里写的"factor 存在时
+    在库里已经缩放过的 analysis 基础上再缩放一次"这句话——1.0 是恒等元，
+    掩盖了"复合"和"从原始 analysis 直接缩放"这两种语义的差异。这里保存时
+    用 factor=0.7，导出时再传 factor=0.6，断言导出结果等于
+    `scale_analysis(scale_analysis(sample_analysis, 0.7), 0.6)`（复合缩放），
+    而不是 `scale_analysis(sample_analysis, 0.6)`（如果实现错误地"忘记"
+    收藏时已经缩放过一次，会得到后者）。
+    """
+    _request(
+        running_server, "POST", "/api/looks",
+        {"name": "compound", "analysis": sample_analysis, "factor": 0.7},
+    )
+    status, data = _request(running_server, "POST", "/api/looks/compound/export", {"factor": 0.6})
+    assert status == 200
+
+    settings = xmp_reader.read_crs_settings(Path(data["preset"]))
+    compound_crs = xmp_writer.analysis_to_crs(
+        intensity.scale_analysis(intensity.scale_analysis(sample_analysis, 0.7), 0.6)
+    )
+    naive_crs = xmp_writer.analysis_to_crs(intensity.scale_analysis(sample_analysis, 0.6))
+
+    for key, value in compound_crs.items():
+        assert settings[key] == value, f"{key} 应等于复合缩放结果：{settings.get(key)!r} != {value!r}"
+
+    # 健全性检查：确认复合缩放与"忘记已缩放过一次"的朴素结果确实不同，
+    # 否则上面的断言即便实现有 bug 也可能因为两者恰好相等而白测。
+    assert any(compound_crs[k] != naive_crs[k] for k in compound_crs), (
+        "复合缩放与朴素缩放的期望值完全一致，这条测试对该 bug 没有区分度"
+    )
 
 
 def test_export_with_sidecar_writes_alongside_raw(running_server, tmp_path, sample_analysis):

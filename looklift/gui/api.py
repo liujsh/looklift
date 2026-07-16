@@ -64,17 +64,26 @@ _UNSAFE_LOOK_NAME_CHARS_RE = re.compile(r'[\\/<>:"|?*\x00-\x1f]')
 
 
 def _validate_look_name(name: Any) -> str | None:
-    """风格库名称安全校验：非空、≤100 字符、不含路径分隔符/“..”/Windows 保留
-    字符。不安全字符集与 `upload.py` 的 `sanitize_filename` 一致，但语义相
-    反——那边清洗的是用户看不到、不关心具体字符的上传文件名；这里的名字是
-    用户自己起的、要在 UI 上原样展示出来，静默改写会让"存的名字"和"看到的
-    名字"对不上，所以选择直接拒绝并提示中文原因，而不是静默清洗。所有
-    `/api/looks*` 与 `/report/<name>` 路由入口统一调用这个函数。
+    """风格库名称安全校验：非空（含纯空白）、≤100 字符、不含路径分隔符/
+    “..”/Windows 保留字符。不安全字符集与 `upload.py` 的 `sanitize_filename`
+    一致，但语义相反——那边清洗的是用户看不到、不关心具体字符的上传文件名；
+    这里的名字是用户自己起的、要在 UI 上原样展示出来，静默改写会让"存的
+    名字"和"看到的名字"对不上，所以选择直接拒绝并提示中文原因，而不是静默
+    清洗。所有 `/api/looks*` 与 `/report/<name>` 路由入口统一调用这个函数。
 
     返回 `None` 表示校验通过；否则返回中文错误信息，调用方直接包成
     `(400, {"error": ...})`。
+
+    路径穿越是两层防御共同挡住的，这里只是第二层：`server.py` 的
+    `_dispatch` 在按 `/` 切分路径段之前就先对整条路径 `unquote()` 过一遍
+    （见 `_match_pattern` 按段数比较），所以 `..%2f..%2f` 这类编码过的斜杠
+    在匹配路由前就已经展开成真正的 `/`，段数对不上 `<name>` 这个单段
+    占位符，直接 404，走不到这个函数；这里补的是同一段里出现字面 `..`
+    的情况（如 `/report/..`，只有两段，能匹配上路由），显式拒绝而不是
+    依赖 `Path` 的行为——不同校验入口（json_path/xmp_path 拼接）对 `..`
+    的处理方式不该是唯一的安全屏障。
     """
-    if not name or not isinstance(name, str):
+    if not isinstance(name, str) or not name.strip():
         return "风格名称不能为空"
     if len(name) > 100:
         return "风格名称过长（最多 100 字符）"
@@ -82,6 +91,36 @@ def _validate_look_name(name: Any) -> str | None:
         return "风格名称不能包含“..”"
     if _UNSAFE_LOOK_NAME_CHARS_RE.search(name):
         return '风格名称包含非法字符（不能有 / \\ < > : " | ? * 等）'
+    return None
+
+
+_ANALYSIS_TOP_LEVEL_KEYS = {"summary", "steps", "basic", "tone_curve", "hsl", "color_grading", "effects"}
+
+
+def _validate_analysis(analysis: dict[str, Any]) -> str | None:
+    """收藏前的最小结构校验（code review Critical/XSS 修复的第二层）。
+
+    `POST /api/looks` 此前只检查 `analysis` 是不是一个 dict，任意内容都能
+    落盘；`hsl[].color` 之类字段本该是固定枚举，`report.py` 的
+    `_HSL_CN.get(color, color)` 在渲染报告页时把它当"受信任的固定词表"处理
+    ——找不到映射就原样回退（现已在 report.py 补了 escape，见该文件注释），
+    但源头本就不该让任意字符串混进这类字段。这里只挡"会被当成受信任枚举/
+    固定类型使用"的最小集合，不是要在 GUI 层重新实现一遍
+    `analyzer.ANALYSIS_SCHEMA` 那份完整 JSON Schema（那是给 AI 结构化输出
+    用的强校验，字段更细、也没有 `additionalProperties` 之外的必要性）。
+
+    返回 `None` 表示校验通过；否则返回中文错误信息。
+    """
+    if not set(analysis.keys()) <= _ANALYSIS_TOP_LEVEL_KEYS:
+        return "analysis 包含未知字段"
+    if "summary" in analysis and not isinstance(analysis["summary"], str):
+        return "analysis.summary 必须是字符串"
+    steps = analysis.get("steps", [])
+    if not isinstance(steps, list) or not all(isinstance(s, str) for s in steps):
+        return "analysis.steps 必须是字符串数组"
+    for entry in analysis.get("hsl") or []:
+        if not isinstance(entry, dict) or entry.get("color") not in analyzer._COLOR_KEYS:
+            return f"analysis.hsl 的 color 必须是以下之一：{', '.join(analyzer._COLOR_KEYS)}"
     return None
 
 
@@ -216,6 +255,9 @@ def _post_looks(ctx: dict) -> tuple[int, dict]:
     analysis = payload.get("analysis")
     if not isinstance(analysis, dict):
         return 400, {"error": "缺少 analysis 字段"}
+    analysis_err = _validate_analysis(analysis)
+    if analysis_err:
+        return 400, {"error": analysis_err}
 
     factor, factor_err = _validate_factor(payload.get("factor", 1.0))
     if factor_err is not None:
@@ -224,6 +266,10 @@ def _post_looks(ctx: dict) -> tuple[int, dict]:
     looks_dir = config.looks_dir()
     if lookstore.exists(looks_dir, name):
         return 409, {"error": f"风格库中已存在同名条目：{name}"}
+    # exists → save 之间不是原子操作:两个并发请求理论上都能通过这个检查、
+    # 后写的覆盖先写的。GUI 是单用户本地进程模型(design.md 风险清单"本地
+    # HTTP server 暴露面"——只信任本机同一用户,不做鉴权),不为这个边角
+    # 情况引入文件锁,接受"后到请求赢"这个后果。
 
     scaled = intensity.scale_analysis(analysis, factor)
     lookstore.save(looks_dir, name, scaled)
@@ -306,6 +352,12 @@ def _report(ctx: dict) -> "tuple[int, dict] | tuple[int, bytes, str]":
     WebView2 支持 `window.open` 弹出原生新窗口，browser 模式下就是普通新
     标签，两种模式前端写同一行代码，不必调用 Python 侧的
     `webview.create_window`（那样就要区分模式，维护两套前端逻辑）。
+
+    `<name>` 段参数的路径穿越防御是两层的（详见 `_validate_look_name` 的
+    docstring）：编码过的斜杠（`..%2f..%2f`）在 `server.py` 按 `/` 切分路径
+    前就已经被 `unquote()` 展开，段数对不上单段占位符直接 404；同一段里
+    的字面 `..`（如 `/report/..`）能匹配上路由，靠下面这行 `_validate_look_name`
+    显式拒绝。
     """
     name = ctx["params"]["name"]
     err = _validate_look_name(name)
