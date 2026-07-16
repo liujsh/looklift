@@ -230,8 +230,22 @@ def cmd_export_lut(args) -> int:
 def cmd_refine(args) -> int:
     template = _resolve_template(args.template)
     current = json.loads(template.read_text(encoding="utf-8"))
-    print(f"正在校准 {template.stem} ...(后端: {analyzer.resolve_backend(args.backend)})")
-    updated = analyzer.refine(current, args.attempt, args.target, backend=args.backend)
+    if args.auto is not None:
+        if not args.source:
+            print("错误: --auto 需要同时提供 --source 原片。", file=sys.stderr)
+            return 1
+        from . import autorefine
+        print(f"自动校准 {template.stem}(最多 {args.auto} 轮,后端: {analyzer.resolve_backend(args.backend)})")
+        updated, history = autorefine.auto_refine(
+            current, args.source, args.target, rounds=args.auto, backend=args.backend,
+            on_round=lambda i, s: print(f"  第 {i} 轮评分: {s}/100"))
+        print(f"评分曲线: {' → '.join(f'{s:g}' for s in history)}")
+    else:
+        if not args.attempt:
+            print("错误: 手动模式需要 --attempt 效果图(或改用 --auto N --source 原片)。", file=sys.stderr)
+            return 1
+        print(f"正在校准 {template.stem} ...(后端: {analyzer.resolve_backend(args.backend)})")
+        updated = analyzer.refine(current, args.attempt, args.target, backend=args.backend)
     _print_analysis(updated)
 
     backup = template.with_suffix(".json.bak")
@@ -314,8 +328,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("refine", help="迭代校准:对比套用效果和目标成片,修正模版参数")
     p.add_argument("template", help="要校准的模版(路径或风格库名字)")
-    p.add_argument("--attempt", required=True, help="套用当前参数后导出的效果图")
+    p.add_argument("--attempt", help="套用当前参数后导出的效果图(手动模式必需;--auto 模式下不需要)")
     p.add_argument("--target", required=True, help="想要达到的目标成片")
+    p.add_argument("--auto", type=int, nargs="?", const=3, default=None, metavar="N",
+                   help="自动闭环:本地渲染→评分→AI 修正,循环最多 N 轮(不带值默认 3),需配 --source")
+    p.add_argument("--source", help="原片(--auto 自动模式的渲染起点,配合 --auto 使用)")
     p.add_argument("--sidecar", action="append", metavar="RAW", help="顺便用新参数生成 sidecar")
     p.add_argument("--backend", choices=["auto", "cli", "api"], default="auto")
     p.set_defaults(func=cmd_refine)
