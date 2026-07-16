@@ -3,12 +3,23 @@ from __future__ import annotations
 
 import http.client
 import json
+import re
 import threading
+from pathlib import Path
 
 import pytest
 
 from looklift.gui import server as gui_server
 from looklift.gui import tasks
+
+_HTML_HREF_SRC_RE = re.compile(r'(?:href|src)\s*=\s*["\']([^"\']+)["\']')
+
+
+def _index_html_local_refs() -> list[str]:
+    """从 index.html 提取本地 href/src 引用（跳过绝对 URL），供下面的参数化测试用。"""
+    index_path = Path(__file__).parent.parent / "looklift" / "gui" / "static" / "index.html"
+    text = index_path.read_text(encoding="utf-8")
+    return [ref for ref in _HTML_HREF_SRC_RE.findall(text) if not ref.startswith(("http://", "https://", "//"))]
 
 
 @pytest.fixture
@@ -63,20 +74,14 @@ def test_root_response_contains_panel_ids(running_server):
     assert 'id="panel-settings"' in text
 
 
-@pytest.mark.parametrize(
-    "path",
-    [
-        "/vendor/claude/tokens.css",
-        "/vendor/claude/components.css",
-        "/css/app.css",
-        "/js/app.js",
-    ],
-)
-def test_index_html_relative_asset_paths_resolve(running_server, path):
-    """index.html 用的是相对路径（无 /static/ 前缀），浏览器据 "/" 解析后请求的
-    正是这些不带前缀的路径；回归测试确保 server 的兜底静态路由覆盖了它们
-    （否则页面会加载不到 CSS/JS，视觉核对必挂）。
+@pytest.mark.parametrize("path", _index_html_local_refs())
+def test_index_html_static_asset_paths_resolve_via_server(running_server, path):
+    """index.html 引用的每个本地资源都必须以 /static/ 开头（server.py 只认
+    "/"、"/static/*"、"/api/*"、"/report/* 四类前缀，裸相对路径会 404——这条
+    断言本身是防止 index.html 退回不带前缀写法的回归门），且真的能通过运行中
+    的 server 拿到 200。
     """
+    assert path.startswith("/static/"), f"index.html 的本地引用必须以 /static/ 开头：{path}"
     status, content_type, body = _get(running_server, path)
     assert status == 200
     assert len(body) > 0

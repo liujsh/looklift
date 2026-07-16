@@ -51,12 +51,6 @@ class _RequestHandler(BaseHTTPRequestHandler):
                 self._serve_static(path[len("/static/") :])
             elif path.startswith("/api/") or path.startswith("/report/"):
                 self._dispatch_api(method, path)
-            elif method == "GET":
-                # index.html 自身的资源引用（vendor/claude/tokens.css、css/app.css、
-                # js/app.js）是相对路径，浏览器据当前 URL "/" 解析后不带 "/static/"
-                # 前缀；这里兜底把其余 GET 路径当作 static/ 下的相对文件处理，
-                # 复用 _serve_static 里的路径穿越防护。
-                self._serve_static(path.lstrip("/"))
             else:
                 self._send_json(HTTPStatus.NOT_FOUND, {"error": f"未找到路径：{path}"})
         except Exception as exc:  # noqa: BLE001 —— handler 异常一律转 500 JSON，不吐 traceback
