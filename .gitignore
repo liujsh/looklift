@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 本地测试产物
+*.jpg
+*.jpeg
+*.png
+*.CR3
+*.NEF
+*.ARW
+*.dng
+*.bak
+master-look.json
+TestLook.xmp
+
+# 个人风格库
+looks/
