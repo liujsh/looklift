@@ -178,9 +178,12 @@
   /**
    * 通用拖拽区绑定：window 模式下走 `looklift:drop` 拿到的原生绝对路径（零
    * 拷贝），browser 模式下对每个拖入的 File 调 App.uploadFile 落临时文件再
-   * 拿路径。两种机制各自独立监听；pywebview 的原生桥转发要经一次 Python
-   * 往返，比浏览器自身的 drop 事件略晚到达，所以用一个短暂延时等它——等到
-   * 了就说明是 window 模式，跳过重复的浏览器式上传。
+   * 拿路径。用 `window.__looklift_native_drop_ready` 同步区分两种模式——
+   * pywebview 在窗口 `loaded` 事件后会把这个全局标记置为 `true`（见
+   * app.py 的 `_register_drop_bridge`）；标记为真就说明原生路径会通过
+   * `looklift:drop` 到达，这里不再重复走一遍浏览器式上传（早先版本用「等
+   * 60ms 看原生事件有没有到」的猜测式去重，没有真实 pywebview 环境验证过
+   * 时序，评审后改成这个确定性标记）。
    * @param {HTMLElement} el 拖拽区元素
    * @param {(path: string) => void} onPath 拿到文件路径后的回调
    */
@@ -188,10 +191,8 @@
     if (!el) {
       return;
     }
-    var nativeHandled = false;
 
     document.addEventListener("looklift:drop", function (evt) {
-      nativeHandled = true;
       (evt.detail.paths || []).forEach(onPath);
     });
 
@@ -201,22 +202,19 @@
 
     el.addEventListener("drop", function (evt) {
       evt.preventDefault();
+      if (window.__looklift_native_drop_ready === true) {
+        return; // window 模式：原生路径走 looklift:drop，这里不重复处理
+      }
       var files = (evt.dataTransfer && evt.dataTransfer.files) || [];
-      setTimeout(function () {
-        if (nativeHandled) {
-          nativeHandled = false;
-          return;
-        }
-        Array.prototype.forEach.call(files, function (file) {
-          App.uploadFile(file)
-            .then(function (result) {
-              onPath(result.path);
-            })
-            .catch(function (err) {
-              App.toast(err.message);
-            });
-        });
-      }, 60);
+      Array.prototype.forEach.call(files, function (file) {
+        App.uploadFile(file)
+          .then(function (result) {
+            onPath(result.path);
+          })
+          .catch(function (err) {
+            App.toast(err.message);
+          });
+      });
     });
   };
 

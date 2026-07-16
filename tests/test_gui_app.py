@@ -92,9 +92,21 @@ class _FakeDom:
         self.document = types.SimpleNamespace(events=types.SimpleNamespace(drop=_FakeDropEvents()))
 
 
+class _FakeLoadedEvent:
+    """模拟 pywebview `window.events.loaded`：`+=` 订阅一个 handler。"""
+
+    def __init__(self) -> None:
+        self.subscribed = None
+
+    def __iadd__(self, handler):
+        self.subscribed = handler
+        return self
+
+
 class _FakeWindowWithDrop:
     def __init__(self) -> None:
         self.dom = _FakeDom()
+        self.events = types.SimpleNamespace(loaded=_FakeLoadedEvent())
         self.evaluate_js_calls = []
 
     def evaluate_js(self, script: str) -> None:
@@ -120,16 +132,35 @@ def test_register_drop_bridge_subscribes_and_forwards_pywebview_full_path():
     }
     window.dom.document.events.drop.subscribed(event)
 
-    assert len(window.evaluate_js_calls) == 1
-    call = window.evaluate_js_calls[0]
-    assert call.startswith("App.onNativeDrop(")
-    assert "a.jpg" in call
-    assert "no-native-path.jpg" not in call
+    drop_calls = [c for c in window.evaluate_js_calls if c.startswith("App.onNativeDrop(")]
+    assert len(drop_calls) == 1
+    assert "a.jpg" in drop_calls[0]
+    assert "no-native-path.jpg" not in drop_calls[0]
+
+
+def test_register_drop_bridge_subscribes_loaded_event_and_sets_ready_flag_on_fire():
+    """代码评审修订：不再用耗时猜测式的去重，改成页面 `loaded` 事件后在 JS 侧
+    打一个同步标记 `window.__looklift_native_drop_ready = true`，前端
+    `bindDropzone` 同步读这个标记区分 window/browser 模式。`loaded` 事件本身
+    只在 `create_window()` 之后、页面真正加载完才触发，这里模拟"触发"这一步，
+    确认注册的 handler 调用时会 evaluate_js 这段标记脚本。"""
+    window = _FakeWindowWithDrop()
+
+    app._register_drop_bridge(window)
+
+    assert window.events.loaded.subscribed is not None
+
+    window.events.loaded.subscribed()  # 模拟 pywebview 触发 loaded 事件
+
+    ready_calls = [c for c in window.evaluate_js_calls if "__looklift_native_drop_ready" in c]
+    assert len(ready_calls) == 1
+    assert "true" in ready_calls[0]
 
 
 def test_register_drop_bridge_degrades_gracefully_when_dom_bridge_missing(capsys):
     """pywebview API 版本差异：`window` 没有 `.dom`（旧版本/桩对象）时不应抛出，
-    只打印中文提示——window 模式下浏览器式 `/api/upload` 上传依然可用。"""
+    只打印中文提示——window 模式下浏览器式 `/api/upload` 上传依然可用。也不应
+    该继续尝试注册 loaded 就绪标记（drop 桥都没建成，标记没有意义）。"""
     window = object()  # 没有 .dom 属性
 
     app._register_drop_bridge(window)  # 不应抛异常
@@ -138,9 +169,32 @@ def test_register_drop_bridge_degrades_gracefully_when_dom_bridge_missing(capsys
     assert "拖" in out or "降级" in out or "失败" in out
 
 
+def test_register_drop_bridge_degrades_gracefully_when_loaded_event_missing(capsys):
+    """drop 桥注册成功，但 `window.events`（或 `.loaded`）在这个 pywebview
+    版本上不存在——就绪标记注册失败也不该抛出，只打印中文提示；drop 桥本身
+    已经生效，不受影响。"""
+
+    class _WindowWithDropOnly:
+        def __init__(self) -> None:
+            self.dom = _FakeDom()
+            # 故意不提供 .events
+
+        def evaluate_js(self, script: str) -> None:
+            pass
+
+    window = _WindowWithDropOnly()
+
+    app._register_drop_bridge(window)  # 不应抛异常
+
+    assert window.dom.document.events.drop.subscribed is not None
+    out = capsys.readouterr().out
+    assert "失败" in out or "降级" in out
+
+
 def test_window_mode_registers_drop_bridge_before_start(monkeypatch):
     """`_run_window` 走通路径（create_window 成功、start 正常返回）时，应该把
-    创建出来的 window 对象交给 `_register_drop_bridge` 完成拖放桥注册。"""
+    创建出来的 window 对象交给 `_register_drop_bridge` 完成拖放桥 + 就绪标记
+    的注册。"""
     fake_window = _FakeWindowWithDrop()
     fake_webview = types.ModuleType("webview")
     fake_webview.create_window = lambda *a, **k: fake_window
@@ -154,6 +208,7 @@ def test_window_mode_registers_drop_bridge_before_start(monkeypatch):
     assert rc == 0
     assert ev.is_set()
     assert fake_window.dom.document.events.drop.subscribed is not None
+    assert fake_window.events.loaded.subscribed is not None
     _assert_no_leaked_threads(before)
 
 

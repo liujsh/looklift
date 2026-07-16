@@ -74,7 +74,7 @@ def _run_window(srv, url: str, *, _ready_event: threading.Event | None) -> int:
 
 
 def _register_drop_bridge(window) -> None:
-    """按 design.md 决策 4 注册 pywebview 原生拖放桥。
+    """按 design.md 决策 4（及代码评审修订）注册 pywebview 原生拖放桥。
 
     `window.dom.document.events.drop` 是 pywebview 的 DOM 事件桥；收到的
     `event['dataTransfer']['files'][i]` 里如果带 `pywebviewFullPath`（pywebview
@@ -83,9 +83,18 @@ def _register_drop_bridge(window) -> None:
     `window.evaluate_js` 回推给前端 `App.onNativeDrop`，触发和「点击选择文件」
     一样的 JS 流程，全程不拷贝原图。
 
-    pywebview 不同版本的 DOM 事件桥 API 有细微差异（本身就是相对新的扩展
-    能力），整体包一层 try/except：注册失败只打印中文提示、优雅降级——
-    window 模式下浏览器式的 `/api/upload` 上传依然可用，不影响窗口正常打开。
+    第二步注册 `window.events.loaded`：页面加载完成后在 JS 侧打一个同步标记
+    `window.__looklift_native_drop_ready = true`。这是给前端 `bindDropzone`
+    用的判别信号——早先版本用「等 60ms 看原生事件有没有到」的猜测式去重，
+    没有真实 pywebview 环境验证过时序，评审后改成这个确定性标记：`loaded`
+    事件保证 `evaluate_js` 在页面就绪后才跑（`create_window()` 刚返回时页面
+    往往还没加载完，此时 `evaluate_js` 不可靠），前端只需同步读一次全局变量，
+    不用再猜多久算「等到了」。
+
+    两步分别包 try/except：pywebview 不同版本的 API 有细微差异（`.dom` 事件
+    桥、`.events.loaded` 都是相对新的扩展能力），任一步失败都只打印中文提示、
+    优雅降级，不影响窗口正常打开。drop 桥没注册成功时，就绪标记也没有意义，
+    直接跳过（`return`）；drop 桥成功但就绪标记失败，drop 桥本身依然有效。
     """
     try:
         def _on_drop(event: dict) -> None:
@@ -98,6 +107,12 @@ def _register_drop_bridge(window) -> None:
         window.dom.document.events.drop += _on_drop
     except Exception:  # noqa: BLE001 —— pywebview API 版本差异一律归为「降级」，不崩溃
         print("原生拖放桥注册失败，窗口内拖拽将退回浏览器式上传")
+        return
+
+    try:
+        window.events.loaded += lambda: window.evaluate_js("window.__looklift_native_drop_ready = true")
+    except Exception:  # noqa: BLE001 —— 同上，注册失败不影响已经生效的 drop 桥
+        print("原生拖放就绪标记注册失败，前端将退回浏览器式上传判定")
 
 
 def _run_browser(srv, url: str, *, _ready_event: threading.Event | None) -> int:
