@@ -141,3 +141,12 @@ def test_refine_auto_end_to_end(tmp_path, sample_analysis, monkeypatch, capsys):
     assert (tmp_path / "look.json.bak").exists()  # 共享的备份逻辑生效
     out = capsys.readouterr().out
     assert "自动校准" in out and "评分曲线" in out
+
+
+def test_gui_help_shows_browser_and_port(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["gui", "--help"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "--browser" in out
+    assert "--port" in out
