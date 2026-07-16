@@ -69,3 +69,26 @@ def test_resolve_template_uses_global_looks(monkeypatch, tmp_path, sample_analys
     monkeypatch.chdir(tmp_path)  # cwd 无 looks/
     monkeypatch.setattr(config, "looks_dir", lambda: globaldir)
     assert cli._resolve_template("mystyle") == globaldir / "mystyle.json"
+
+
+def test_cmd_preview_writes_image(tmp_path, sample_analysis, monkeypatch):
+    import json
+    from PIL import Image
+    from looklift import cli
+    monkeypatch.chdir(tmp_path)
+    t = tmp_path / "look.json"
+    t.write_text(json.dumps(sample_analysis), encoding="utf-8")
+    photo = tmp_path / "in.jpg"
+    Image.new("RGB", (32, 32), (100, 100, 100)).save(photo)
+    rc = cli.main(["preview", str(t), str(photo), "-o", str(tmp_path / "out.jpg")])
+    assert rc == 0 and (tmp_path / "out.jpg").exists()
+
+
+def test_cmd_export_lut(tmp_path, sample_analysis, monkeypatch):
+    import json
+    from looklift import cli
+    monkeypatch.chdir(tmp_path)
+    t = tmp_path / "look.json"
+    t.write_text(json.dumps(sample_analysis), encoding="utf-8")
+    rc = cli.main(["export-lut", str(t), "-o", str(tmp_path / "o.cube"), "--size", "9"])
+    assert rc == 0 and (tmp_path / "o.cube").read_text(encoding="ascii").startswith("TITLE")

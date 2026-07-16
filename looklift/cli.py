@@ -26,7 +26,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import analyzer, config, report, xmp_reader, xmp_writer
+from . import analyzer, config, lut, render, report, xmp_reader, xmp_writer
 
 
 def _looks_dir() -> Path:
@@ -204,6 +204,29 @@ def cmd_report(args) -> int:
     return 0
 
 
+def cmd_preview(args) -> int:
+    from PIL import Image
+    template = _resolve_template(args.template)
+    analysis = json.loads(template.read_text(encoding="utf-8"))
+    img = Image.open(args.photo)
+    out = Path(args.out) if args.out else Path(args.photo).with_stem(Path(args.photo).stem + "_preview")
+    render.render(img, analysis).save(out, quality=92)
+    print(f"[preview] 已生成: {out}  (本地近似渲染,方向参考,不等于 LR 效果)")
+    if args.target:
+        s = render.score(Image.open(out), Image.open(args.target))
+        print(f"[评分] 与目标图相似度: {s}/100")
+    return 0
+
+
+def cmd_export_lut(args) -> int:
+    template = _resolve_template(args.template)
+    analysis = json.loads(template.read_text(encoding="utf-8"))
+    out = Path(args.out) if args.out else template.with_suffix(".cube")
+    lut.export_cube(analysis, out, size=args.size)
+    print(f"[LUT] 已生成: {out}  (达芬奇/剪映导入;曝光等全局色彩已包含,暗角/颗粒不进 LUT)")
+    return 0
+
+
 def cmd_refine(args) -> int:
     template = _resolve_template(args.template)
     current = json.loads(template.read_text(encoding="utf-8"))
@@ -275,6 +298,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("template", help="模版文件路径,或风格库中的名字")
     p.add_argument("-o", "--out", help="输出路径,默认与模版同名 .html")
     p.set_defaults(func=cmd_report)
+
+    p = sub.add_parser("preview", help="本地近似渲染:预览模版套用效果(不开 LR)")
+    p.add_argument("template", help="模版文件路径,或风格库中的名字")
+    p.add_argument("photo", help="要套用的照片(sRGB JPEG/PNG)")
+    p.add_argument("-o", "--out", help="输出路径,默认 <照片>_preview.jpg")
+    p.add_argument("--target", help="可选:目标成片,输出相似度评分")
+    p.set_defaults(func=cmd_preview)
+
+    p = sub.add_parser("export-lut", help="导出 .cube 3D LUT(达芬奇/剪映给视频调色)")
+    p.add_argument("template", help="模版文件路径,或风格库中的名字")
+    p.add_argument("-o", "--out", help="输出路径,默认与模版同名 .cube")
+    p.add_argument("--size", type=int, default=33, help="LUT 网格大小,默认 33")
+    p.set_defaults(func=cmd_export_lut)
 
     p = sub.add_parser("refine", help="迭代校准:对比套用效果和目标成片,修正模版参数")
     p.add_argument("template", help="要校准的模版(路径或风格库名字)")
