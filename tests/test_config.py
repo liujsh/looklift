@@ -38,6 +38,47 @@ def test_looks_dir_falls_back_to_home(monkeypatch, tmp_path):
     assert config.looks_dir() == Path.home() / ".looklift" / "looks"
 
 
+def test_save_config_roundtrip(monkeypatch, tmp_path):
+    p = tmp_path / "config.toml"
+    monkeypatch.setattr(config, "CONFIG_PATH", p)
+    config.save_config({
+        "provider": "api", "model": "claude-x", "api_key": "sk-123",
+        "base_url": "https://example.com", "looks_dir": "",
+    })
+    cfg = config.load_config()
+    assert cfg["provider"] == "api"
+    assert cfg["model"] == "claude-x"
+    assert cfg["api_key"] == "sk-123"
+    assert cfg["base_url"] == "https://example.com"
+    assert cfg["looks_dir"] == ""
+
+
+def test_save_config_quoting_survives_special_chars(monkeypatch, tmp_path):
+    p = tmp_path / "config.toml"
+    monkeypatch.setattr(config, "CONFIG_PATH", p)
+    tricky = 'a "quoted" \\ value'
+    config.save_config({"api_key": tricky})
+    cfg = config.load_config()
+    assert cfg["api_key"] == tricky
+
+
+def test_save_config_ignores_unknown_keys(monkeypatch, tmp_path):
+    p = tmp_path / "config.toml"
+    monkeypatch.setattr(config, "CONFIG_PATH", p)
+    config.save_config({"provider": "api", "bogus_field": "should not appear"})
+    cfg = config.load_config()
+    assert cfg["provider"] == "api"
+    assert "bogus_field" not in p.read_text(encoding="utf-8")
+
+
+def test_save_config_creates_parent_dirs(monkeypatch, tmp_path):
+    p = tmp_path / "nested" / "dir" / "config.toml"
+    monkeypatch.setattr(config, "CONFIG_PATH", p)
+    config.save_config({"provider": "api"})
+    assert p.is_file()
+    assert config.load_config()["provider"] == "api"
+
+
 def test_looks_dir_uses_config_when_no_cwd_looks(monkeypatch, tmp_path):
     """中间档:cwd 无 looks/,但 config.toml 配了 looks_dir → 用配置路径(优先于 home 兜底)。"""
     cfg_path = tmp_path / "config.toml"
