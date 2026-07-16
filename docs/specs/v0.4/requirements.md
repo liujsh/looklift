@@ -1,6 +1,6 @@
 # v0.4 Spec:GUI alpha —— 需求
 
-> 状态:草拟,待作者 review。
+> 状态:已确认(2026-07-17,作者授权自主推进;人工验收项后置)。
 > 上游文档:[requirements.md](../../requirements.md)(定位/用户故事/路线图)、
 > [design.md](../../design.md)(当前架构)、[v0.3 spec](../2026-07-16-v0.3-precision-loop.md)
 > (本迭代直接复用的核心 API 来源)。
