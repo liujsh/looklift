@@ -1,6 +1,7 @@
 # looklift 设计文档
 
-> 产品定位、用户故事、路线图见 [requirements.md](requirements.md)。本文档记录技术架构与关键设计决策。
+> 产品定位、用户故事、路线图见 [requirements.md](requirements.md)。本文档记录**已实现**的技术架构与关键设计决策。
+> 未实现迭代的详细设计写在 `docs/specs/`(每迭代一份 spec,实现后要点回填本文档)。当前:[v0.3 spec](specs/2026-07-16-v0.3-precision-loop.md)。
 
 ## 架构总览
 
@@ -89,48 +90,18 @@ effects: {vignette_amount, grain_amount}
 - `[project.scripts] looklift = "looklift.cli:main"`
 - setuptools 后端;`pip install -e .` 开发安装
 
-### 8. Provider 抽象(v0.3 定接口,v0.5 扩展)
+### 8. 未来迭代设计(已拆分至 specs/)
 
-现有 cli/api 双后端将重构为统一的 provider 接口,为 OpenAI 兼容中转和本地模型铺路:
+- v0.3(provider 抽象、preview 渲染、auto-refine、LUT 导出):
+  详见 [specs/2026-07-16-v0.3-precision-loop.md](specs/2026-07-16-v0.3-precision-loop.md),实现后要点回填本文档
+- v0.4 GUI 架构方向(已定形态,细节届时写 spec):
+  - **形态(2026-07-16 敲定)**:同一套 HTML 界面,发布默认 **pywebview 独立窗口**
+    (Windows 依赖 WebView2,Win11 自带),`--browser` 参数走本地 web + 浏览器,
+    用于开发调试和兜底;**不引入 Electron/Node 栈**,保持 Python 单语言
+  - 原则:GUI 只是壳,所有逻辑留在核心模块,CLI 与 GUI 永远共享同一实现
+  - 打包(v0.7):PyInstaller 单 exe
 
-```python
-class VisionProvider(Protocol):
-    def complete(self, system: str, content: list[Block], schema: dict) -> dict: ...
-
-# 实现:ClaudeCliProvider(现 cli 后端) / AnthropicProvider(现 api 后端)
-#      OpenAICompatProvider(v0.5: base_url+key+model,兼容中转站/DeepSeek/GLM 等)
-#      OllamaProvider(v0.5: 本地 Qwen-VL 等)
-```
-
-- 配置:`~/.looklift/config.toml`(provider 选择、key、base_url、模型名),环境变量可覆盖
-- 无结构化输出保证的 provider 统一走 `_extract_json + _normalize` 容错路径(cli 后端已验证)
-
-### 9. 本地近似渲染 preview(v0.3)
-
-目的:不开 LR 快速看"套上参数大概什么样",并为 auto-refine 提供反馈信号。
-**定位是方向正确的近似,不承诺与 LR 渲染一致。**
-
-- Pillow/numpy 按顺序应用:曝光(2^ev 增益)→ 白平衡(温/色调通道增益)→ 对比度
-  (S 曲线)→ 高光/阴影(亮度蒙版加权)→ 饱和度/自然饱和度(HSV)→ 色调曲线(LUT 插值)
-  → HSL 定向(色相范围蒙版)→ 分离色调(亮度加权叠色)→ 暗角
-- 还原度评分:与目标图在缩略图尺度上比较(亮度直方图相关性 + ab 通道均值/方差
-  接近度的加权),输出 0-100 分,只用于趋势判断
-
-### 10. refine 自动闭环(v0.3)
-
-`looklift refine <look> --target 目标.jpg --source 原片.jpg --auto [N]`:
-`渲染 preview → 评分 → AI 对比修正参数 → 再渲染`,循环直到评分收敛(提升 < 阈值)
-或达到 N 轮(默认 3)。每轮打印评分曲线;结束后更新模版并重生成预设。
-无原片时退化为现有手动 refine(用户自己在 LR 里套用导出)。
-
-### 11. GUI 架构方向(v0.4,届时细化)
-
-- 形态:本地 web 界面(FastAPI/内置 http.server + 浏览器)或 pywebview 壳,复用
-  report.py 的 HTML 风格;**不引入 Electron/Node 栈**,保持 Python 单语言
-- 原则:GUI 只是壳,所有逻辑留在核心模块,CLI 与 GUI 永远共享同一实现
-- 打包(v0.7):PyInstaller 单 exe
-
-### 12. 测试与 CI
+### 9. 测试与 CI
 
 - `tests/`:pytest,不触网、不调 AI
   - `test_xmp_writer.py`:analysis→crs 映射(符号前缀、HSL 字段、曲线 Seq)、

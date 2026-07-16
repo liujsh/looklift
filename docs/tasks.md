@@ -4,6 +4,8 @@
 
 ## v0.3(下一迭代):像 —— 精度闭环
 
+> 详细设计与验收:[specs/2026-07-16-v0.3-precision-loop.md](specs/2026-07-16-v0.3-precision-loop.md)
+
 ### T1 Provider 抽象重构
 - [ ] `providers.py`:VisionProvider 接口;现有 cli/api 后端迁入(行为不变,测试回归)
 - [ ] `~/.looklift/config.toml` 配置读取(provider/key/base_url/model),env 覆盖
@@ -21,7 +23,7 @@
 
 ### T4 LUT 导出(U19,竞品借鉴)
 - [ ] `looklift export-lut <look> [-o x.cube] [--size 33]`:用 render.py 管线对 3D 网格采样生成 .cube
-- [ ] 达芬奇/剪映加载验证(人工)
+- [ ] .cube 格式程序化校验(单元测试)+ 剪映加载验证(人工);达芬奇留社区反馈
 
 ### T5 收尾
 - [ ] README/文档同步,版本 0.3.0,CI 绿,推送
