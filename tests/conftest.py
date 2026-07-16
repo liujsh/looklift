@@ -1,4 +1,18 @@
+import os
+import pathlib
+
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _isolate_env(monkeypatch, tmp_path_factory):
+    """所有测试与真实用户环境隔离:假 home、假配置路径、清空 LOOKLIFT_* 环境变量。"""
+    home = tmp_path_factory.mktemp("home")
+    monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: home))
+    from looklift import config
+    monkeypatch.setattr(config, "CONFIG_PATH", home / ".looklift" / "config.toml")
+    for k in [k for k in os.environ if k.startswith("LOOKLIFT_")]:
+        monkeypatch.delenv(k)
 
 
 @pytest.fixture
