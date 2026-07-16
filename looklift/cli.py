@@ -26,9 +26,11 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import analyzer, report, xmp_reader, xmp_writer
+from . import analyzer, config, report, xmp_reader, xmp_writer
 
-LOOKS_DIR = Path("looks")  # 风格库目录(相对当前工作目录)
+
+def _looks_dir() -> Path:
+    return config.looks_dir()
 
 
 def _resolve_template(name_or_path: str) -> Path:
@@ -36,10 +38,11 @@ def _resolve_template(name_or_path: str) -> Path:
     p = Path(name_or_path)
     if p.is_file():
         return p
-    candidate = LOOKS_DIR / f"{name_or_path}.json"
+    looks_dir = _looks_dir()
+    candidate = looks_dir / f"{name_or_path}.json"
     if candidate.is_file():
         return candidate
-    raise FileNotFoundError(f"找不到模版: {name_or_path}(也不在 {LOOKS_DIR}/ 风格库中)")
+    raise FileNotFoundError(f"找不到模版: {name_or_path}(也不在 {looks_dir}/ 风格库中)")
 
 
 def _expand_raws(patterns: list[str] | None) -> list[str]:
@@ -102,8 +105,9 @@ def _emit_outputs(crs: dict, args) -> None:
         if args.preset:
             out = Path(args.preset)
         else:
-            LOOKS_DIR.mkdir(exist_ok=True)
-            out = LOOKS_DIR / f"{name}.xmp"
+            d = _looks_dir()
+            d.mkdir(parents=True, exist_ok=True)
+            out = d / f"{name}.xmp"
         path = xmp_writer.write_preset(crs, name, out)
         print(f"\n[预设] 已生成: {path}  (Lightroom → 预设面板 → 导入预设)")
     for raw in _expand_raws(getattr(args, "sidecar", None)):
@@ -121,8 +125,9 @@ def cmd_analyze(args) -> int:
 
     json_out = args.json
     if not json_out and args.name:
-        LOOKS_DIR.mkdir(exist_ok=True)
-        json_out = str(LOOKS_DIR / f"{args.name}.json")
+        d = _looks_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        json_out = str(d / f"{args.name}.json")
     if json_out:
         Path(json_out).write_text(
             json.dumps(analysis, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -165,14 +170,15 @@ def cmd_apply(args) -> int:
 
 
 def cmd_list(args) -> int:
-    if not LOOKS_DIR.is_dir():
-        print(f"风格库为空({LOOKS_DIR}/ 不存在)。用 analyze --name 某某 来收藏第一个风格。")
+    looks_dir = _looks_dir()
+    if not looks_dir.is_dir():
+        print(f"风格库为空({looks_dir}/ 不存在)。用 analyze --name 某某 来收藏第一个风格。")
         return 0
-    templates = sorted(LOOKS_DIR.glob("*.json"))
+    templates = sorted(looks_dir.glob("*.json"))
     if not templates:
         print("风格库为空。用 analyze --name 某某 来收藏第一个风格。")
         return 0
-    print(f"风格库({LOOKS_DIR}/,共 {len(templates)} 个):\n")
+    print(f"风格库({looks_dir}/,共 {len(templates)} 个):\n")
     for t in templates:
         try:
             data = json.loads(t.read_text(encoding="utf-8"))

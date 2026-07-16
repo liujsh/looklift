@@ -36,6 +36,7 @@ def test_expand_raws_glob(tmp_path, monkeypatch):
 
 def test_apply_end_to_end(tmp_path, monkeypatch, sample_analysis, capsys):
     monkeypatch.chdir(tmp_path)
+    (tmp_path / "looks").mkdir()  # cwd 已有 looks/,config.looks_dir() 按 cwd 优先规则选中它
     template = tmp_path / "look.json"
     template.write_text(json.dumps(sample_analysis), encoding="utf-8")
     raw = tmp_path / "IMG.CR3"
@@ -56,3 +57,15 @@ def test_report_end_to_end(tmp_path, monkeypatch, sample_analysis):
     assert rc == 0
     html = (tmp_path / "look.html").read_text(encoding="utf-8")
     assert "<svg" in html and "风格分析" in html and "+0.35" in html
+
+
+def test_resolve_template_uses_global_looks(monkeypatch, tmp_path, sample_analysis):
+    """cwd 无 looks/ 时,模版名字应在全局库(config.looks_dir())中解析。"""
+    import json
+    from looklift import cli, config
+    globaldir = tmp_path / "globallooks"
+    globaldir.mkdir()
+    (globaldir / "mystyle.json").write_text(json.dumps(sample_analysis), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)  # cwd 无 looks/
+    monkeypatch.setattr(config, "looks_dir", lambda: globaldir)
+    assert cli._resolve_template("mystyle") == globaldir / "mystyle.json"
