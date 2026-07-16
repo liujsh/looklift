@@ -12,6 +12,17 @@
   var App = {};
 
   /**
+   * 跨面板共享状态。`currentAnalysis`/`currentPhotoPath` 由分析面板
+   * （panels/analyze.js）在一次分析完成后写入，后续任务（T9 强度滑杆、
+   * T10 收藏导出)直接读这两个字段，不用重新请求一遍。
+   * @type {{currentAnalysis: (object|null), currentPhotoPath: (string|null)}}
+   */
+  App.state = {
+    currentAnalysis: null,
+    currentPhotoPath: null,
+  };
+
+  /**
    * 切换到指定面板：显示 #panel-<name>、隐藏其余面板（用 hidden 属性），
    * 同步导航按钮的激活态（aria-current），并把当前面板记进 sessionStorage
    * 供下次打开时恢复。未知面板名会退回默认面板。

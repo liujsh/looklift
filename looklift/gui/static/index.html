@@ -27,7 +27,40 @@
       <section id="panel-analyze" class="panel">
         <div class="card">
           <h2>分析</h2>
-          <p class="body-muted">拖入一张照片，AI 会给出调色分析、后期步骤与基本参数。待后续任务填充。</p>
+          <p class="body-muted">拖入一张照片，或点击选择文件，AI 会给出调色分析、后期步骤与基本面板参数。</p>
+
+          <div id="analyze-dropzone" class="dropzone" aria-disabled="false">
+            <p class="dropzone-text">将照片拖到这里</p>
+            <p class="dropzone-or">或</p>
+            <label class="btn btn-secondary" for="analyze-file-input">选择文件</label>
+            <input
+              type="file"
+              id="analyze-file-input"
+              accept=".jpg,.jpeg,.png,.webp,.tif,.tiff"
+              hidden
+            />
+          </div>
+
+          <div class="field field-hint">
+            <label for="analyze-hint">风格提示（可选）</label>
+            <input type="text" id="analyze-hint" placeholder="例如：胶片感、冷调、日系……" />
+          </div>
+
+          <div id="analyze-progress" class="analyze-progress" hidden>
+            <span class="spinner" aria-hidden="true"></span>
+            <span id="analyze-progress-text">分析中，通常需要 30–120 秒……</span>
+          </div>
+        </div>
+
+        <div id="analyze-result" class="card" hidden>
+          <p class="eyebrow">风格概述</p>
+          <h3 id="analyze-summary" class="analyze-summary"></h3>
+
+          <p class="eyebrow analyze-section-label">后期步骤</p>
+          <ol id="analyze-steps" class="analyze-steps"></ol>
+
+          <p class="eyebrow analyze-section-label">基本面板参数</p>
+          <div id="analyze-basic" class="analyze-basic"></div>
         </div>
       </section>
 
@@ -95,5 +128,6 @@
     <div id="toast-root" class="toast-root" aria-live="polite"></div>
 
     <script src="/static/js/app.js" defer></script>
+    <script src="/static/js/panels/analyze.js" defer></script>
   </body>
 </html>

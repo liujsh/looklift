@@ -8,23 +8,27 @@ handler 收到的不再只是段参数，而是一个请求上下文 dict：
 的 handler（如 `/api/upload`）和只需要段参数的 handler 用同一套签名，不必再
 分裂成两种 Handler 类型。
 
-本文件只放 handler 表和已落地的业务 handler；未落地的路由（`/api/analyze`
-等，见 design.md「API 路由一览」）留给对应任务实现，不预先占位。
+本文件只放 handler 表和已落地的业务 handler；未落地的路由（`/api/preview`
+`/api/looks` 等，见 design.md「API 路由一览」）留给对应任务实现，不预先
+占位。
 """
 from __future__ import annotations
 
 import json
 import os
 import shutil
+from pathlib import Path
 from typing import Any, Callable
 
-from .. import config
+from .. import analyzer, config
 from . import tasks
 from . import upload
 
 Handler = Callable[[dict], tuple[int, dict]]
 
 _VALID_PROVIDERS = {"auto", "cli", "api"}
+
+_ANALYZE_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
 
 
 def _ping(ctx: dict) -> tuple[int, dict]:
@@ -154,11 +158,48 @@ def _upload(ctx: dict) -> tuple[int, dict]:
     return 200, {"path": str(dest)}
 
 
+def _analyze(ctx: dict) -> tuple[int, dict]:
+    """`POST /api/analyze`：提交分析任务，立即返回 `task_id`（design.md 决策 2
+    轮询 + 风险清单「长任务卡 UI」）。真正的 `analyzer.analyze` 调用要 30-120
+    秒，必须经 `tasks.submit` 在后台守护线程里跑，这里只做参数校验 + 起任务，
+    不能等分析跑完才返回，否则会把 HTTP 请求处理线程（进而 pywebview 窗口）
+    卡住。
+
+    body 字段：`path`（必填，成片路径）、`original`（可选，原片路径，用于
+    原片/成片对比模式）、`hint`（可选，风格提示）、`backend`（可选，透传给
+    `analyzer.analyze`，缺省 "auto"，见 design.md API 路由一览）。
+    """
+    body = ctx.get("body")
+    try:
+        payload = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        return 400, {"error": "请求体不是合法 JSON"}
+    if not isinstance(payload, dict):
+        return 400, {"error": "请求体必须是 JSON 对象"}
+
+    path = payload.get("path")
+    if not path:
+        return 400, {"error": "缺少 path 字段"}
+    image_path = Path(path)
+    if not image_path.is_file():
+        return 400, {"error": f"文件不存在：{path}"}
+    if image_path.suffix.lower() not in _ANALYZE_ALLOWED_EXTS:
+        return 400, {"error": f"不支持的图片格式：{image_path.suffix or '（无扩展名）'}"}
+
+    original = payload.get("original") or None
+    hint = payload.get("hint") or None
+    backend = payload.get("backend") or "auto"
+
+    task_id = tasks.submit(analyzer.analyze, image_path, original=original, style_hint=hint, backend=backend)
+    return 200, {"task_id": task_id}
+
+
 ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/ping"): _ping,
     ("GET", "/api/config"): _get_config,
     ("POST", "/api/config"): _post_config,
     ("GET", "/api/tasks/<id>"): _get_task,
     ("POST", "/api/upload"): _upload,
+    ("POST", "/api/analyze"): _analyze,
     ("GET", "/report/<name>"): _report_placeholder,
 }
