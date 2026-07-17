@@ -4,6 +4,7 @@ from __future__ import annotations
 from .basic import Contrast, Exposure, HighlightsShadows, WhiteBalance, WhitesBlacks
 from .color import ColorGrading, Hsl, Saturation
 from .detail import Clarity, Dehaze, Texture
+from .effects import Grain, Vignette
 from .tone import ToneCurve
 
 REGISTRY = [
@@ -19,4 +20,6 @@ REGISTRY = [
     Texture(),
     Clarity(),
     Dehaze(),
+    Vignette(),
+    Grain(),
 ]

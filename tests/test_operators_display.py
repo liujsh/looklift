@@ -315,7 +315,10 @@ def test_registry_order_domains_and_resolved_leaf_contract(sample_analysis):
 
     names = [op.name for op in REGISTRY]
     assert names == sorted(names, key=lambda name: OP_BITS[name])
-    assert all(op.stage is Stage.FUSED for op in REGISTRY)
+    assert all(
+        op.stage is (Stage.OUTPUT if op.name in {"vignette", "grain"} else Stage.FUSED)
+        for op in REGISTRY
+    )
     assert {
         op.name for op in REGISTRY if op.domain is Domain.LINEAR
     } == {"exposure", "white_balance"}

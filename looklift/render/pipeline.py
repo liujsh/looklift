@@ -10,6 +10,7 @@ from PIL import Image
 from . import color_space as cs, kernel
 from .base import ResolvedParams
 from .operators import REGISTRY
+from .operators.effects import Grain, Vignette, noise_aux
 
 _PROXY_LONG_EDGE = 2048
 
@@ -229,3 +230,40 @@ def render_with_aux(
     """复用已准备 S2，仅重跑融合内核。"""
 
     return render_fused(arr_srgb, analysis, aux)
+
+
+def apply_output_grain(
+    arr: np.ndarray, grain_params: tuple, noise: np.ndarray
+) -> np.ndarray:
+    """grain 唯一 S4 像素叠加入口。"""
+
+    return Grain().apply_numpy(arr, grain_params, noise_aux(noise))
+
+
+def apply_output_effects(
+    arr: np.ndarray, resolved: ResolvedParams, aux: AuxBuffers | None
+) -> np.ndarray:
+    """固定执行 vignette→grain；grain 只在此叠加一次。"""
+
+    vignette = resolved.get("vignette")
+    if vignette is not None:
+        arr = Vignette().apply_numpy(arr, vignette)
+    grain = resolved.get("grain")
+    if grain is not None:
+        if aux is None:
+            raise ValueError("启用 grain 时必须提供 S2 noise")
+        arr = apply_output_grain(arr, grain, aux.noise)
+    return np.clip(arr, 0, 1).astype(np.float32)
+
+
+def render_complete(arr_srgb: np.ndarray, analysis: dict) -> np.ndarray:
+    """生产数组管线：S2→fused→唯一 S4 effects。"""
+
+    resolved = resolve_params(analysis)
+    needs_aux = any(
+        resolved.is_enabled(name)
+        for name in ("texture", "clarity", "dehaze", "grain")
+    )
+    aux = prepare_aux(arr_srgb, analysis) if needs_aux else None
+    arr = render_fused(arr_srgb, analysis, aux)
+    return apply_output_effects(arr, resolved, aux)
