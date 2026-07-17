@@ -125,6 +125,31 @@ def test_post_config_valid_merges_onto_load_config(running_server, monkeypatch):
     assert cfg["base_url"] == "https://example.com"
 
 
+def test_post_config_accepts_new_providers_and_timeout(running_server):
+    for provider in ("openai_compat", "ollama"):
+        status, _ = _request(
+            running_server,
+            "POST",
+            "/api/config",
+            {
+                "provider": provider,
+                "model": "vision-model",
+                "base_url": "http://localhost:11434",
+                "timeout": "45",
+            },
+        )
+        assert status == 200
+        cfg = config.load_config(include_env=False)
+        assert cfg["provider"] == provider
+        assert cfg["timeout"] == 45
+
+
+def test_post_config_rejects_invalid_timeout(running_server):
+    status, data = _request(running_server, "POST", "/api/config", {"timeout": "soon"})
+    assert status == 400
+    assert "timeout" in data["error"] and "正整数" in data["error"]
+
+
 def test_get_config_after_post_is_configured_with_key_and_never_leaks_it(running_server, monkeypatch):
     monkeypatch.setattr(api.shutil, "which", lambda _: None)
     _request(running_server, "POST", "/api/config", {"provider": "api", "api_key": "sk-abc"})
@@ -135,6 +160,30 @@ def test_get_config_after_post_is_configured_with_key_and_never_leaks_it(running
     assert data["configured"] is True
     assert data["has_key"] is True
     assert "api_key" not in data
+
+
+def test_get_config_returns_non_sensitive_provider_fields(running_server):
+    _request(
+        running_server,
+        "POST",
+        "/api/config",
+        {
+            "provider": "openai_compat",
+            "model": "vision-model",
+            "base_url": "https://proxy.example/v1",
+            "api_key": "secret",
+            "timeout": 66,
+        },
+    )
+
+    status, data = _request(running_server, "GET", "/api/config")
+    assert status == 200
+    assert data["provider"] == "openai_compat"
+    assert data["model"] == "vision-model"
+    assert data["base_url"] == "https://proxy.example/v1"
+    assert data["timeout"] == 66
+    assert data["has_key"] is True
+    assert "api_key" not in data and "secret" not in json.dumps(data)
 
 
 def test_post_config_empty_api_key_keeps_existing_key(running_server, monkeypatch):
@@ -226,6 +275,8 @@ def test_post_config_does_not_bake_transient_env_override_into_saved_file(runnin
 def test_analyze_would_work_true_when_provider_explicit():
     assert api._analyze_would_work({"provider": "cli", "api_key": "", "model": "", "base_url": ""}) is True
     assert api._analyze_would_work({"provider": "api", "api_key": "", "model": "", "base_url": ""}) is True
+    assert api._analyze_would_work({"provider": "openai_compat", "api_key": "", "model": "", "base_url": ""}) is True
+    assert api._analyze_would_work({"provider": "ollama", "api_key": "", "model": "", "base_url": ""}) is True
 
 
 def test_analyze_would_work_true_when_api_key_present():
@@ -264,8 +315,25 @@ def test_index_html_has_wizard_skip_button():
 
 def test_index_html_settings_form_has_all_config_field_names():
     text = _index_html_text()
-    for field_name in ("provider", "model", "api_key", "base_url"):
+    for field_name in ("provider", "model", "api_key", "base_url", "timeout"):
         assert f'name="{field_name}"' in text, f"settings 表单缺少字段:{field_name}"
+
+
+def test_index_html_lists_new_providers_and_marks_linked_fields():
+    text = _index_html_text()
+    assert 'value="openai_compat"' in text
+    assert 'value="ollama"' in text
+    for field_name in ("model", "api_key", "base_url", "timeout"):
+        assert f'data-config-field="{field_name}"' in text
+
+
+def test_app_js_hides_api_key_for_ollama_and_submits_timeout():
+    text = (Path(__file__).parent.parent / "looklift" / "gui" / "static" / "js" / "app.js").read_text(
+        encoding="utf-8"
+    )
+    assert 'provider === "ollama"' in text
+    assert 'data-config-field="api_key"' in text
+    assert 'timeout: data.get("timeout")' in text
 
 
 def test_index_html_has_no_duplicate_ids():

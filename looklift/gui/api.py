@@ -33,7 +33,7 @@ from . import upload
 # `server.py` 按返回值长度分发。
 Handler = Callable[[dict], "tuple[int, dict] | tuple[int, bytes, str]"]
 
-_VALID_PROVIDERS = {"auto", "cli", "api"}
+_VALID_PROVIDERS = {"auto", "cli", "api", "openai_compat", "ollama"}
 
 _ANALYZE_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
 
@@ -146,7 +146,7 @@ def _ping(ctx: dict) -> tuple[int, dict]:
 def _analyze_would_work(cfg: dict[str, Any]) -> bool:
     """纯函数：判断"分析请求现在发得出去"，即 GET /api/config 里的 `configured`。
 
-    四选一即算配好：provider 被显式指到 cli/api（用户已经做过选择）、config
+    四选一即算配好：provider 被显式指到任一具体后端（用户已经做过选择）、config
     里存了 api_key、环境变量 `ANTHROPIC_API_KEY` 有值（`providers.get_provider`
     在 backend="auto" 时就是把这个环境变量当"api 可用"的判据之一，见
     providers.py:136-137、design.md §10——这里的口径必须跟它保持一致，否则
@@ -156,7 +156,7 @@ def _analyze_would_work(cfg: dict[str, Any]) -> bool:
     后端时会抛异常，这里只想要一个布尔值，抽成独立纯函数也方便不起 HTTP
     server 单测。
     """
-    if cfg["provider"] in ("cli", "api"):
+    if cfg["provider"] in _VALID_PROVIDERS - {"auto"}:
         return True
     if cfg["api_key"]:
         return True
@@ -180,6 +180,8 @@ def _get_config(ctx: dict) -> tuple[int, dict]:
         "configured": _analyze_would_work(cfg),
         "provider": disk_cfg["provider"],
         "model": disk_cfg["model"],
+        "base_url": disk_cfg["base_url"],
+        "timeout": disk_cfg["timeout"],
         "has_key": bool(cfg["api_key"]),
     }
 
@@ -209,18 +211,27 @@ def _post_config(ctx: dict) -> tuple[int, dict]:
 
     provider = payload.get("provider")
     if provider is not None and provider not in _VALID_PROVIDERS:
-        return 400, {"error": f"provider 必须是 auto/cli/api 之一，收到：{provider!r}"}
+        choices = "/".join(sorted(_VALID_PROVIDERS))
+        return 400, {"error": f"provider 必须是 {choices} 之一，收到：{provider!r}"}
 
     cfg = config.load_config(include_env=False)
     for key in ("provider", "model"):
         if key in payload:
             cfg[key] = payload[key]
-    # base_url 跟 api_key 同样吃"空字符串 = 保留原值"：设置表单/向导每次都提交
-    # base_url:""（前端不回填），无条件写入会把已配好的兼容代理地址静默清空。
+    # base_url 跟 api_key 同样吃"空字符串 = 保留原值"，避免部分更新静默清空地址。
     if payload.get("base_url"):  # 空字符串／缺省字段 → 保留原值
         cfg["base_url"] = payload["base_url"]
     if payload.get("api_key"):  # 空字符串／缺省字段 → 保留原值
         cfg["api_key"] = payload["api_key"]
+    if "timeout" in payload:
+        timeout = payload["timeout"]
+        if timeout in ("", None):
+            cfg["timeout"] = ""
+        else:
+            try:
+                cfg["timeout"] = config.provider_timeout("api", timeout)
+            except RuntimeError as exc:
+                return 400, {"error": str(exc)}
 
     config.save_config(cfg)
     return 200, {"ok": True}
