@@ -35,6 +35,16 @@ def test_bounds_read_from_schema():
     assert contract.param_bounds("color_grading.shadows.hue") == (0, 360)
 
 
+def test_param_defaults_are_owned_by_contract():
+    assert contract.param_default("basic.exposure") == 0
+    assert contract.param_default("hsl.blue.saturation") == 0
+    assert contract.param_default("color_grading.blending") == 50
+    assert contract.param_default("effects.grain_amount") == 0
+
+    with pytest.raises(KeyError, match="unknown.value"):
+        contract.param_default("unknown.value")
+
+
 def test_resolve_path_basic_and_effects(sample_analysis):
     container, key = contract.resolve_path(sample_analysis, "basic.exposure")
     assert container[key] == sample_analysis["basic"]["exposure"]

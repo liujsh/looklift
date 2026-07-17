@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import hmac
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -24,10 +25,23 @@ _CONTENT_TYPES = {
     ".png": "image/png",
 }
 
+_CORS_ORIGINS = {
+    "http://localhost:1420",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+    "tauri://localhost",
+}
 
-def create_server(port: int = 0) -> ThreadingHTTPServer:
-    """创建绑定 `127.0.0.1:<port>` 的 server；`port=0` 时由 OS 分配空闲端口。"""
-    return ThreadingHTTPServer(("127.0.0.1", port), _RequestHandler)
+
+def create_server(port: int = 0, token: str | None = None) -> ThreadingHTTPServer:
+    """创建绑定 `127.0.0.1:<port>` 的 server。
+
+    `token` 只供 Tauri sidecar 模式启用；旧 pywebview 入口与现有
+    测试不传 token，保持原契约。
+    """
+    server = ThreadingHTTPServer(("127.0.0.1", port), _RequestHandler)
+    server.looklift_token = token  # type: ignore[attr-defined]
+    return server
 
 
 class _RequestHandler(BaseHTTPRequestHandler):
@@ -42,10 +56,23 @@ class _RequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         self._dispatch("POST")
 
+    def do_OPTIONS(self) -> None:
+        """只为受信 Tauri/Vite origin 回应带自定义令牌头的预检。"""
+        path = unquote(urlsplit(self.path).path)
+        if path.startswith("/api/") and self._cors_origin() is not None:
+            self.send_response(HTTPStatus.NO_CONTENT)
+            self._send_cors_headers(preflight=True)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        self._send_json(HTTPStatus.FORBIDDEN, {"error": "不允许的请求来源"})
+
     def _dispatch(self, method: str) -> None:
         path = unquote(urlsplit(self.path).path)
         try:
-            if method == "GET" and path == "/":
+            if path.startswith("/api/") and not self._authorized():
+                self._send_json(HTTPStatus.UNAUTHORIZED, {"error": "启动令牌无效"})
+            elif method == "GET" and path == "/":
                 self._serve_static("index.html")
             elif method == "GET" and path.startswith("/static/"):
                 self._serve_static(path[len("/static/") :])
@@ -55,6 +82,29 @@ class _RequestHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.NOT_FOUND, {"error": f"未找到路径：{path}"})
         except Exception as exc:  # noqa: BLE001 —— handler 异常一律转 500 JSON，不吐 traceback
             self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+
+    def _authorized(self) -> bool:
+        """校验 Tauri 启动时生成的本机令牌；未配置时保持旧行为。"""
+        expected = getattr(self.server, "looklift_token", None)
+        if expected is None:
+            return True
+        actual = self.headers.get("X-Looklift-Token", "")
+        return hmac.compare_digest(actual, expected)
+
+    def _cors_origin(self) -> str | None:
+        origin = self.headers.get("Origin")
+        return origin if origin in _CORS_ORIGINS else None
+
+    def _send_cors_headers(self, *, preflight: bool = False) -> None:
+        origin = self._cors_origin()
+        if origin is None:
+            return
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Vary", "Origin")
+        if preflight:
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Looklift-Token")
+            self.send_header("Access-Control-Max-Age", "600")
 
     def _dispatch_api(self, method: str, path: str) -> None:
         matched = _match_route(method, path)
@@ -109,6 +159,7 @@ class _RequestHandler(BaseHTTPRequestHandler):
 
     def _send_binary(self, status: int, data: bytes, content_type: str) -> None:
         self.send_response(status)
+        self._send_cors_headers()
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
@@ -117,6 +168,7 @@ class _RequestHandler(BaseHTTPRequestHandler):
     def _send_json(self, status: int, body: dict) -> None:
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
+        self._send_cors_headers()
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()

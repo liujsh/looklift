@@ -17,6 +17,25 @@
   首次配置向导两条路径、WebView2 缺失兜底、长任务体验、U1/U4/U8 全流程复核、
   视觉 token 合规抽查——清单见 [specs/v0.4/tasks.md](specs/v0.4/tasks.md)
   「人工验收」一节,逐项过一遍后勾选。
+- [x] **v2.0-B T1 最后人工门禁**:作者于 2026-07-18 确认手测通过。在一台未安装 Python/Rust 的干净 Windows 上
+  双击 `looklift_0.5.0_x64-setup.exe`，确认安装、启动、页面显示「T1 真实引擎往返已通过」，
+  关闭后任务管理器无 `looklift-engine.exe`。本机 Defender 自定义扫描已无威胁，
+  但干净机 SmartScreen/Defender 仍需此步验收。
+
+## v2.0-B T1 打包 gate 实证(2026-07-18)
+
+| 项目 | 结果 |
+|---|---|
+| 构建链 | Node 22.19.0 / pnpm 11.5.3 / rustc 1.97.1 / VS 2022 Build Tools 17.14.36 |
+| 真实引擎 | numba 0.66.0 + pyvips 3.1.1 + libvips 8.18.4，冻结后真实渲染通过 |
+| onedir | 约 222 MB；冷 probe 19.7s，cache 命中后 1.63s；可写 cache 落盘 2 文件 |
+| Tauri 往返 | release 应用自动拉起 sidecar；带启动 token 的 ping/engine-probe 均通过 |
+| 生命周期 | 正常关闭主窗口后主进程与 sidecar 同时退出，无孤儿进程 |
+| 安装器 | NSIS `looklift_0.5.0_x64-setup.exe`，65.1 MB；本机 Defender 扫描无威胁 |
+| 自动测试 | Python `394 passed, 1 skipped`；TypeScript/Vite build、Vitest `8 passed` 和 Rust `cargo check` 通过 |
+
+门禁判定为 **GO（2026-07-18 作者确认）**：技术链路与干净 Windows
+安装/SmartScreen 人工验收均已通过，可以进入 T2。
 
 ## v0.4 开发中踩的坑(已解决)
 

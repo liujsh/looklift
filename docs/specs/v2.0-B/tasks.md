@@ -1,6 +1,6 @@
 # v2.0-B Spec:三栏 GUI 壳(Tauri)—— 任务
 
-> 状态:草拟,待作者 review。
+> 状态:已确认(2026-07-18,作者授权开工)。
 > 上游:[requirements.md](requirements.md)、[design.md](design.md)。
 > 约定:按依赖排序,每任务一句验收;**人工验收集中在最后一节**。
 > **T1 是决策门(gate):不通过不进 T2+**。

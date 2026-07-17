@@ -23,6 +23,13 @@ def param_bounds(path: str) -> tuple[float, float]:
     return node["minimum"], node["maximum"]
 
 
+def param_default(path: str) -> float:
+    """返回参数复位值；默认中性为 0，颜色分级混合的中性值为 50。"""
+    if path not in _path_nodes():
+        raise KeyError(path)
+    return 50 if path == "color_grading.blending" else 0
+
+
 def _path_nodes() -> dict[str, dict]:
     """从 schema 构造可调点路径到数值叶子的映射。"""
     props = ANALYSIS_SCHEMA["properties"]
