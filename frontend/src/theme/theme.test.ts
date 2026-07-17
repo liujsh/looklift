@@ -31,6 +31,6 @@ describe("统一桌面暗房主题", () => {
     const layout = read("./layout.css");
 
     expect(layout).toMatch(/\.contact-sheet::before[^}]*repeating-linear-gradient/s);
-    expect(layout).toMatch(/\.look-card:hover:not\(:disabled\)[^}]*translateY\(-2px\)/s);
+    expect(layout).toMatch(/\.look-card:hover[^}]*translateY\(-2px\)/s);
   });
 });

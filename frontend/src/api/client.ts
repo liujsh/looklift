@@ -99,6 +99,10 @@ export class LookliftClient {
     return this.text(`/report/${encodeURIComponent(name)}`, undefined, false);
   }
 
+  reportUrl(name: string): string {
+    return `${this.baseUrl}/report/${encodeURIComponent(name)}`;
+  }
+
   private async request(
     path: string,
     init: RequestInit = {},

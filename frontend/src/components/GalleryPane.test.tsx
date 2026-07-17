@@ -19,5 +19,9 @@ describe("GalleryPane", () => {
     expect(html).toContain("柔和胶片");
     expect(html).not.toContain("我的收藏");
     expect(html.match(/data-source="built_in"/g)).toHaveLength(2);
+    expect(html).toContain('aria-label="收藏名称"');
+    for (const action of ["报告", "预设", "sidecar"]) {
+      expect(html).toContain(`>${action}<`);
+    }
   });
 });

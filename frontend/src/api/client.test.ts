@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LookliftClient, clientFromStatus, readSidecarStatus } from "./client";
-import type { SidecarStatus } from "./types";
+import type { Analysis, SidecarStatus } from "./types";
 
 type RecordedRequest = { url: string; init: RequestInit };
 
@@ -101,6 +101,10 @@ describe("LookliftClient", () => {
     ]);
     const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
 
+    expect(client.reportUrl("胶片 #1")).toBe(
+      "http://127.0.0.1:9/report/%E8%83%B6%E7%89%87%20%231",
+    );
+
     await client.getLook("胶片 #1");
     await client.report("胶片 #1");
     await client.exportLook("胶片 #1", { factor: 0.6 });
@@ -116,6 +120,7 @@ describe("LookliftClient", () => {
   it("优先透传后端中文错误，并为非 JSON 和网络错误提供稳定文案", async () => {
     const queue = responseQueue([
       Response.json({ error: "缺少 analysis 字段" }, { status: 400 }),
+      Response.json({ error: "风格库中已存在同名条目：胶片" }, { status: 409 }),
       new Response("bad gateway", { status: 502 }),
     ]);
     const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
@@ -123,6 +128,10 @@ describe("LookliftClient", () => {
     await expect(client.paramContract()).rejects.toMatchObject({
       message: "缺少 analysis 字段",
       status: 400,
+    });
+    await expect(client.saveLook({ name: "胶片", analysis: {} as Analysis })).rejects.toMatchObject({
+      message: "风格库中已存在同名条目：胶片",
+      status: 409,
     });
     await expect(client.ping()).rejects.toThrow("本地引擎请求失败（HTTP 502）");
 

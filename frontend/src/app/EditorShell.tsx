@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CanvasPane } from "../components/CanvasPane";
 import { ChatPane } from "../components/ChatPane";
 import { GalleryPane } from "../components/GalleryPane";
@@ -7,6 +7,7 @@ import { FEATURES } from "./featureFlags";
 import type { LookliftClient } from "../api/client";
 import type { ParamContract } from "../api/types";
 import { createNeutralAnalysis } from "../panel/contractModel";
+import { exportLookFile } from "../features/looks/lookActions";
 import { editorStore, useEditorState } from "../store/editorStore";
 
 type EditorShellProps = {
@@ -23,6 +24,10 @@ export function EditorShell({
   contract,
 }: EditorShellProps) {
   const editor = useEditorState();
+  const [activeLookName, setActiveLookName] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const activeLookAnalysis = useRef(editor.analysis);
   const neutral = !editor.analysis && contract ? createNeutralAnalysis(contract) : undefined;
   const openImage = useCallback((path: string) => {
     if (!contract) {
@@ -35,6 +40,30 @@ export function EditorShell({
   }, [contract]);
   const settleManualPreview = useCallback(() => editorStore.finalizePreview("manual"), []);
   const setRenderState = useCallback(editorStore.setRenderState, []);
+  const activateLook = useCallback((name: string) => {
+    activeLookAnalysis.current = editorStore.getSnapshot().analysis;
+    setActiveLookName(name);
+    setExportStatus(null);
+  }, []);
+
+  useEffect(() => {
+    if (activeLookName && activeLookAnalysis.current !== editor.analysis) {
+      setActiveLookName(null);
+      setExportStatus(null);
+    }
+  }, [activeLookName, editor.analysis]);
+
+  const exportActiveLook = async () => {
+    if (!client || !activeLookName) return;
+    setExporting(true);
+    try {
+      setExportStatus(`已导出：${await exportLookFile(client, activeLookName)}`);
+    } catch (reason) {
+      setExportStatus(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <main className="editor-shell" data-chat-enabled={chatEnabled}>
@@ -48,7 +77,15 @@ export function EditorShell({
           <span aria-hidden="true" />
           引擎已连接
         </div>
-        <button className="export-button" type="button" disabled>导出</button>
+        <div className="app-actions">
+          {exportStatus && <span title={exportStatus}>{exportStatus}</span>}
+          <button
+            className="export-button"
+            type="button"
+            disabled={!activeLookName || exporting}
+            onClick={() => void exportActiveLook()}
+          >{exporting ? "导出中…" : "导出预设"}</button>
+        </div>
       </header>
 
       <section className="workbench" aria-label="照片编辑工作区">
@@ -64,7 +101,7 @@ export function EditorShell({
         <PanelPane contract={contract} />
       </section>
 
-      <GalleryPane client={client} />
+      <GalleryPane client={client} onActiveLookChange={activateLook} />
     </main>
   );
 }
