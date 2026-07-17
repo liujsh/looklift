@@ -77,6 +77,22 @@ describe("LookliftClient", () => {
     expect(new Uint8Array(await preview.arrayBuffer())).toEqual(jpeg);
   });
 
+  it("浏览器上传使用 multipart 且不手写 Content-Type 边界", async () => {
+    const queue = responseQueue([Response.json({ path: "C:/temp/photo.jpg" })]);
+    const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
+    const file = new File([new Uint8Array([1, 2, 3])], "照片.jpg", { type: "image/jpeg" });
+
+    await expect(client.upload(file)).resolves.toEqual({ path: "C:/temp/photo.jpg" });
+
+    const request = queue.requests[0];
+    expect(request.init.method).toBe("POST");
+    expect(request.init.body).toBeInstanceOf(FormData);
+    expect((request.init.body as FormData).get("file")).toBeInstanceOf(File);
+    const headers = new Headers(request.init.headers);
+    expect(headers.get("X-Looklift-Token")).toBe("token");
+    expect(headers.has("Content-Type")).toBe(false);
+  });
+
   it("编码风格名路径并覆盖读取、报告和导出端点", async () => {
     const queue = responseQueue([
       Response.json({ summary: "测试" }),

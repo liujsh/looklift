@@ -18,7 +18,12 @@ function App() {
     );
   }
 
-  return <EditorShell engineLabel={`${engine.numba} · libvips ${engine.libvips}`} />;
+  return (
+    <EditorShell
+      client={engine.client}
+      engineLabel={`${engine.numba} · libvips ${engine.libvips}`}
+    />
+  );
 }
 
 export default App;

@@ -69,6 +69,12 @@ export class LookliftClient {
     });
   }
 
+  upload(file: File): Promise<{ path: string }> {
+    const form = new FormData();
+    form.set("file", file, file.name);
+    return this.json("/api/upload", { method: "POST", body: form });
+  }
+
   async listLooks(): Promise<LookSummary[]> {
     const result = await this.json<{ looks: LookSummary[] }>("/api/looks");
     return result.looks;

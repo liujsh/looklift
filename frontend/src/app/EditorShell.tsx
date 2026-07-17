@@ -3,15 +3,18 @@ import { ChatPane } from "../components/ChatPane";
 import { GalleryPane } from "../components/GalleryPane";
 import { PanelPane } from "../components/PanelPane";
 import { FEATURES } from "./featureFlags";
+import type { LookliftClient } from "../api/client";
 
 type EditorShellProps = {
   chatEnabled?: boolean;
   engineLabel?: string;
+  client?: LookliftClient;
 };
 
 export function EditorShell({
   chatEnabled = FEATURES.chatPane,
   engineLabel = "本地引擎已连接",
+  client,
 }: EditorShellProps) {
   return (
     <main className="editor-shell" data-chat-enabled={chatEnabled}>
@@ -30,7 +33,7 @@ export function EditorShell({
 
       <section className="workbench" aria-label="照片编辑工作区">
         <ChatPane enabled={chatEnabled} />
-        <CanvasPane />
+        <CanvasPane client={client} />
         <PanelPane />
       </section>
 

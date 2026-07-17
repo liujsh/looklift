@@ -53,12 +53,22 @@
 .chat-pane p:last-child { color: var(--ink-muted); font-size: 13px; line-height: 1.6; }
 
 .canvas-pane { position: relative; display: grid; place-items: center; overflow: hidden; color: #eee9df; background: #252422; }
+.canvas-pane[data-drag-active="true"] { background: #2b2926; }
 .canvas-toolbar { position: absolute; inset: 12px 14px auto; display: flex; justify-content: space-between; color: #a9a39a; font-size: 10px; }
 .canvas-empty { width: min(360px, calc(100% - 48px)); text-align: center; }
 .drop-outline { display: grid; place-items: center; width: 62px; height: 62px; margin: 0 auto 20px; border: 1px solid #625e58; border-radius: 50%; color: #b8afa4; font-size: 26px; }
 .canvas-empty h1 { margin: 0 0 8px; font: 500 clamp(24px, 3vw, 36px)/1.2 Georgia, "Songti SC", serif; }
 .canvas-empty p { margin: 0 0 22px; color: #918b83; font-size: 12px; }
 .canvas-empty button { padding: 8px 17px; border: 1px solid #69635c; border-radius: 999px; color: #bcb6ad; background: transparent; cursor: not-allowed; }
+.canvas-empty button:not(:disabled) { color: #eee9df; cursor: pointer; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.drop-overlay { position: absolute; z-index: 4; inset: 18px; display: grid; place-items: center; border: 1px dashed #b8795d; color: #e7c0ad; background: rgba(36, 33, 30, .82); font: 500 22px/1.2 Georgia, "Songti SC", serif; pointer-events: none; }
+.comparison-view { position: absolute; inset: 42px 18px 38px; overflow: hidden; user-select: none; }
+.comparison-view > img, .comparison-after img { width: 100%; height: 100%; object-fit: contain; }
+.comparison-after { position: absolute; inset: 0; clip-path: inset(0 calc(100% - var(--comparison-position)) 0 0); }
+.comparison-divider { position: absolute; z-index: 2; top: 0; bottom: 0; left: var(--comparison-position); width: 1px; color: #332f2a; background: #fffaf1; pointer-events: none; }
+.comparison-divider span { position: absolute; top: 50%; left: 50%; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #fffaf1; border-radius: 50%; background: #f3ede2; transform: translate(-50%, -50%); font-size: 12px; }
+.comparison-view input { position: absolute; z-index: 3; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
 .canvas-footer { position: absolute; inset: auto 20px 14px; display: flex; align-items: center; justify-content: center; gap: 10px; color: #8d8881; font-size: 10px; }
 .diff-track { width: 62px; height: 2px; background: #55514c; }
 .diff-track i { display: block; width: 50%; height: 100%; background: #aaa39a; }

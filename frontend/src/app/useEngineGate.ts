@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { clientFromStatus, readSidecarStatus } from "../api/client";
+import type { LookliftClient } from "../api/client";
 import type { SidecarStatus } from "../api/types";
 
 type EngineGate =
   | { phase: "starting"; error: null; numba: null; libvips: null }
-  | { phase: "ready"; error: null; numba: string; libvips: string }
+  | { phase: "ready"; error: null; numba: string; libvips: string; client: LookliftClient }
   | { phase: "error"; error: string; numba: null; libvips: null };
 
 const STARTING: EngineGate = {
@@ -22,7 +23,13 @@ async function probeEngine(status: SidecarStatus): Promise<EngineGate> {
     client.listLooks(),
   ]);
   if (!ping.ok || !probe.rendered) throw new Error("本地引擎自检未通过");
-  return { phase: "ready", error: null, numba: probe.numba, libvips: probe.libvips };
+  return {
+    phase: "ready",
+    error: null,
+    numba: probe.numba,
+    libvips: probe.libvips,
+    client,
+  };
 }
 
 export function useEngineGate(): EngineGate {
