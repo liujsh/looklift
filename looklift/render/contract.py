@@ -8,53 +8,50 @@ from __future__ import annotations
 
 from ..analyzer import ANALYSIS_SCHEMA, _COLOR_KEYS
 
-_BASIC_FIELDS = (
-    "temperature_shift", "tint_shift", "exposure", "contrast",
-    "highlights", "shadows", "whites", "blacks",
-    "texture", "clarity", "dehaze", "vibrance", "saturation",
-)
-_HSL_FIELDS = ("hue", "saturation", "luminance")
-_CG_ZONES = ("shadows", "midtones", "highlights", "global")
-_CG_ZONE_FIELDS = ("hue", "saturation", "luminance")
-_CG_SCALARS = ("blending", "balance")
-_EFFECTS_FIELDS = ("vignette_amount", "grain_amount")
-
 
 def param_paths() -> list[str]:
     """枚举所有可调数值参数的点路径,不含整点数组 tone_curve。"""
-    paths: list[str] = [f"basic.{field}" for field in _BASIC_FIELDS]
-    for color in _COLOR_KEYS:
-        paths += [f"hsl.{color}.{field}" for field in _HSL_FIELDS]
-    for zone in _CG_ZONES:
-        paths += [f"color_grading.{zone}.{field}" for field in _CG_ZONE_FIELDS]
-    paths += [f"color_grading.{scalar}" for scalar in _CG_SCALARS]
-    paths += [f"effects.{field}" for field in _EFFECTS_FIELDS]
-    return paths
+    return list(_path_nodes())
 
 
 def param_bounds(path: str) -> tuple[float, float]:
     """从 schema 的 minimum/maximum 读取指定路径范围。"""
-    node = _schema_node(path)
+    try:
+        node = _path_nodes()[path]
+    except KeyError:
+        raise KeyError(path) from None
     return node["minimum"], node["maximum"]
 
 
-def _schema_node(path: str) -> dict:
+def _path_nodes() -> dict[str, dict]:
+    """从 schema 构造可调点路径到数值叶子的映射。"""
     props = ANALYSIS_SCHEMA["properties"]
-    parts = path.split(".")
-    section = parts[0]
-    if section == "basic":
-        return props["basic"]["properties"][parts[1]]
-    if section == "effects":
-        return props["effects"]["properties"][parts[1]]
-    if section == "hsl":
-        return props["hsl"]["items"]["properties"][parts[2]]
-    if section == "color_grading":
-        cg = props["color_grading"]["properties"]
-        if parts[1] in _CG_SCALARS:
-            return cg[parts[1]]
-        key = "global_" if parts[1] == "global" else parts[1]
-        return cg[key]["properties"][parts[2]]
-    raise KeyError(path)
+    nodes: dict[str, dict] = {}
+
+    for field, node in props["basic"]["properties"].items():
+        if node.get("type") == "number":
+            nodes[f"basic.{field}"] = node
+
+    hsl_props = props["hsl"]["items"]["properties"]
+    for color in _COLOR_KEYS:
+        for field, node in hsl_props.items():
+            if node.get("type") == "number":
+                nodes[f"hsl.{color}.{field}"] = node
+
+    for field, node in props["color_grading"]["properties"].items():
+        if node.get("type") == "number":
+            nodes[f"color_grading.{field}"] = node
+        elif node.get("type") == "object":
+            zone = "global" if field == "global_" else field
+            for child, leaf in node["properties"].items():
+                if leaf.get("type") == "number":
+                    nodes[f"color_grading.{zone}.{child}"] = leaf
+
+    for field, node in props["effects"]["properties"].items():
+        if node.get("type") == "number":
+            nodes[f"effects.{field}"] = node
+
+    return nodes
 
 
 def resolve_path(analysis: dict, path: str) -> tuple[dict, str]:
@@ -63,6 +60,9 @@ def resolve_path(analysis: dict, path: str) -> tuple[dict, str]:
     hsl 按 color 段从数组查找,缺失时补零插入；color_grading.global 段映射
     到字典键 global_。
     """
+    if path not in _path_nodes():
+        raise KeyError(path)
+
     parts = path.split(".")
     section = parts[0]
     if section == "basic":
@@ -80,7 +80,7 @@ def resolve_path(analysis: dict, path: str) -> tuple[dict, str]:
         return item, field
     if section == "color_grading":
         color_grading = analysis.setdefault("color_grading", {})
-        if parts[1] in _CG_SCALARS:
+        if len(parts) == 2:
             return color_grading, parts[1]
         key = "global_" if parts[1] == "global" else parts[1]
         zone = color_grading.setdefault(

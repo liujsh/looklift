@@ -72,8 +72,8 @@ ANALYSIS_SCHEMA: dict[str, Any] = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "input": {"type": "number"},
-                    "output": {"type": "number"},
+                    "input": {"type": "number", "minimum": 0, "maximum": 255},
+                    "output": {"type": "number", "minimum": 0, "maximum": 255},
                 },
                 "required": ["input", "output"],
                 "additionalProperties": False,
