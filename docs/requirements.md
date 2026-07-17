@@ -150,7 +150,7 @@ CLI、XMP 导出全部 carry forward;只有 pywebview 壳 + vanilla-JS 前端被
 | v0.3 | 像:精度闭环 | preview 渲染;refine --auto;评分;.cube LUT | ✅ 已发布 |
 | v0.4 | GUI alpha | pywebview 拖拽→分析→报告→导出;强度滑杆;对比条 | ✅ 已完成(终审修复+合入收尾中) |
 | **v0.5** | **供应商 + 库** | OpenAI 兼容 provider、Ollama provider;GUI 内配置;批量分析 | 🎯 **下一个,先做完**;用非 Anthropic 供应商跑通 analyze |
-| **v2.0-A** | **引擎重构** | render→operator 化 + 线性光 + numba 融合 + 导出嵌 ICC;补 texture/clarity/dehaze/grain 像素实现 | 🎯 v2 第一步;operator 单测 + 线性光正确 + 2048px<50ms + 导出嵌 ICC |
+| **v2.0-A** | **引擎重构** | render→operator 化 + 线性光 + numba 融合 + 导出嵌 ICC;补 texture/clarity/dehaze/grain 像素实现 | 🎯 v2 第一步(**技术上独立于 v0.5,可先于 v0.5 实施**);operator 单测 + 线性光正确 + 融合内核代理帧<50ms/S2<200ms(见 spec 性能口径)+ 导出嵌 ICC |
 | **v2.0-B** | **三栏 GUI(Tauri)** | Tauri+React 壳(Python sidecar);中画布+diff、右全局调色面板、图库+内置大师模板 | 🎯 不碰命令行完成 拖图→面板调参→看 diff→收藏→导出;打包产物双击运行 |
 | **v2.1** | **左聊天调参** | AI 对话→参数 delta→渲染→diff→reflection 多轮自修正(复用 v0.5 多供应商 + 本地 CLI) | 🎯 mock 下多轮闭环确定性测试;chat 与右面板滑杆同步 |
 | **v2.x** | 远期能力 | 局部蒙版(分割模型)· RAW(rawpy)· GPU 后端(moderngl/wgpu-py)· 桌面打包分发 | 视情况,逐项独立 spec |

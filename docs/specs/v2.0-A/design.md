@@ -1,6 +1,6 @@
 # v2.0-A Spec:引擎重构 —— 设计
 
-> 状态:草拟,待作者 review。同迭代:[需求](./requirements.md) · [任务](./tasks.md)。
+> 状态:已确认(2026-07-17,作者授权开工)。同迭代:[需求](./requirements.md) · [任务](./tasks.md)。
 > 基线:[当前架构 design.md §12/§15/§17](../../design.md)(现渲染管线/LUT/强度缩放)、
 > [产品宪法](../../requirements.md)。参考架构(设计非代码,均不抄码):**AlcedoStudio**
 > (operator + per-op JSON 参数 + 分阶段管线,GPL-3 仅借结构)。spike 数据引自开发计划文档。
