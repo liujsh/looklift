@@ -1,6 +1,6 @@
 # v0.5 设计:供应商 + 库
 
-> 状态:草拟,待作者 review。同迭代:[需求](./requirements.md) · [任务](./tasks.md)。
+> 状态:已确认(2026-07-18,作者授权开工)。同迭代:[需求](./requirements.md) · [任务](./tasks.md)。
 > 基线:[v0.3 provider 抽象](../2026-07-16-v0.3-precision-loop.md#t1-provider-抽象只定接口不加新供应商)、
 > [当前架构](../../design.md)。
 
@@ -12,8 +12,9 @@
 | 2 | config.toml schema 是否要为新 provider 加分节 | (a) 沿用现有扁平 schema(`provider/model/api_key/base_url/looks_dir`),只加一个 `timeout` (b) 改成 `[provider.openai_compat]` / `[provider.ollama]` 分节,支持同时保存多套配置 | (a) | YAGNI:当前产品形态是"某一时刻只用一个 provider",分节支持的"多套配置同时存在、切换省得重填"是 v1.0 前用不上的便利。`base_url` 对 openai_compat 是中转站地址,对 ollama 默认 `http://localhost:11434`(留空时代码里给默认值);`api_key` 对 ollama 无意义,留空即可。扩展成本低于分节引入的复杂度 |
 | 3 | 超时与重试 | — | 新增 `timeout` 配置项(秒),按 provider 给不同默认值:cli 600s(已有)、api 120s、openai_compat 120s、ollama 300s(本地 CPU 推理视觉模型可能很慢);网络级错误(连接失败/5xx)重试 1 次、指数退避;4xx(鉴权/参数错误)不重试,直接抛中文错误 | 本地模型推理耗时波动大,超时太短会误判失败;但不设上限又会导致 CLI 卡死无提示,所以给了单独的默认值而不是复用 api 的 120s |
 | 4 | 错误信息中文化 | — | 在两个新 provider 的 `complete()` 里捕获 `HTTPError`/`ConnectionError`,按状态码/异常类型映射成中文提示 + 修复建议(如「401:api_key 无效,检查 config.toml 里的 api_key」「Ollama 连接失败:确认 `ollama serve` 已启动,或 base_url 配置是否正确」「模型不存在:先 `ollama pull <模型名>`」) | 沿用现有 `RuntimeError` 中文提示的风格(见 `analyzer.py` 现有的「未找到可用后端」提示) |
-| 5 | 批量分析的目录约定与断点续跑 | — | 约定 `--batch <目录>` 下每个一级子目录是一"组"(复用 v0.2 多图归纳,一组内最多 5 张,超出的按修改时间取前 5 张并打印提示);每组分析成功后在该子目录写一个 `.looklift-done` 标记文件(或检测模版是否已存在于目标 looks 目录,取更简单的一种,留给实现阶段判断);重跑时跳过已标记的组,`--force` 强制重跑全部;开始前扫描一遍打印「共 N 组待分析,预计消耗 N 次调用额度」 | 断点状态必须落盘而不是纯内存,否则 Ctrl-C/机器休眠后重跑等于没有断点续跑 |
-| 6 | 风格聚类(视情况/可裁剪) | — | 若本迭代时间允许:特征向量 = `basic` 13 维 + `hsl` 8 通道 × 3 属性 24 维,做 min-max 标准化后跑 k-means(k 默认按 `min(5, 组数)` 或让用户用 `--clusters N` 指定);聚类结果只用于给批量分析产出的模版打「分组标签」,不改变模版内容本身,不影响单独的 `analyze`/`apply` 流程 | 聚类质量依赖参数向量本身的代表性,不追求精确;若裁剪到 v0.6 或以后,`--batch` 本身的验收不受影响(聚类是加分项非必需项),这一决策与 [v0.6 design.md](../v0.6/design.md) 的聚类章节互相引用,避免重复实现 |
+| 5 | 批量分析的目录约定与断点续跑 | — | `--batch <目录>` 下每个含受支持图片的一级子目录是一组；图片按修改时间升序取前 5 张。成功结果原子写入该组的 `.looklift-result.json`，它同时是可直接复用的模版与断点标记；重跑跳过已有结果，`--force` 强制重跑。结果不自动写入 `looks/`。单组失败不留结果、继续后续组，最终有失败则命令返回 1 | 用一个原子结果文件同时承担产物和断点，避免 marker 与模版状态漂移；不自动建库守住非目标 |
+| 6 | 风格聚类 | — | 延期到 v0.6/backlog，v0.5 不提供 `--clusters` | 核心 gate 是多供应商与可续跑 batch；聚类是 roadmap 的 v0.5+ 能力，不应拖住供应商收口 |
+| 7 | HTTP 传输 | (a) 新增第三方 SDK (b) 标准库 `urllib.request` | (b) | 当前只需 JSON POST、超时、状态码与一次重试；标准库足够且避免引入 OpenAI/Ollama SDK。公共传输放 `provider_http.py`，provider 只负责 wire 格式和中文错误映射 |
 
 ## 接口/数据结构变化
 
@@ -23,18 +24,26 @@ class OpenAICompatProvider:
     def __init__(self, base_url: str, api_key: str, model: str, timeout: int = 120): ...
     def complete(self, system: str, content: list[Block], schema: dict) -> dict: ...
     # 内部:content -> OpenAI chat.completions messages 格式(image_url data URI)
-    # 无结构化输出保证 -> 走 _extract_json + _normalize
+    # 无结构化输出保证 -> complete 内 _extract_json，analyzer 返回前统一 _normalize
 
 class OllamaProvider:
     def __init__(self, base_url: str, model: str, timeout: int = 300): ...
     def complete(self, system: str, content: list[Block], schema: dict) -> dict: ...
     # 内部:content -> /api/chat 的 messages + images(纯 base64 数组)
-    # 无结构化输出保证 -> 走 _extract_json + _normalize
+    # 无结构化输出保证 -> complete 内 _extract_json，analyzer 返回前统一 _normalize
 ```
+
+两个 provider 的 `complete()` 只负责 `_extract_json`；现有 `analyzer.analyze/refine` 在
+`provider.complete()` 返回后统一调用 `_normalize`，不得让 `providers.py` 反向导入 analyzer 形成循环依赖。
+
+OpenAI 兼容地址按 `base_url.rstrip('/') + '/chat/completions'` 组装（用户配置通常已含 `/v1`）；
+Ollama 按 `base_url.rstrip('/') + '/api/chat'` 组装。公共 HTTP 层只重试连接错误与 5xx 一次，
+4xx 不重试。测试注入/替换 opener 与 sleeper，不触网、不真实等待。
 
 - `config.toml` 新增字段:`timeout`(int,秒,可选,不填按 provider 类型给默认值);其余复用现有 `provider/model/api_key/base_url/looks_dir`
 - `provider` 取值扩展为 `auto | cli | api | openai_compat | ollama`
-- CLI 新增 `analyze --batch <目录> [--force] [--clusters N]`
+- CLI 新增 `analyze --batch <目录> [--force]`；batch 模式与位置参数 `edited`、`--original`、
+  `--name/--json/--preset/--sidecar` 互斥，`--hint` 与 `--backend` 作用于每一组
 - GUI 设置页(依赖 v0.4)新增 provider 类型下拉,选中 `openai_compat`/`ollama` 时展示对应字段(`ollama` 隐藏 api_key)
 
 ## 风险
