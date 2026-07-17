@@ -37,13 +37,16 @@
 `base.py`:定义 `Operator` 协议(`name`/`stage`/`domain`/`resolve`/`apply_numpy`/`apply_px`)、
 `Stage`/`Domain` 枚举、扁平 Python 暂存容器 `ResolvedParams` + 稳定 per-op enable 位掩码
 (见 [design.md §1.2/§1.4](./design.md))。`ResolvedParams` 只允许保存
-`op name -> tuple[标量/定长小数组, ...]`,禁止嵌套 dict;它供 numpy 参考路径使用,也是 T6b
+`op name -> tuple[叶子, ...]`;叶子只能是 Python/NumPy 数值标量,或 1D、C-contiguous、
+`np.float32` 定长小数组。拒绝 list/set/dict/object、object dtype、非 1D、非 float32、非连续
+数组及嵌套 tuple/list/dict;它供 numpy 参考路径使用,也是 T6b
 固定 `RenderParams` 的输入。`OP_BITS` 位次严格按 exposure 至 grain 的固定 operator 顺序,
 编码切换不占 bit。
 
 **验收**:pytest 覆盖一个同时实现 `apply_numpy`/`apply_px` 的 stub operator,并用 runtime Protocol
 检查接口;`resolve` 全 0 返回 `None`(enable=False)、非 0 返回参数元组;`ResolvedParams`
-打包/取用往返一致且拒绝嵌套 dict;`OP_BITS` 精确映射固定顺序、每个值都是唯一 single bit。
+打包/取用往返一致,逐类覆盖合法叶子与上述全部非法叶子;`OP_BITS` 精确映射固定顺序、每个值
+都是唯一 single bit。
 
 ## T3 色彩空间基元(`color_space.py`)
 
@@ -78,9 +81,15 @@ tone_curve/hsl/saturation/color_grading 九步的数学**逐字搬进各 operato
 把各 op 的 `apply_px`(njit device 函数)inline 进单个 `@njit(parallel=True, fastmath=True,
 cache=True)` 的 `fused()`;linear 段→编码→display 段的单次光域切换在内核内完成(见
 [design.md §3](./design.md))。**这是本迭代最大的单块工作,分子步推进,不当一行估:**
-- T6a:把已迁入的 `apply_px` 逐个 inline,先跑通「linear 段(exposure/WB/叠色)→编码→display 段」骨架;
+- T6a:把已迁入的 `apply_px` 逐个 inline,只用显式标量参数/函数内部临时 tuple 跑通
+  「linear 段(exposure/WB/叠色)→编码→display 段」骨架;不定义 record、不 marshal、不形成 ABI;
 - T6b:在 T4/T5 参数形态完整后,把 `ResolvedParams` 机械 marshal 成固定布局 numba
-  `RenderParams`(NamedTuple/定长 record);验证 dtype/layout/enable,内核只接该 record + aux,
+  先声明唯一 `RENDER_PARAM_LAYOUT` 精确字段映射,再定义 `RenderParams`(NamedTuple/定长 record);
+  精确字段为 enable:int64、exposure/contrast:float32、white_balance/highlights_shadows/
+  whites_blacks/saturation:float32×2、tone_curve_lut:float32×1024、hsl:float32×24、
+  color_grading:float32×12;
+  逐字段验证 Numba type/dtype/shape/C 连续、禁用同 shape 零值、数组 marshal 等值与真实 njit
+  nopython signature;内核只接该 record + aux,
   绝不接 Python dict;0 值 op 按稳定 `OP_BITS` 在内核里 `if` 短路;
 - T6c:开 `parallel=True, fastmath=True, cache=True`,处理浮点结合序带来的容差;
 - **风险**:`fastmath` 数值发散(用容差 ≤1/255 而非严格相等)、冷编译首帧延迟(见 T7 预热)。

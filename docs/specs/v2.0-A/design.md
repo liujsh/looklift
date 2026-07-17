@@ -81,7 +81,9 @@ class Operator(Protocol):
 组织结构误当成 numba ABI:
 
 - **T2 `ResolvedParams`**:pipeline 遍历 operator 注册表,逐个 `resolve(analysis)`,把结果暂存为
-  `op name -> tuple`。tuple 只能由标量或定长小数组组成,**禁止嵌套 dict**;它供 numpy 参考路径
+  `op name -> tuple`。tuple 的每个叶子只能是 Python/NumPy 数值标量,或 **1D、C-contiguous、
+  `np.float32`** 的定长小数组;拒绝 list/set/dict/object、object dtype、非 1D、非 float32 与
+  非连续数组。tuple 本身也不得嵌套 tuple/list/dict。它供 numpy 参考路径
   使用,也是 T6b 构建固定 record 的唯一输入。`resolve()` 返回 `None` 时对应 enable 位为 0,
   有 tuple 时置位。
 - **稳定 `OP_BITS`**:T2 即冻结位次为 exposure、white_balance、contrast、
@@ -92,6 +94,12 @@ class Operator(Protocol):
   `ResolvedParams` 机械 marshal 成 numba 可接受的固定布局 `NamedTuple` / 定长 record。
   该 record 带同一个 enable 整数,曲线等小数组预计算成定长 LUT 后写入固定字段。推迟到
   T6b 才冻结标量字段/offset,是为避免 T2 提前锁 ABI 后随 T4/T5 反复返工。
+
+T6a 只验证融合数学骨架,调用 `fused` 时传显式标量参数或函数内部临时 tuple;不得定义 record、
+不得 marshal、不得形成 ABI。T6b 首先声明唯一 `RENDER_PARAM_LAYOUT` 常量,精确冻结每个字段的
+名称、Numba type/dtype/shape:enable:int64 标量;exposure/contrast:float32 标量;
+white_balance/highlights_shadows/whites_blacks/saturation:float32×2;tone_curve_lut:float32×1024;
+hsl:float32×24;color_grading:float32×12。随后才定义 `RenderParams` 并把调用切换到 record。
 
 融合内核只接收固定 `RenderParams` + 辅助缓冲,**绝不接收 Python dict 或
 `ResolvedParams`**。numpy 参考路径可以直接读取 `ResolvedParams`。
