@@ -171,11 +171,15 @@ def _get_config(ctx: dict) -> tuple[int, dict]:
     绝不在响应里带 `api_key` 原文——`has_key` 布尔值够前端判断"要不要提示
     去填"，没必要把密钥吐回浏览器里。
     """
+    # configured 判定要吃 env（LOOKLIFT_*/ANTHROPIC_API_KEY 都算"分析用得起来"），
+    # 但表单可编辑字段 provider/model 必须回显磁盘原值：否则本次进程的临时 env
+    # 覆盖会被回显进设置表单，用户一保存就固化进 config.toml（env baking）。
     cfg = config.load_config()
+    disk_cfg = config.load_config(include_env=False)
     return 200, {
         "configured": _analyze_would_work(cfg),
-        "provider": cfg["provider"],
-        "model": cfg["model"],
+        "provider": disk_cfg["provider"],
+        "model": disk_cfg["model"],
         "has_key": bool(cfg["api_key"]),
     }
 
@@ -208,9 +212,13 @@ def _post_config(ctx: dict) -> tuple[int, dict]:
         return 400, {"error": f"provider 必须是 auto/cli/api 之一，收到：{provider!r}"}
 
     cfg = config.load_config(include_env=False)
-    for key in ("provider", "model", "base_url"):
+    for key in ("provider", "model"):
         if key in payload:
             cfg[key] = payload[key]
+    # base_url 跟 api_key 同样吃"空字符串 = 保留原值"：设置表单/向导每次都提交
+    # base_url:""（前端不回填），无条件写入会把已配好的兼容代理地址静默清空。
+    if payload.get("base_url"):  # 空字符串／缺省字段 → 保留原值
+        cfg["base_url"] = payload["base_url"]
     if payload.get("api_key"):  # 空字符串／缺省字段 → 保留原值
         cfg["api_key"] = payload["api_key"]
 

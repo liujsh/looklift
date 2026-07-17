@@ -147,6 +147,39 @@ def test_post_config_empty_api_key_keeps_existing_key(running_server, monkeypatc
     assert config.load_config()["api_key"] == "sk-keep-me"
 
 
+def test_post_config_empty_base_url_keeps_existing(running_server, monkeypatch):
+    """代码评审(Must-fix，base_url 静默清空):设置表单/向导每次都提交
+    `base_url: ""`（前端出于对称考虑不回填），而 `_post_config` 原本无条件
+    写入任何出现的字段——导致已配好的 OpenAI 兼容代理地址（国内用户关键）
+    在任何一次保存设置时被清空。要求 `base_url` 跟 `api_key` 一样吃"空字符串
+    = 保留原值"的待遇。"""
+    monkeypatch.setattr(api.shutil, "which", lambda _: None)
+    _request(running_server, "POST", "/api/config", {"provider": "api", "base_url": "https://proxy.example.com/v1"})
+
+    status, data = _request(running_server, "POST", "/api/config", {"provider": "api", "base_url": ""})
+
+    assert status == 200
+    assert config.load_config()["base_url"] == "https://proxy.example.com/v1"
+
+
+def test_get_config_reports_on_disk_provider_model_not_env(running_server, monkeypatch):
+    """代码评审(Must-fix，env 固化):`_get_config` 原本用带 env 合并的
+    `load_config()` 回填表单里的 provider/model，用户一保存就把这次进程的
+    临时 `LOOKLIFT_*` 覆盖固化进 config.toml。要求表单可编辑字段
+    （provider/model）取自 `load_config(include_env=False)` 的磁盘值；env
+    只影响 `configured` 判定，不影响回显/保存的表单值。"""
+    monkeypatch.setattr(api.shutil, "which", lambda _: None)
+    _request(running_server, "POST", "/api/config", {"provider": "api", "model": "disk-model"})
+    monkeypatch.setenv("LOOKLIFT_MODEL", "env-model")
+    monkeypatch.setenv("LOOKLIFT_PROVIDER", "cli")
+
+    status, data = _request(running_server, "GET", "/api/config")
+
+    assert status == 200
+    assert data["model"] == "disk-model"  # 回显磁盘值，不是 env 覆盖值
+    assert data["provider"] == "api"
+
+
 def test_post_config_invalid_provider_returns_400_in_chinese(running_server):
     status, data = _request(running_server, "POST", "/api/config", {"provider": "bogus"})
 
