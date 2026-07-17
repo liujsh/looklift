@@ -1,0 +1,62 @@
+:root {
+  --color-canvas: #ded8cc;
+  --color-paper: #f2eee5;
+  --color-paper-raised: #faf7f0;
+  --color-paper-deep: #e7e0d4;
+  --color-ink: #211e1a;
+  --color-ink-soft: #514b44;
+  --color-muted: #7d746b;
+  --color-faint: #9f968c;
+  --color-line: #cec5b8;
+  --color-line-soft: #ded6ca;
+  --color-accent: #b65d3d;
+  --color-accent-hover: #9f4d32;
+  --color-accent-soft: #edd8cc;
+  --color-success: #587b63;
+  --color-danger: #984a38;
+  --color-focus: #367fa3;
+  --color-stage: #1b1a18;
+  --color-stage-raised: #242320;
+  --color-stage-line: #3c3934;
+  --color-stage-text: #d7d0c6;
+  --color-stage-muted: #938d84;
+  --color-red: #ad493e;
+  --color-orange: #bd7138;
+  --color-yellow: #aa9038;
+  --color-green: #547d58;
+  --color-aqua: #457f7d;
+  --color-blue: #526d94;
+  --color-purple: #75608f;
+  --color-magenta: #8f5578;
+
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Songti SC", Georgia, serif;
+  --font-body: "Segoe UI Variable", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  --font-data: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+
+  --text-utility: 9px;
+  --text-caption: 10px;
+  --text-ui: 12px;
+  --text-body: 14px;
+  --text-title: 22px;
+  --text-display: 36px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-pill: 999px;
+  --shadow-panel: 0 8px 26px rgba(45, 37, 29, .08);
+  --shadow-bar: 0 1px 12px rgba(45, 37, 29, .05);
+  --shadow-handle: 0 3px 10px rgba(0, 0, 0, .2);
+  --shadow-stage: inset 0 0 0 1px rgba(255, 255, 255, .025), inset 0 18px 48px rgba(0, 0, 0, .24);
+  --focus-ring: 0 0 0 3px rgba(54, 127, 163, .28);
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --ease-out: cubic-bezier(.2, .75, .25, 1);
+}
