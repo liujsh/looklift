@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import pytest
 from looklift import config
 
 
@@ -11,6 +12,7 @@ def test_load_config_defaults(monkeypatch, tmp_path):
     cfg = config.load_config()
     assert cfg["provider"] == "auto"
     assert cfg["api_key"] == ""
+    assert cfg["timeout"] == ""
 
 
 def test_load_config_file_and_env_override(monkeypatch, tmp_path):
@@ -21,6 +23,31 @@ def test_load_config_file_and_env_override(monkeypatch, tmp_path):
     cfg = config.load_config()
     assert cfg["provider"] == "api"   # 来自文件
     assert cfg["model"] == "m2"       # env 覆盖文件
+
+
+def test_timeout_accepts_positive_integer_from_file_and_env(monkeypatch, tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text("timeout = 45\n", encoding="utf-8")
+    monkeypatch.setattr(config, "CONFIG_PATH", p)
+    assert config.load_config()["timeout"] == 45
+
+    monkeypatch.setenv("LOOKLIFT_TIMEOUT", "90")
+    assert config.load_config()["timeout"] == 90
+
+
+def test_timeout_rejects_invalid_value(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "nonexistent.toml")
+    monkeypatch.setenv("LOOKLIFT_TIMEOUT", "soon")
+    with pytest.raises(RuntimeError, match="timeout.*正整数"):
+        config.load_config()
+
+
+def test_provider_timeout_defaults_and_override():
+    assert config.provider_timeout("cli", "") == 600
+    assert config.provider_timeout("api", "") == 120
+    assert config.provider_timeout("openai_compat", "") == 120
+    assert config.provider_timeout("ollama", "") == 300
+    assert config.provider_timeout("ollama", 42) == 42
 
 
 def test_load_config_include_env_false_skips_env_override(monkeypatch, tmp_path):
@@ -57,7 +84,7 @@ def test_save_config_roundtrip(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "CONFIG_PATH", p)
     config.save_config({
         "provider": "api", "model": "claude-x", "api_key": "sk-123",
-        "base_url": "https://example.com", "looks_dir": "",
+        "base_url": "https://example.com", "looks_dir": "", "timeout": 75,
     })
     cfg = config.load_config()
     assert cfg["provider"] == "api"
@@ -65,6 +92,7 @@ def test_save_config_roundtrip(monkeypatch, tmp_path):
     assert cfg["api_key"] == "sk-123"
     assert cfg["base_url"] == "https://example.com"
     assert cfg["looks_dir"] == ""
+    assert cfg["timeout"] == 75
 
 
 def test_save_config_quoting_survives_special_chars(monkeypatch, tmp_path):

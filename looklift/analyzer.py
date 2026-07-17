@@ -145,8 +145,7 @@ SYSTEM_PROMPT = """你是一位资深的摄影后期调色师,精通 Adobe Light
 
 def resolve_backend(backend: str = "auto") -> str:
     """兼容入口:返回 auto 解析后的后端名(测试与 cli 打印用)。"""
-    p = providers.get_provider(backend)
-    return "api" if isinstance(p, providers.AnthropicProvider) else "cli"
+    return providers.get_provider(backend).name
 
 
 MAX_IMAGES = 5

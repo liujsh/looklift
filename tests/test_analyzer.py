@@ -47,6 +47,14 @@ def test_resolve_backend_cli_fallback(monkeypatch):
     assert resolve_backend("auto") == "cli"
 
 
+def test_resolve_backend_uses_provider_declared_name(monkeypatch):
+    class FakeProvider:
+        name = "openai_compat"
+
+    monkeypatch.setattr(analyzer.providers, "get_provider", lambda _: FakeProvider())
+    assert resolve_backend("auto") == "openai_compat"
+
+
 def test_resolve_backend_none_available(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setattr("shutil.which", lambda _: None)
