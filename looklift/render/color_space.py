@@ -30,7 +30,7 @@ def srgb_to_linear(arr: np.ndarray) -> np.ndarray:
     return np.where(
         values <= 0.04045,
         values / 12.92,
-        np.power((values + 0.055) / 1.055, 2.4),
+        np.power(np.clip((values + 0.055) / 1.055, 0.0, None), 2.4),
     ).astype(np.float32)
 
 

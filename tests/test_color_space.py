@@ -1,5 +1,8 @@
+from io import BytesIO
+
 import numpy as np
 import pytest
+from PIL import ImageCms
 
 from looklift.render import color_space as cs
 
@@ -42,3 +45,82 @@ def test_embed_icc_falls_back_to_pillow_when_no_pyvips(monkeypatch):
 
     kwargs = cs.embed_icc(Image.new("RGB", (4, 4)))
     assert kwargs["icc_profile"] == cs.srgb_icc_bytes()
+
+
+def test_srgb_to_linear_negative_values_do_not_evaluate_power_branch():
+    values = np.array([-0.1, -0.055, -1.0], dtype=np.float32)
+
+    with np.errstate(invalid="raise"):
+        converted = cs.srgb_to_linear(values)
+
+    np.testing.assert_allclose(converted, values / 12.92, rtol=0.0, atol=1e-7)
+
+
+def test_linear_to_srgb_preserves_highlights_and_input():
+    values = np.array([2.0], dtype=np.float32)
+    original = values.copy()
+
+    converted = cs.linear_to_srgb(values)
+
+    assert converted[0] > 1.0
+    np.testing.assert_array_equal(values, original)
+
+
+def test_eotf_threshold_and_neighbors_follow_piecewise_formula():
+    threshold = np.float32(0.04045)
+    below = np.nextafter(threshold, np.float32(-np.inf))
+    above = np.nextafter(threshold, np.float32(np.inf))
+    values = np.array([below, threshold, above], dtype=np.float32)
+
+    converted = cs.srgb_to_linear(values)
+    expected = np.array(
+        [
+            float(below) / 12.92,
+            float(threshold) / 12.92,
+            ((float(above) + 0.055) / 1.055) ** 2.4,
+        ],
+        dtype=np.float32,
+    )
+
+    np.testing.assert_allclose(converted, expected, rtol=1e-6, atol=1e-8)
+    assert np.max(np.abs(np.diff(converted))) < 1e-6
+
+
+def test_oetf_threshold_and_neighbors_follow_piecewise_formula():
+    threshold = np.float32(0.0031308)
+    below = np.nextafter(threshold, np.float32(-np.inf))
+    above = np.nextafter(threshold, np.float32(np.inf))
+    values = np.array([below, threshold, above], dtype=np.float32)
+
+    converted = cs.linear_to_srgb(values)
+    expected = np.array(
+        [
+            float(below) * 12.92,
+            float(threshold) * 12.92,
+            1.055 * float(above) ** (1.0 / 2.4) - 0.055,
+        ],
+        dtype=np.float32,
+    )
+
+    np.testing.assert_allclose(converted, expected, rtol=1e-6, atol=1e-8)
+    assert np.max(np.abs(np.diff(converted))) < 1e-6
+
+
+@pytest.mark.parametrize("convert", [cs.srgb_to_linear, cs.linear_to_srgb])
+def test_transfer_functions_preserve_shape_propagate_nan_and_return_float32(convert):
+    values = np.array([[0.0, np.nan], [0.25, 2.0]], dtype=np.float64)
+
+    converted = convert(values)
+
+    assert converted.shape == values.shape
+    assert converted.dtype == np.float32
+    assert np.isnan(converted[0, 1])
+
+
+def test_srgb_icc_header_and_pillow_parse_are_valid():
+    profile_bytes = cs.srgb_icc_bytes()
+
+    assert int.from_bytes(profile_bytes[:4], byteorder="big") == len(profile_bytes)
+    assert profile_bytes[36:40] == b"acsp"
+    profile = ImageCms.ImageCmsProfile(BytesIO(profile_bytes))
+    assert "srgb" in profile.profile.profile_description.casefold()
