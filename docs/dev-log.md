@@ -21,6 +21,9 @@
   双击 `looklift_0.5.0_x64-setup.exe`，确认安装、启动、页面显示「T1 真实引擎往返已通过」，
   关闭后任务管理器无 `looklift-engine.exe`。本机 Defender 自定义扫描已无威胁，
   但干净机 SmartScreen/Defender 仍需此步验收。
+- [ ] **v2.0-B T11 集中人工验收（M1–M8）**：用本次最终安装包重新执行干净机启动/退出、
+  拖图→分析→调参→diff→收藏→导出、三栏视觉与手感、真实路径拖拽、连续预览、三份
+  内置模板观感和 40MP 稳定性。逐项判据见 [specs/v2.0-B/tasks.md](specs/v2.0-B/tasks.md)。
 
 ## v2.0-B T1 打包 gate 实证(2026-07-18)
 
@@ -68,6 +71,17 @@
 - 报告通过本地编码 URL 在新窗口打开；预设与 RAW sidecar 均复用既有导出 API，并展示后端返回的实际文件路径。
 - 顶栏导出只对刚收藏或载入、且此后未继续修改的风格开放，避免把当前画面与库内导出对象混为一谈。
 - 离线流程测试锁定手调、before/after、收藏与导出共用同一份 `analysis` 和 `factor`。
+
+## v2.0-B T11 最终打包与自动验收(2026-07-18)
+
+- 用 Python 3.12.13 / PyInstaller 6.21.0 重建 onedir sidecar；最终 Tauri release 已包含
+  T8 的三份内置模板、T9 最终 UI 与 T10 收藏/报告/导出闭环。
+- release sidecar 连续两次真实预热均成功：numba 0.66.0、pyvips 3.1.1、libvips 8.18.4；
+  随机 localhost API 返回 3 份只读内置模板，临时用户库收藏和 XMP 导出成功，进程已回收。
+- Tauri 2.11.5 release + NSIS 构建成功；安装包
+  `frontend/src-tauri/target/release/bundle/nsis/looklift_0.5.0_x64-setup.exe`，65,128,699 字节。
+- 自动化基线：Python `398 passed, 1 skipped`；前端 Vitest `55 passed`；TypeScript/Vite
+  production build 与 Tauri release build 通过。最终 M1–M8 仍由作者在真机集中验收。
 
 ## v0.4 开发中踩的坑(已解决)
 

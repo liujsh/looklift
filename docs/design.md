@@ -334,3 +334,49 @@ Handler 类型。
 - 同一份设置表单增加 `openai_compat`/`ollama`、base_url/model/timeout；向导继续克隆复用
 - provider 切换时隐藏无意义字段，Ollama 不显示 API key；配置 API 回显非敏感字段，
   密钥仍只返回 `has_key`
+
+---
+
+## v2.0-B 新增设计
+
+> 原 spec：[specs/v2.0-B/](specs/v2.0-B/)；本节只记录已实现实况。
+
+### 23. Tauri + React + Python sidecar
+
+```
+Tauri 原生窗口
+  ├─ Rust 壳：spawn/reap sidecar、生成启动令牌、读取随机端口
+  ├─ React 前端：三栏工作台、画布、参数面板、图库与导出交互
+  └─ Python sidecar：localhost HTTP → gui/api.py → 核心分析/渲染/收藏/导出
+```
+
+- Rust 壳只管理窗口和进程。启动 `looklift-engine serve --port 0` 后，从 stdout 的
+  `ready` JSON 取得端口，并把随机启动令牌通过 Tauri command 交给前端；应用退出时
+  kill 并回收子进程。
+- React 的 `LookliftClient` 为 `/api/*` 请求添加启动令牌；调色数学、参数范围、收藏和
+  导出均留在 Python。报告页使用编码后的本地 `/report/<name>` URL 在新窗口打开。
+- PyInstaller onedir sidecar 包含 numba、pyvips/libvips、ICC 和内置模板；numba cache
+  位于 `%LOCALAPPDATA%/looklift/cache/numba`，不写安装目录。
+
+### 24. 单一编辑状态与实时预览
+
+- `editorStore` 是 `analysis`、全局强度、图片路径和版本栈唯一 owner。AI 整对象回填、
+  面板分片修改和未来聊天 delta 都进入同一提交内核。
+- 参数控件只消费 `/api/param-contract` 投影的范围和默认值；前端只维护分组、路径和中文
+  标签，不复制 Python 参数范围表。
+- 预览调度器以 160ms 防抖、单一 `AbortController` 和单调请求序号处理连续拖动；旧慢
+  响应不会覆盖新画面。before/after 使用同尺寸 JPEG 与 CSS clipping，不引入 GPL 组件。
+
+### 25. 内置模板与用户图库
+
+- 三份原创通用模板由包内 `looklift/data/looks/*.json` 提供，只读加载；用户风格继续写
+  `config.looks_dir()` 指向的可写目录。合并时用户历史同名条目优先且列表不重复。
+- 收藏把当前 `analysis` 与全局强度交给既有 API，成功后局部刷新图库；只有刚收藏或载入、
+  此后未修改的风格可从顶栏导出，避免当前画面与库内对象不一致。
+
+### 26. Windows release 验证
+
+- `packaging/stage_sidecar.ps1` 只把冻结 exe 与 `_internal` 复制到 Tauri `externalBin` 暂存区；
+  Tauri bundler 生成 NSIS 安装包。
+- `packaging/smoke_release.py` 在临时用户目录连续预热冻结引擎，启动随机 localhost 端口，
+  校验内置模板只读、用户库可写、XMP 可导出，并回收 sidecar；全程不访问外网或 AI。
