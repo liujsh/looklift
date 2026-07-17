@@ -1,6 +1,6 @@
 # v0.5 任务:供应商 + 库
 
-> 状态:草拟,待作者 review。同迭代:[需求](./requirements.md) · [设计](./design.md)。
+> 状态:已确认(2026-07-18,作者授权开工)。同迭代:[需求](./requirements.md) · [设计](./design.md)。
 > 任务按依赖顺序排列;人工验证项集中放最后「人工验收」区。
 
 ## T1 config.toml 扩展
@@ -12,21 +12,22 @@
 ## T2 OpenAICompatProvider
 
 - [ ] `providers.py` 新增 `OpenAICompatProvider`:base_url + api_key + model,复用现有「Pillow 缩到长边 1568 + base64」逻辑,组装成 OpenAI Chat Completions vision 格式请求
-- [ ] 走 `_extract_json` + `_normalize` 容错路径解析响应
+- [ ] `complete()` 用 `_extract_json` 解析；analyzer 现有返回路径统一 `_normalize`
 - [ ] 超时/重试/中文错误提示按 [design.md 决策 3、4](./design.md#关键设计决策) 实现
 - 验收:mock HTTP 响应的单元测试覆盖正常解析、401、模型不存在、连接失败四种场景,不触网
 
 ## T3 OllamaProvider
 
 - [ ] `providers.py` 新增 `OllamaProvider`:base_url(默认 `http://localhost:11434`)+ model,组装 `/api/chat` 请求(`images` 纯 base64 数组)
-- [ ] 同样走 `_extract_json` + `_normalize`
+- [ ] 同样由 provider `_extract_json`、analyzer `_normalize`
 - [ ] 中文错误提示覆盖「服务未启动」「模型未 pull」
 - 验收:mock HTTP 响应单元测试;依赖 T2 已验证过的容错路径复用
 
 ## T4 批量分析 CLI
 
-- [ ] `looklift analyze --batch <目录> [--force]`:扫描一级子目录为组,复用多图归纳分析
-- [ ] 断点标记落盘,重跑跳过已完成组;开始前打印组数与额度提示
+- [ ] `looklift analyze --batch <目录> [--force]`:扫描含图片的一级子目录为组,复用多图归纳分析
+- [ ] 成功结果原子写入组内 `.looklift-result.json` 并作为断点;重跑跳过,`--force` 重算
+- [ ] batch 与单次分析输出参数互斥;开始前打印待分析组数与额度提示
 - [ ] 单组失败不中断整体批量,记录失败列表,结束后汇总打印
 - 验收:tmp_path 下构造 3 组图片(mock provider),验证首次全部完成、模拟中断后重跑只补跑剩余组、`--force` 强制全部重跑
 
@@ -36,11 +37,9 @@
 - [ ] 依赖:v0.4 设置页存在。若 v0.4 未按期完成,本任务顺延到 v0.4 完成后再做,不阻塞 T1-T4/T6/T7
 - 验收:GUI 内配置 openai_compat 后能跑通一次 analyze(人工验收区)
 
-## T6 聚类(视情况/可裁剪)
+## T6 聚类(本期裁剪)
 
-- [ ] `--clusters N` 参数:对批量分析产出的模版做参数向量 k-means 分组,标注分组标签
-- [ ] 时间不够可裁剪,裁剪不影响本迭代整体验收;裁剪决定需要在此打勾说明去向(留到 v0.6 或 backlog)
-- 验收:构造已知能明显分两类的参数向量,聚类结果分组正确(单元测试,不依赖真实 AI)
+- [x] 延期到 v0.6/backlog；v0.5 不提供 `--clusters`,不影响供应商与 batch 核心验收
 
 ## T7 收尾
 

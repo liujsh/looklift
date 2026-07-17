@@ -138,20 +138,32 @@
                 <input type="radio" name="provider" value="api" />
                 Anthropic API —— 填写 API key，最稳定，按用量计费
               </label>
+              <label class="radio-option">
+                <input type="radio" name="provider" value="openai_compat" />
+                OpenAI-compatible —— 标准 Chat Completions 视觉接口或兼容中转站
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="provider" value="ollama" />
+                Ollama —— 本机运行开源视觉模型，无需 API key
+              </label>
             </div>
-            <div class="field">
+            <div class="field" data-config-field="model">
               <label for="settings-model">模型（可选）</label>
               <input id="settings-model" type="text" name="model" placeholder="留空使用默认模型" />
             </div>
-            <div class="field">
+            <div class="field" data-config-field="api_key">
               <label for="settings-api-key">API Key</label>
               <input id="settings-api-key" type="password" name="api_key" autocomplete="off" placeholder="sk-..." />
-              <p class="field-help">选择「Anthropic API」或「自动选择」且本机没装 CLI 时需要；已保存过的话留空提交不会清空它。</p>
+              <p class="field-help">Anthropic API / OpenAI-compatible 使用；已保存过的话留空提交不会清空它。</p>
             </div>
-            <details class="field">
+            <details class="field" data-config-field="base_url">
               <summary>高级：自定义 base_url</summary>
-              <input type="text" name="base_url" placeholder="留空使用官方默认地址" />
+              <input id="settings-base-url" type="text" name="base_url" placeholder="Ollama 留空使用 http://localhost:11434" />
             </details>
+            <div class="field" data-config-field="timeout">
+              <label for="settings-timeout">超时（秒，可选）</label>
+              <input id="settings-timeout" type="number" name="timeout" min="1" step="1" placeholder="留空使用后端默认值" />
+            </div>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">保存</button>
             </div>

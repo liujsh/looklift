@@ -1,8 +1,10 @@
 """从成片(可选:对照原片)逆向推断 Lightroom 调整参数。
 
-两种后端:
+四类后端:
 - "cli": 调用本地 Claude Code CLI(`claude -p`),走 Claude Code 登录额度,无需 API key
 - "api": 调用 Anthropic API(需要 API key),有结构化输出保证
+- "openai_compat": 标准 OpenAI Chat Completions vision 兼容接口
+- "ollama": 本机 Ollama 视觉模型
 - "auto": config.toml 显式指定 provider 时优先;否则有 API key(环境变量或 config.toml)
   则用 api,没有则退回本地 claude CLI
 """
@@ -14,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from . import providers
-from .providers import MODEL, MAX_EDGE, _extract_json  # 兼容旧引用
+from .providers import MODEL, MAX_EDGE, _extract_json  # noqa: F401 - 兼容旧引用
 
 _COLOR_KEYS = ["red", "orange", "yellow", "green", "aqua", "blue", "purple", "magenta"]
 
@@ -145,8 +147,7 @@ SYSTEM_PROMPT = """你是一位资深的摄影后期调色师,精通 Adobe Light
 
 def resolve_backend(backend: str = "auto") -> str:
     """兼容入口:返回 auto 解析后的后端名(测试与 cli 打印用)。"""
-    p = providers.get_provider(backend)
-    return "api" if isinstance(p, providers.AnthropicProvider) else "cli"
+    return providers.get_provider(backend).name
 
 
 MAX_IMAGES = 5

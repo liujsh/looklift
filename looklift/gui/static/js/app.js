@@ -237,11 +237,11 @@
 
   /**
    * 把 `GET /api/config` 返回的状态回填进一个配置表单：provider 单选项按
-   * `cfg.provider` 选中；model/base_url 回填当前值；api_key 输入框故意
+   * `cfg.provider` 选中；model/base_url/timeout 回填当前值；api_key 输入框故意
    * 保持空——后端从不把已保存的密钥吐回来（见 api._get_config 的注释），
    * 这里只用 `cfg.has_key` 调整 placeholder 提示"已经存过一份"。
    * @param {HTMLFormElement} form
-   * @param {{provider: string, model: string, has_key: boolean}} cfg
+   * @param {{provider: string, model: string, base_url: string, timeout: number|string, has_key: boolean}} cfg
    */
   function applyConfigToForm(form, cfg) {
     var providerInput = form.querySelector('[name="provider"][value="' + cfg.provider + '"]');
@@ -252,11 +252,41 @@
     if (modelInput) {
       modelInput.value = cfg.model || "";
     }
+    var baseUrlInput = form.querySelector('[name="base_url"]');
+    if (baseUrlInput) {
+      baseUrlInput.value = cfg.base_url || "";
+    }
+    var timeoutInput = form.querySelector('[name="timeout"]');
+    if (timeoutInput) {
+      timeoutInput.value = cfg.timeout || "";
+    }
     var apiKeyInput = form.querySelector('[name="api_key"]');
     if (apiKeyInput) {
       apiKeyInput.value = "";
       apiKeyInput.placeholder = cfg.has_key ? "已保存 · 留空则不修改" : "sk-...";
     }
+    updateProviderFields(form);
+  }
+
+  /** 按 provider 隐藏无意义字段；Ollama 明确不显示 API key。 */
+  function updateProviderFields(form) {
+    var selected = form.querySelector('[name="provider"]:checked');
+    var provider = selected ? selected.value : "auto";
+    var apiKeyField = form.querySelector('[data-config-field="api_key"]');
+    var modelField = form.querySelector('[data-config-field="model"]');
+    var baseUrlField = form.querySelector('[data-config-field="base_url"]');
+    if (apiKeyField) apiKeyField.hidden = provider === "ollama" || provider === "cli";
+    if (modelField) modelField.hidden = provider === "cli";
+    if (baseUrlField) baseUrlField.hidden = provider === "cli";
+  }
+
+  function bindProviderFields(form) {
+    form.querySelectorAll('[name="provider"]').forEach(function (input) {
+      input.addEventListener("change", function () {
+        updateProviderFields(form);
+      });
+    });
+    updateProviderFields(form);
   }
 
   /**
@@ -268,6 +298,7 @@
    * @param {() => void} onSaved
    */
   function bindConfigForm(form, onSaved) {
+    bindProviderFields(form);
     form.addEventListener("submit", function (evt) {
       evt.preventDefault();
       var data = new FormData(form);
@@ -276,6 +307,7 @@
         model: data.get("model") || "",
         api_key: data.get("api_key") || "",
         base_url: data.get("base_url") || "",
+        timeout: data.get("timeout") || "",
       };
       App.api("/api/config", { method: "POST", body: payload })
         .then(function () {
@@ -349,7 +381,7 @@
    * 后续改动时漏改一处），回填当前配置状态，挂 submit 处理（保存成功即
    * 关闭向导 + toast 提示）。克隆节点内部的 id 必须先经 `_dedupeClonedIds`
    * 改写掉，再插入文档，避免和隐藏的设置面板出现重复 id。
-   * @param {{provider: string, model: string, has_key: boolean}} cfg
+   * @param {{provider: string, model: string, base_url: string, timeout: number|string, has_key: boolean}} cfg
    */
   function showWizard(cfg) {
     var wizard = document.getElementById("wizard");

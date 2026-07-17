@@ -26,7 +26,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import analyzer, config, lut, render, report, xmp_reader, xmp_writer
+from . import analyzer, batch, config, lut, render, report, xmp_reader, xmp_writer
 
 
 def _looks_dir() -> Path:
@@ -116,6 +116,46 @@ def _emit_outputs(crs: dict, args) -> None:
 
 
 def cmd_analyze(args) -> int:
+    if args.batch:
+        conflicts = bool(
+            args.edited or args.original or args.name or args.json or args.preset or args.sidecar
+        )
+        if conflicts:
+            raise ValueError("--batch 与成片位置参数及单次输出选项互斥。")
+        print(
+            f"开始批量分析 {args.batch}（后端: {analyzer.resolve_backend(args.backend)}）。"
+            "每组都会调用 AI，可能消耗较多额度。"
+        )
+
+        def progress(event, index, total, group, detail):
+            prefix = f"[{index}/{total}] {group.name}"
+            if event == "started":
+                print(f"{prefix}：分析中...")
+            elif event == "completed":
+                print(f"{prefix}：完成")
+            elif event == "skipped":
+                print(f"{prefix}：已有结果，跳过")
+            else:
+                print(f"{prefix}：失败：{detail}")
+
+        result = batch.run_batch(
+            args.batch,
+            analyze=analyzer.analyze,
+            style_hint=args.hint,
+            backend=args.backend,
+            force=args.force,
+            on_progress=progress,
+        )
+        print(
+            f"批量结束：共 {result.total} 组，完成 {result.completed}，"
+            f"跳过 {result.skipped}，失败 {result.failed}。"
+        )
+        return 1 if result.failed else 0
+
+    if args.force:
+        raise ValueError("--force 只能与 --batch 一起使用。")
+    if not args.edited:
+        raise ValueError("请提供至少一张成片，或使用 --batch 指定目录。")
     label = args.edited[0] if len(args.edited) == 1 else f"{len(args.edited)} 张成片(归纳共同风格)"
     print(f"正在分析 {label} ...(后端: {analyzer.resolve_backend(args.backend)})")
     analysis = analyzer.analyze(
@@ -283,8 +323,10 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("analyze", help="AI 分析成片的调色参数")
-    p.add_argument("edited", nargs="+",
+    p.add_argument("edited", nargs="*",
                    help="后期完成的成片(可多张,多张时归纳共同风格,上限 5 张)")
+    p.add_argument("--batch", metavar="DIR", help="按一级子目录批量分析同风格照片")
+    p.add_argument("--force", action="store_true", help="批量模式下强制重跑已有结果的组")
     p.add_argument("--original", help="修图前的原片(仅单张成片时可用)")
     p.add_argument("--hint", help="风格提示,如摄影师名字、胶片型号等")
     p.add_argument("--name", help="风格名称:预设和模版自动存入 looks/ 风格库")
@@ -292,7 +334,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--sidecar", action="append", metavar="RAW",
                    help="RAW 文件路径或通配符(如 D:/photos/*.CR3),可多次")
     p.add_argument("--json", help="模版输出路径,覆盖默认的 looks/ 位置")
-    p.add_argument("--backend", choices=["auto", "cli", "api"], default="auto",
+    p.add_argument(
+        "--backend", choices=["auto", "cli", "api", "openai_compat", "ollama"], default="auto",
                    help="auto: 有 API key 走 API,否则走本地 Claude Code CLI")
     p.set_defaults(func=cmd_analyze)
 
@@ -340,7 +383,9 @@ def main(argv: list[str] | None = None) -> int:
                    help="自动闭环:本地渲染→评分→AI 修正,循环最多 N 轮(不带值默认 3),需配 --source")
     p.add_argument("--source", help="原片(--auto 自动模式的渲染起点,配合 --auto 使用)")
     p.add_argument("--sidecar", action="append", metavar="RAW", help="顺便用新参数生成 sidecar")
-    p.add_argument("--backend", choices=["auto", "cli", "api"], default="auto")
+    p.add_argument(
+        "--backend", choices=["auto", "cli", "api", "openai_compat", "ollama"], default="auto"
+    )
     p.set_defaults(func=cmd_refine)
 
     p = sub.add_parser("gui", help="启动本地图形界面(默认独立窗口,--browser 走系统浏览器)")

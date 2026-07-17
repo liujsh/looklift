@@ -33,7 +33,7 @@ from . import upload
 # `server.py` 按返回值长度分发。
 Handler = Callable[[dict], "tuple[int, dict] | tuple[int, bytes, str]"]
 
-_VALID_PROVIDERS = {"auto", "cli", "api"}
+_VALID_PROVIDERS = {"auto", "cli", "api", "openai_compat", "ollama"}
 
 _ANALYZE_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
 
@@ -146,8 +146,8 @@ def _ping(ctx: dict) -> tuple[int, dict]:
 def _analyze_would_work(cfg: dict[str, Any]) -> bool:
     """纯函数：判断"分析请求现在发得出去"，即 GET /api/config 里的 `configured`。
 
-    四选一即算配好：provider 被显式指到 cli/api（用户已经做过选择）、config
-    里存了 api_key、环境变量 `ANTHROPIC_API_KEY` 有值（`providers.get_provider`
+    CLI/API 显式配置即可；OpenAI-compatible 还需 base_url/model，Ollama 还需 model。
+    自动模式则是 config 里存了 api_key、环境变量 `ANTHROPIC_API_KEY` 有值（`providers.get_provider`
     在 backend="auto" 时就是把这个环境变量当"api 可用"的判据之一，见
     providers.py:136-137、design.md §10——这里的口径必须跟它保持一致，否则
     只用环境变量配置的用户每次启动都会被向导烦一遍，违反 requirements.md
@@ -156,8 +156,13 @@ def _analyze_would_work(cfg: dict[str, Any]) -> bool:
     后端时会抛异常，这里只想要一个布尔值，抽成独立纯函数也方便不起 HTTP
     server 单测。
     """
-    if cfg["provider"] in ("cli", "api"):
+    provider = cfg["provider"]
+    if provider in ("cli", "api"):
         return True
+    if provider == "openai_compat":
+        return bool(cfg["base_url"] and cfg["model"])
+    if provider == "ollama":
+        return bool(cfg["model"])
     if cfg["api_key"]:
         return True
     if os.environ.get("ANTHROPIC_API_KEY"):
@@ -180,6 +185,8 @@ def _get_config(ctx: dict) -> tuple[int, dict]:
         "configured": _analyze_would_work(cfg),
         "provider": disk_cfg["provider"],
         "model": disk_cfg["model"],
+        "base_url": disk_cfg["base_url"],
+        "timeout": disk_cfg["timeout"],
         "has_key": bool(cfg["api_key"]),
     }
 
@@ -209,21 +216,47 @@ def _post_config(ctx: dict) -> tuple[int, dict]:
 
     provider = payload.get("provider")
     if provider is not None and provider not in _VALID_PROVIDERS:
-        return 400, {"error": f"provider 必须是 auto/cli/api 之一，收到：{provider!r}"}
+        choices = "/".join(sorted(_VALID_PROVIDERS))
+        return 400, {"error": f"provider 必须是 {choices} 之一，收到：{provider!r}"}
 
     cfg = config.load_config(include_env=False)
     for key in ("provider", "model"):
         if key in payload:
             cfg[key] = payload[key]
-    # base_url 跟 api_key 同样吃"空字符串 = 保留原值"：设置表单/向导每次都提交
-    # base_url:""（前端不回填），无条件写入会把已配好的兼容代理地址静默清空。
-    if payload.get("base_url"):  # 空字符串／缺省字段 → 保留原值
+    # `GET /api/config` 已回填 base_url，故前端明确提交空字符串就是用户要清空、
+    # 回到 Ollama 等后端默认地址；只有字段缺省才表示 partial update 的"保持不变"。
+    if "base_url" in payload:
         cfg["base_url"] = payload["base_url"]
     if payload.get("api_key"):  # 空字符串／缺省字段 → 保留原值
         cfg["api_key"] = payload["api_key"]
+    if "timeout" in payload:
+        timeout = payload["timeout"]
+        if timeout in ("", None):
+            cfg["timeout"] = ""
+        else:
+            try:
+                cfg["timeout"] = config.provider_timeout("api", timeout)
+            except RuntimeError as exc:
+                return 400, {"error": str(exc)}
+
+    settings_error = _provider_settings_error(cfg)
+    if settings_error:
+        return 400, {"error": settings_error}
 
     config.save_config(cfg)
     return 200, {"ok": True}
+
+
+def _provider_settings_error(cfg: dict[str, Any]) -> str | None:
+    """校验新 provider 在保存后可实际发起分析所需的字段。"""
+    if cfg["provider"] == "openai_compat":
+        if not cfg["base_url"]:
+            return "OpenAI-compatible 后端需要 base_url。"
+        if not cfg["model"]:
+            return "OpenAI-compatible 后端需要 model。"
+    if cfg["provider"] == "ollama" and not cfg["model"]:
+        return "Ollama 后端需要视觉模型 model。"
+    return None
 
 
 def _get_task(ctx: dict) -> tuple[int, dict]:

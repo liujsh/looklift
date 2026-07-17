@@ -8,7 +8,16 @@ from typing import Any
 
 CONFIG_PATH = Path.home() / ".looklift" / "config.toml"
 
-_DEFAULTS = {"provider": "auto", "model": "", "api_key": "", "base_url": "", "looks_dir": ""}
+_DEFAULTS = {
+    "provider": "auto",
+    "model": "",
+    "api_key": "",
+    "base_url": "",
+    "looks_dir": "",
+    "timeout": "",
+}
+
+_PROVIDER_TIMEOUTS = {"cli": 600, "api": 120, "openai_compat": 120, "ollama": 300}
 
 
 def load_config(*, include_env: bool = True) -> dict[str, Any]:
@@ -29,7 +38,32 @@ def load_config(*, include_env: bool = True) -> dict[str, Any]:
             env = os.environ.get(f"LOOKLIFT_{key.upper()}")
             if env:
                 cfg[key] = env
+    if cfg["timeout"] != "":
+        cfg["timeout"] = _positive_timeout(cfg["timeout"])
     return cfg
+
+
+def provider_timeout(provider: str, value: Any = "") -> int:
+    """解析 provider 超时秒数；空值采用各后端默认值。"""
+    if value == "":
+        try:
+            return _PROVIDER_TIMEOUTS[provider]
+        except KeyError:
+            raise RuntimeError(f"未知 provider：{provider}") from None
+    return _positive_timeout(value)
+
+
+def _positive_timeout(value: Any) -> int:
+    """把配置值规范成正整数秒。"""
+    if isinstance(value, bool):
+        raise RuntimeError("timeout 必须是正整数秒。")
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError):
+        raise RuntimeError("timeout 必须是正整数秒。") from None
+    if timeout <= 0 or isinstance(value, float) and not value.is_integer():
+        raise RuntimeError("timeout 必须是正整数秒。")
+    return timeout
 
 
 def save_config(data: dict) -> None:
