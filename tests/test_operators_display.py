@@ -63,6 +63,18 @@ def test_hsl_and_negative_saturation_preserve_legacy_overrange_hsv(sample_analys
     assert np.max(np.abs(actual - expected)) <= 1.0 / 255
 
 
+def test_hsl_only_restores_legacy_final_saturation_clip(sample_analysis):
+    analysis = _zero(sample_analysis)
+    analysis["hsl"] = [
+        {"color": "orange", "hue": 0, "saturation": 100, "luminance": 0}
+    ]
+    hsv = np.asarray([[[30.0, 0.8, 1.0]]], dtype=np.float32)
+    arr = _legacy._hsv_to_rgb(hsv)
+    expected = _legacy._apply_color_ops(arr.copy(), analysis)
+    actual = pipeline.apply_color_ops_numpy(arr.copy(), analysis)
+    assert np.max(np.abs(actual - expected)) <= 1.0 / 255
+
+
 def test_exposure_operator_direction_and_zero(sample_analysis):
     from looklift.render.operators.basic import Exposure
 

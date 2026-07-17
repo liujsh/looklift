@@ -32,9 +32,18 @@ def apply_color_ops_numpy(arr: np.ndarray, analysis: dict) -> np.ndarray:
             arr = operators[name].apply_numpy(arr, params)
     arr = np.clip(arr, 0, 1)
 
+    hsl_applied = False
+    saturation_applied = False
     for name in ("tone_curve", "hsl", "saturation", "color_grading"):
         params = resolved.get(name)
         if params is not None:
             arr = operators[name].apply_numpy(arr, params)
+            if name == "hsl":
+                hsl_applied = True
+            elif name == "saturation":
+                saturation_applied = True
+        if name == "saturation" and hsl_applied and not saturation_applied:
+            arr = operators[name].apply_numpy(arr, (0.0, 0.0))
+            saturation_applied = True
 
     return np.clip(arr, 0, 1).astype(np.float32)
