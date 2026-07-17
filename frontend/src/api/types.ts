@@ -85,6 +85,8 @@ export type LookSummary = {
   name: string;
   summary: string;
   has_preset: boolean;
+  source: "built_in" | "user";
+  readonly: boolean;
 };
 
 export type SaveLookRequest = {

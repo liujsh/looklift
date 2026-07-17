@@ -64,7 +64,7 @@ export function EditorShell({
         <PanelPane contract={contract} />
       </section>
 
-      <GalleryPane />
+      <GalleryPane client={client} />
     </main>
   );
 }

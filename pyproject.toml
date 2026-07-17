@@ -32,4 +32,4 @@ render = ["pyvips>=2.2"]
 packages = ["looklift", "looklift.gui", "looklift.render", "looklift.render.operators"]
 
 [tool.setuptools.package-data]
-looklift = ["gui/static/**", "render/data/*.icc"]
+looklift = ["gui/static/**", "render/data/*.icc", "data/looks/*.json"]

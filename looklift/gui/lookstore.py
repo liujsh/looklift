@@ -22,6 +22,11 @@ from .. import xmp_writer
 _SUMMARY_MAX_CHARS = 80
 
 
+def builtin_looks_dir() -> Path:
+    """返回随包分发的只读内置模板目录。"""
+    return Path(__file__).resolve().parents[1] / "data" / "looks"
+
+
 def json_path(looks_dir: Path, name: str) -> Path:
     return looks_dir / f"{name}.json"
 
@@ -30,9 +35,13 @@ def xmp_path(looks_dir: Path, name: str) -> Path:
     return looks_dir / f"{name}.xmp"
 
 
-def exists(looks_dir: Path, name: str) -> bool:
+def exists(looks_dir: Path | None, name: str, builtins_dir: Path | None = None) -> bool:
     """名字是否已被占用（收藏前的重名检查用）。"""
-    return json_path(looks_dir, name).is_file()
+    builtins = builtin_looks_dir() if builtins_dir is None else builtins_dir
+    return bool(
+        (looks_dir is not None and json_path(looks_dir, name).is_file())
+        or json_path(builtins, name).is_file()
+    )
 
 
 def _write_preset_from_crs(looks_dir: Path, name: str, crs: dict[str, Any]) -> Path:
@@ -44,7 +53,12 @@ def _write_preset(looks_dir: Path, name: str, analysis: dict[str, Any]) -> Path:
     return _write_preset_from_crs(looks_dir, name, xmp_writer.analysis_to_crs(analysis))
 
 
-def save(looks_dir: Path, name: str, analysis: dict[str, Any]) -> None:
+def save(
+    looks_dir: Path,
+    name: str,
+    analysis: dict[str, Any],
+    builtins_dir: Path | None = None,
+) -> None:
     """收藏一个风格：落盘 `<name>.json`（`analysis` 应该是调用方已经按当前
     滑杆强度 `intensity.scale_analysis` 缩放过的结果——这里不做缩放，只管
     写）+ 对应的 `<name>.xmp` 预设。调用方需自行做好重名校验，这里不检查、
@@ -57,6 +71,9 @@ def save(looks_dir: Path, name: str, analysis: dict[str, Any]) -> None:
     json 会让这个名字永久占用、重试同一个名字会被 `POST /api/looks` 的 409
     重名检查挡死，用户没有任何办法恢复。
     """
+    builtins = builtin_looks_dir() if builtins_dir is None else builtins_dir
+    if json_path(builtins, name).is_file():
+        raise PermissionError(f"内置模板只读，不能覆盖：{name}")
     crs = xmp_writer.analysis_to_crs(analysis)
     looks_dir.mkdir(parents=True, exist_ok=True)
     json_path(looks_dir, name).write_text(
@@ -65,12 +82,19 @@ def save(looks_dir: Path, name: str, analysis: dict[str, Any]) -> None:
     _write_preset_from_crs(looks_dir, name, crs)
 
 
-def load(looks_dir: Path, name: str) -> dict[str, Any] | None:
-    """读取某个风格的完整 analysis；不存在返回 `None`。"""
-    path = json_path(looks_dir, name)
-    if not path.is_file():
-        return None
-    return json.loads(path.read_text(encoding="utf-8"))
+def load(
+    looks_dir: Path | None,
+    name: str,
+    builtins_dir: Path | None = None,
+) -> dict[str, Any] | None:
+    """读取完整 analysis；历史用户同名条目优先于内置模板。"""
+    builtins = builtin_looks_dir() if builtins_dir is None else builtins_dir
+    candidates = [] if looks_dir is None else [json_path(looks_dir, name)]
+    candidates.append(json_path(builtins, name))
+    for path in candidates:
+        if path.is_file():
+            return json.loads(path.read_text(encoding="utf-8"))
+    return None
 
 
 def export_preset(looks_dir: Path, name: str, analysis: dict[str, Any]) -> Path:
@@ -82,17 +106,11 @@ def export_preset(looks_dir: Path, name: str, analysis: dict[str, Any]) -> Path:
     return _write_preset(looks_dir, name, analysis)
 
 
-def list_entries(looks_dir: Path) -> list[dict[str, Any]]:
-    """列出风格库条目：`[{name, summary, has_preset}]`。
-
-    损坏的 json（解析失败、或顶层不是对象）静默跳过，不让一个坏文件炸掉
-    整个列表——与 `cli.cmd_list` 对同一目录的容错口径一致。`summary` 截断到
-    `_SUMMARY_MAX_CHARS` 字符（卡片网格里不需要完整摘要）。
-    """
-    if not looks_dir.is_dir():
+def _list_source(directory: Path | None, source: str) -> list[dict[str, Any]]:
+    if directory is None or not directory.is_dir():
         return []
     entries: list[dict[str, Any]] = []
-    for path in sorted(looks_dir.glob("*.json")):
+    for path in sorted(directory.glob("*.json")):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
@@ -105,6 +123,25 @@ def list_entries(looks_dir: Path) -> list[dict[str, Any]]:
         entries.append({
             "name": path.stem,
             "summary": summary,
-            "has_preset": xmp_path(looks_dir, path.stem).is_file(),
+            "has_preset": xmp_path(directory, path.stem).is_file(),
+            "source": source,
+            "readonly": source == "built_in",
         })
     return entries
+
+
+def list_entries(
+    looks_dir: Path | None,
+    builtins_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    """列出风格库条目：`[{name, summary, has_preset}]`。
+
+    损坏的 json（解析失败、或顶层不是对象）静默跳过，不让一个坏文件炸掉
+    整个列表——与 `cli.cmd_list` 对同一目录的容错口径一致。`summary` 截断到
+    `_SUMMARY_MAX_CHARS` 字符（卡片网格里不需要完整摘要）。
+    """
+    builtins = builtin_looks_dir() if builtins_dir is None else builtins_dir
+    merged = {entry["name"]: entry for entry in _list_source(builtins, "built_in")}
+    # 兼容早期版本已经存在的同名用户条目：用户数据优先，且不显示重复卡片。
+    merged.update({entry["name"]: entry for entry in _list_source(looks_dir, "user")})
+    return sorted(merged.values(), key=lambda entry: entry["name"])
