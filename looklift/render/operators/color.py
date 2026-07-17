@@ -4,14 +4,110 @@
 """
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from ...analyzer import _COLOR_KEYS
 from .._legacy import _hsv_to_rgb, _luminance, _rgb_to_hsv
 from ..base import Domain, Stage
+from .._numba import register_jitable
 
 _CENTER_VALUES = (0, 30, 60, 120, 180, 240, 280, 320)
 _HSL_CENTERS = dict(zip(_COLOR_KEYS, _CENTER_VALUES, strict=True))
+
+
+@register_jitable(inline="always")
+def _rgb_to_hsv_px(r, g, b):
+    maxc = max(r, g, b)
+    minc = min(r, g, b)
+    delta = maxc - minc
+    if delta == 0.0:
+        hue = 0.0
+    elif maxc == r:
+        hue = ((g - b) / delta * 60.0) % 360.0
+    elif maxc == g:
+        hue = (2.0 + (b - r) / delta) * 60.0
+    else:
+        hue = (4.0 + (r - g) / delta) * 60.0
+    saturation = 0.0 if maxc == 0.0 else delta / maxc
+    return hue, saturation, maxc
+
+
+@register_jitable(inline="always")
+def _hsv_to_rgb_px(hue, saturation, value):
+    scaled = (hue % 360.0) / 60.0
+    sector = int(math.floor(scaled)) % 6
+    fraction = scaled - math.floor(scaled)
+    p = value * (1.0 - saturation)
+    q = value * (1.0 - saturation * fraction)
+    t = value * (1.0 - saturation * (1.0 - fraction))
+    if sector == 0:
+        return value, t, p
+    if sector == 1:
+        return q, value, p
+    if sector == 2:
+        return p, value, t
+    if sector == 3:
+        return p, q, value
+    if sector == 4:
+        return t, p, value
+    return value, p, q
+
+
+@register_jitable(inline="always")
+def hsl_px(r, g, b, values):
+    hue, saturation, value = _rgb_to_hsv_px(r, g, b)
+    for index in range(8):
+        center = _CENTER_VALUES[index]
+        distance = abs((hue - center + 180.0) % 360.0 - 180.0)
+        mask = min(1.0, max(0.0, 1.0 - distance / 45.0))
+        offset = index * 3
+        hue = (hue + mask * values[offset] * 0.3) % 360.0
+        saturation *= 1.0 + mask * values[offset + 1] / 100.0 * 0.5
+        value *= 1.0 + mask * values[offset + 2] / 100.0 * 0.3
+    return _hsv_to_rgb_px(hue, saturation, value)
+
+
+@register_jitable(inline="always")
+def saturation_px(r, g, b, saturation_shift, vibrance):
+    hue, saturation, value = _rgb_to_hsv_px(r, g, b)
+    saturation *= 1.0 + saturation_shift / 100.0
+    saturation += vibrance / 100.0 * 0.5 * saturation * (1.0 - saturation)
+    saturation = min(1.0, max(0.0, saturation))
+    return _hsv_to_rgb_px(hue, saturation, value)
+
+
+@register_jitable(inline="always")
+def color_grading_px(r, g, b, values):
+    luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    weights = (
+        (1.0 - luma) ** 2,
+        4.0 * luma * (1.0 - luma),
+        luma**2,
+        1.0,
+    )
+    for index in range(4):
+        offset = index * 3
+        hue = values[offset]
+        saturation = values[offset + 1]
+        luminance = values[offset + 2]
+        weight = weights[index]
+        if saturation != 0.0:
+            angle = hue * math.pi / 180.0
+            tint_r = math.cos(angle) * 0.5 + 0.5
+            tint_g = math.cos(angle - 2.0944) * 0.5 + 0.5
+            tint_b = math.cos(angle - 4.1888) * 0.5 + 0.5
+            amount = weight * saturation / 100.0 * 0.3
+            r += amount * (tint_r - r)
+            g += amount * (tint_g - g)
+            b += amount * (tint_b - b)
+        if luminance != 0.0:
+            amount = weight * luminance / 100.0 * 0.2
+            r += amount
+            g += amount
+            b += amount
+    return r, g, b
 
 
 class Hsl:
@@ -46,6 +142,8 @@ class Hsl:
             hsv[..., 2] *= 1 + mask * luminance / 100 * 0.3
         return _hsv_to_rgb(hsv)
 
+    apply_px = staticmethod(hsl_px)
+
 
 class Saturation:
     name = "saturation"
@@ -70,6 +168,8 @@ class Saturation:
             hsv[..., 1] += (vibrance / 100) * 0.5 * hsv[..., 1] * (1 - hsv[..., 1])
         hsv[..., 1] = np.clip(hsv[..., 1], 0, 1)
         return _hsv_to_rgb(hsv)
+
+    apply_px = staticmethod(saturation_px)
 
 
 class ColorGrading:
@@ -123,3 +223,5 @@ class ColorGrading:
             if luminance:
                 arr = arr + weight * luminance / 100 * 0.2
         return arr.astype(np.float32)
+
+    apply_px = staticmethod(color_grading_px)

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from . import color_space as cs
+from . import color_space as cs, kernel
 from .base import ResolvedParams
 from .operators import REGISTRY
 
@@ -12,6 +12,34 @@ def resolve_params(analysis: dict) -> ResolvedParams:
     """遍历注册表一次解析参数，生成共用的扁平暂存。"""
     return ResolvedParams.pack(
         {operator.name: operator.resolve(analysis) for operator in REGISTRY}
+    )
+
+
+def marshal_render_params(resolved: ResolvedParams) -> kernel.RenderParams:
+    """机械复制扁平暂存到固定 numba record；禁用字段填同型零值。"""
+
+    def scalar(name: str) -> np.float32:
+        values = resolved.get(name)
+        return np.float32(0.0 if values is None else values[0])
+
+    def vector(name: str, size: int, packed: bool = False) -> np.ndarray:
+        values = resolved.get(name)
+        if values is None:
+            return np.zeros(size, dtype=np.float32)
+        source = values[0] if packed else values
+        return np.ascontiguousarray(np.asarray(source, dtype=np.float32)).copy()
+
+    return kernel.RenderParams(
+        np.int64(resolved.enable),
+        scalar("exposure"),
+        vector("white_balance", 2),
+        scalar("contrast"),
+        vector("highlights_shadows", 2),
+        vector("whites_blacks", 2),
+        vector("tone_curve", 1024, packed=True),
+        vector("hsl", 24, packed=True),
+        vector("saturation", 2),
+        vector("color_grading", 12, packed=True),
     )
 
 
@@ -92,3 +120,16 @@ def render_arr(arr_srgb: np.ndarray, analysis: dict) -> np.ndarray:
             saturation_applied = True
 
     return np.clip(arr, 0, 1).astype(np.float32)
+
+
+def render_fused(arr_srgb: np.ndarray, analysis: dict, aux=None) -> np.ndarray:
+    """生产 pointwise 路径；numba 缺失/JIT 不可用时回退纯 NumPy。"""
+
+    if not kernel.HAS_NUMBA:
+        return render_arr(arr_srgb, analysis)
+    resolved = resolve_params(analysis)
+    params = marshal_render_params(resolved)
+    try:
+        return kernel.fused(arr_srgb.astype(np.float32), params, aux)
+    except kernel.NumbaError:
+        return render_arr(arr_srgb, analysis)

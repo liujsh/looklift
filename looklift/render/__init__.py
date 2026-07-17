@@ -25,7 +25,7 @@ from ._legacy import (  # noqa: F401  迁移期兼容 re-export
 def _apply_color_ops(arr: np.ndarray, analysis: dict) -> np.ndarray:
     """迁移期兼容入口，颜色处理统一转入分阶段 NumPy 管线。"""
 
-    return pipeline.render_arr(arr, analysis)
+    return pipeline.render_fused(arr, analysis)
 
 
 def render(image: Image.Image, analysis: dict) -> Image.Image:
@@ -34,7 +34,7 @@ def render(image: Image.Image, analysis: dict) -> Image.Image:
     if image.mode != "RGB":
         image = image.convert("RGB")
     arr = np.asarray(image, dtype=np.float32) / 255.0
-    arr = pipeline.render_arr(arr, analysis)
+    arr = pipeline.render_fused(arr, analysis)
     arr = _apply_spatial_ops(arr, analysis)
     return Image.fromarray((arr * 255 + 0.5).astype(np.uint8), "RGB")
 

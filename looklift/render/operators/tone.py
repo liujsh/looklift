@@ -4,14 +4,21 @@ from __future__ import annotations
 import numpy as np
 
 from ..base import Domain, Stage
+from .._numba import register_jitable
 
 
+@register_jitable(inline="always")
 def _sample_lut(value, lut):
-    pos = np.clip(value, 0, 1) * 1023.0
+    pos = min(1.0, max(0.0, value)) * 1023.0
     low = int(np.floor(pos))
     high = min(low + 1, 1023)
     fraction = pos - low
     return lut[low] * (1 - fraction) + lut[high] * fraction
+
+
+@register_jitable(inline="always")
+def tone_curve_px(r, g, b, lut):
+    return _sample_lut(r, lut), _sample_lut(g, lut), _sample_lut(b, lut)
 
 
 class ToneCurve:
@@ -50,6 +57,4 @@ class ToneCurve:
             lut[low] * (1 - fraction) + lut[high] * fraction
         ).astype(np.float32)
 
-    def apply_px(self, r, g, b, *params, aux=None):
-        (lut,) = params
-        return (_sample_lut(r, lut), _sample_lut(g, lut), _sample_lut(b, lut))
+    apply_px = staticmethod(tone_curve_px)

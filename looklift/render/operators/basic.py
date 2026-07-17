@@ -8,6 +8,61 @@ import numpy as np
 
 from .._legacy import _luminance
 from ..base import Domain, Stage
+from .._numba import register_jitable
+
+
+@register_jitable(inline="always")
+def exposure_px(r, g, b, ev):
+    gain = 2.0**ev
+    return r * gain, g * gain, b * gain
+
+
+@register_jitable(inline="always")
+def white_balance_px(r, g, b, temperature, tint):
+    return (
+        r * (1.0 + 0.2 * temperature / 100.0),
+        g * (1.0 - 0.15 * tint / 100.0),
+        b * (1.0 - 0.2 * temperature / 100.0),
+    )
+
+
+@register_jitable(inline="always")
+def contrast_px(r, g, b, contrast):
+    gain = 1.0 + 0.6 * contrast / 100.0
+    return (
+        0.5 + (r - 0.5) * gain,
+        0.5 + (g - 0.5) * gain,
+        0.5 + (b - 0.5) * gain,
+    )
+
+
+@register_jitable(inline="always")
+def highlights_shadows_px(r, g, b, highlights, shadows):
+    luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    delta = (
+        highlights / 100.0 * 0.25 * luma**2
+        + shadows / 100.0 * 0.25 * (1.0 - luma) ** 2
+    )
+    return r + delta, g + delta, b + delta
+
+
+@register_jitable(inline="always")
+def _clip01(value):
+    return min(1.0, max(0.0, value))
+
+
+@register_jitable(inline="always")
+def whites_blacks_px(r, g, b, whites, blacks):
+    gain = 1.0 + 0.15 * whites / 100.0
+    black_gain = 0.15 * blacks / 100.0
+    r *= gain
+    g *= gain
+    b *= gain
+    return (
+        r + black_gain * (1.0 - _clip01(r)) ** 4,
+        g + black_gain * (1.0 - _clip01(g)) ** 4,
+        b + black_gain * (1.0 - _clip01(b)) ** 4,
+    )
 
 
 class Exposure:
@@ -22,6 +77,8 @@ class Exposure:
     def apply_numpy(self, arr, params, aux=None):
         (ev,) = params
         return (arr.astype(np.float32) * (2.0 ** ev)).astype(np.float32)
+
+    apply_px = staticmethod(exposure_px)
 
 
 class WhiteBalance:
@@ -48,6 +105,8 @@ class WhiteBalance:
             arr[..., 1] *= 1 - 0.15 * tint / 100  # 品红偏移通过压低绿通道实现
         return arr
 
+    apply_px = staticmethod(white_balance_px)
+
 
 class Contrast:
     name = "contrast"
@@ -63,6 +122,8 @@ class Contrast:
         return (
             0.5 + (arr - 0.5) * (1 + 0.6 * contrast / 100)
         ).astype(np.float32)
+
+    apply_px = staticmethod(contrast_px)
 
 
 class HighlightsShadows:
@@ -89,6 +150,8 @@ class HighlightsShadows:
             arr = arr + (shadows / 100) * 0.25 * ((1 - luma) ** 2)
         return arr.astype(np.float32)
 
+    apply_px = staticmethod(highlights_shadows_px)
+
 
 class WhitesBlacks:
     name = "whites_blacks"
@@ -112,3 +175,5 @@ class WhitesBlacks:
         if blacks:
             arr = arr + 0.15 * blacks / 100 * (1 - np.clip(arr, 0, 1)) ** 4
         return arr.astype(np.float32)
+
+    apply_px = staticmethod(whites_blacks_px)
