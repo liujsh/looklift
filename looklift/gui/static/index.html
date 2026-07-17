@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>looklift</title>
+    <link rel="stylesheet" href="/static/vendor/claude/tokens.css" />
+    <link rel="stylesheet" href="/static/vendor/claude/components.css" />
+    <link rel="stylesheet" href="/static/css/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <span class="brand-word">looklift</span>
+          <span class="brand-tagline">AI 调色助手 · 一键生成 Lightroom 预设</span>
+        </div>
+        <nav class="nav" aria-label="主导航">
+          <button class="nav-item" type="button" data-panel="analyze">分析</button>
+          <button class="nav-item" type="button" data-panel="looks">风格库</button>
+          <button class="nav-item" type="button" data-panel="settings">设置</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="main">
+      <section id="panel-analyze" class="panel">
+        <div class="card">
+          <h2>分析</h2>
+          <p class="body-muted">拖入一张照片，或点击选择文件，AI 会给出调色分析、后期步骤与基本面板参数。</p>
+
+          <div id="analyze-dropzone" class="dropzone" aria-disabled="false">
+            <p class="dropzone-text">将照片拖到这里</p>
+            <p class="dropzone-or">或</p>
+            <label class="btn btn-secondary" for="analyze-file-input">选择文件</label>
+            <input
+              type="file"
+              id="analyze-file-input"
+              accept=".jpg,.jpeg,.png,.webp,.tif,.tiff"
+              hidden
+            />
+          </div>
+
+          <div class="field field-hint">
+            <label for="analyze-hint">风格提示（可选）</label>
+            <input type="text" id="analyze-hint" placeholder="例如：胶片感、冷调、日系……" />
+          </div>
+
+          <div id="analyze-progress" class="analyze-progress" hidden>
+            <span class="spinner" aria-hidden="true"></span>
+            <span id="analyze-progress-text">分析中，通常需要 30–120 秒……</span>
+          </div>
+        </div>
+
+        <div id="analyze-result" class="card" hidden>
+          <p class="eyebrow">风格概述</p>
+          <h3 id="analyze-summary" class="analyze-summary"></h3>
+
+          <p class="eyebrow analyze-section-label">后期步骤</p>
+          <ol id="analyze-steps" class="analyze-steps"></ol>
+
+          <p class="eyebrow analyze-section-label">基本面板参数</p>
+          <div id="analyze-basic" class="analyze-basic"></div>
+
+          <p class="eyebrow analyze-section-label">收藏到风格库</p>
+          <div class="field-inline">
+            <input type="text" id="save-look-name" placeholder="给这个风格起个名字" />
+            <button type="button" id="save-look-btn" class="btn btn-secondary">收藏</button>
+          </div>
+
+          <p class="eyebrow analyze-section-label">导出</p>
+          <div class="field-inline">
+            <button type="button" id="export-preset-btn" class="btn btn-secondary" disabled>
+              导出预设（.xmp）
+            </button>
+          </div>
+          <div class="field-inline field-inline-muted">
+            <input type="text" id="export-sidecar-path" placeholder="RAW 文件路径（可选，生成 sidecar）" />
+            <button type="button" id="export-sidecar-btn" class="btn btn-secondary" disabled>
+              导出 sidecar
+            </button>
+          </div>
+          <p class="field-help">先收藏起个名字，才能导出——导出用的正是收藏那一刻的强度。</p>
+        </div>
+
+        <div id="preview-card" class="card" hidden>
+          <h2>预览与强度</h2>
+          <p class="body-muted">拖动滑杆调整强度：0% 接近原图，100% 是分析给出的完整调整。</p>
+
+          <div class="preview-compare" id="preview-compare">
+            <img id="preview-before" class="preview-img" alt="原图预览" />
+            <img id="preview-after" class="preview-img" alt="调整后预览" />
+            <div id="preview-divider" class="preview-divider" aria-hidden="true"></div>
+          </div>
+
+          <div class="field preview-intensity">
+            <label for="preview-intensity-slider">
+              强度
+              <span id="preview-intensity-value">100%</span>
+            </label>
+            <input
+              type="range"
+              id="preview-intensity-slider"
+              min="0"
+              max="100"
+              step="1"
+              value="100"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-looks" class="panel" hidden>
+        <div class="card">
+          <h2>风格库</h2>
+          <p class="body-muted">收藏的分析结果会出现在这里，可按当前强度导出为预设或 sidecar。</p>
+        </div>
+        <p id="looks-empty" class="body-muted looks-empty" hidden>风格库还是空的，去分析第一张照片吧。</p>
+        <div id="looks-grid" class="looks-grid"></div>
+      </section>
+
+      <section id="panel-settings" class="panel" hidden>
+        <div class="card">
+          <h2>设置</h2>
+          <p class="body-muted">配置 AI provider 与密钥；不填也能先逛逛风格库和报告页，真正点「分析」时才会用到。</p>
+          <form id="settings-form" class="form">
+            <div class="field">
+              <label>AI Provider</label>
+              <label class="radio-option">
+                <input type="radio" name="provider" value="auto" checked />
+                自动选择 —— 优先用已登录的本地 Claude CLI，没有再看是否配了 API key
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="provider" value="cli" />
+                本地 Claude CLI —— 用你的 Claude Code 订阅额度，零配置（需先安装并登录 claude 命令）
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="provider" value="api" />
+                Anthropic API —— 填写 API key，最稳定，按用量计费
+              </label>
+            </div>
+            <div class="field">
+              <label for="settings-model">模型（可选）</label>
+              <input id="settings-model" type="text" name="model" placeholder="留空使用默认模型" />
+            </div>
+            <div class="field">
+              <label for="settings-api-key">API Key</label>
+              <input id="settings-api-key" type="password" name="api_key" autocomplete="off" placeholder="sk-..." />
+              <p class="field-help">选择「Anthropic API」或「自动选择」且本机没装 CLI 时需要；已保存过的话留空提交不会清空它。</p>
+            </div>
+            <details class="field">
+              <summary>高级：自定义 base_url</summary>
+              <input type="text" name="base_url" placeholder="留空使用官方默认地址" />
+            </details>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <div id="wizard" class="wizard-overlay" hidden>
+      <div class="wizard-card card">
+        <h2>欢迎使用 looklift</h2>
+        <p class="body-muted">
+          先配置一下 AI provider，「分析」面板才用得上；现在不想配也没关系，可以先跳过，去逛逛界面，随时回「设置」里补上。
+        </p>
+        <div id="wizard-form-slot"></div>
+        <div class="form-actions">
+          <button type="button" id="wizard-skip" class="btn btn-secondary">稍后配置</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+    <script src="/static/js/app.js" defer></script>
+    <script src="/static/js/panels/analyze.js" defer></script>
+    <script src="/static/js/panels/preview.js" defer></script>
+    <script src="/static/js/panels/looks.js" defer></script>
+  </body>
+</html>

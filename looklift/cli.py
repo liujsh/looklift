@@ -264,6 +264,11 @@ def cmd_refine(args) -> int:
     return 0
 
 
+def cmd_gui(args) -> int:
+    from .gui import app as gui_app  # 惰性导入:CLI-only 用户不强制装 gui 相关依赖
+    return gui_app.main(browser=args.browser, port=args.port)
+
+
 def main(argv: list[str] | None = None) -> int:
     # Windows 控制台默认 GBK,统一按 UTF-8 输出
     for stream in (sys.stdout, sys.stderr):
@@ -336,6 +341,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--sidecar", action="append", metavar="RAW", help="顺便用新参数生成 sidecar")
     p.add_argument("--backend", choices=["auto", "cli", "api"], default="auto")
     p.set_defaults(func=cmd_refine)
+
+    p = sub.add_parser("gui", help="启动本地图形界面(默认独立窗口,--browser 走系统浏览器)")
+    p.add_argument("--browser", action="store_true", help="不弹独立窗口,改用系统浏览器打开")
+    p.add_argument("--port", type=int, default=0, help="调试用固定端口(默认 0,由系统自动分配)")
+    p.set_defaults(func=cmd_gui)
 
     args = parser.parse_args(argv)
     try:

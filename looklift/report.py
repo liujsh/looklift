@@ -116,7 +116,16 @@ def render_report(analysis: dict[str, Any], name: str) -> str:
         color = entry.get("color", "")
         swatch = f'<span class="swatch" style="background:{_HSL_SWATCH.get(color, "#999")}"></span>'
         hsl_rows += (
-            f"<tr><td>{swatch}{_HSL_CN.get(color, color)}</td>"
+            # review fix(Critical/XSS):找不到映射时原样回退成 color 本身——
+            # color 是 analysis 里的用户/AI 可控字段,不经 escape 直接拼进
+            # HTML 会被浏览器当成标签执行(GET /report/<name> 现在是活路由,
+            # 上游 POST /api/looks 只做了 isinstance(dict) 校验，两者叠加
+            # 就是一条未转义 XSS 路径)。summary/steps/name 已经 escape 过，
+            # 这里补上；本文件其余把 analysis 数值拼进 HTML 的地方
+            # （_grading_row 的 hue/sat/lum、tone_curve、effects）都先经过
+            # `:g`/`float()` 数值格式化，非数字输入会直接抛异常而不是被当
+            # HTML 执行，不是同一类风险，已核对过不需要同样处理。
+            f"<tr><td>{swatch}{escape(_HSL_CN.get(color, color))}</td>"
             f"<td>{_fmt(entry.get('hue', 0))}</td>"
             f"<td>{_fmt(entry.get('saturation', 0))}</td>"
             f"<td>{_fmt(entry.get('luminance', 0))}</td></tr>"

@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from PIL import Image
 from looklift import render
 
@@ -63,6 +64,27 @@ def test_tone_curve_lifted_black(sample_analysis):
     a["tone_curve"] = [{"input": 0, "output": 40}, {"input": 255, "output": 255}]
     out = render._apply_color_ops(_flat_gray(0.0), a)
     assert out.mean() > 0.1  # 40/255 ≈ 0.157
+
+
+def test_tone_curve_near_endpoints_leave_black_and_white_untouched():
+    """曲线控制点接近但不等于 (0,0)/(255,255) 时(GUI-T9 review 发现的域外
+    夹平问题),定义域外应按斜率 1 外推——纯黑/纯白必须严格不变,而不是被
+    np.interp 夹到端点 y 值。"""
+    a = {"tone_curve": [
+        {"input": 15, "output": 15}, {"input": 128, "output": 128}, {"input": 240, "output": 240},
+    ]}
+    black = render._apply_color_ops(_flat_gray(0.0), a)
+    white = render._apply_color_ops(_flat_gray(1.0), a)
+    assert np.array_equal(black, np.zeros_like(black))
+    assert np.array_equal(white, np.ones_like(white))
+
+
+def test_tone_curve_matte_black_extrapolates_by_slope_one():
+    """端点不接近 0 的哑光黑曲线:x=0 处的输出应按斜率 1 从最近控制点外推
+    (40 - 15 = 25),而不是被夹到 40。"""
+    a = {"tone_curve": [{"input": 15, "output": 40}, {"input": 255, "output": 255}]}
+    out = render._apply_color_ops(_flat_gray(0.0), a)
+    assert out.mean() == pytest.approx(25 / 255, abs=1e-3)
 
 
 def test_saturation_negative_desaturates(sample_analysis):
