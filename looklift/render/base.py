@@ -88,6 +88,24 @@ def _validate_leaf(value) -> None:
     raise TypeError("参数叶子必须是数值标量或定长 np.float32 一维数组")
 
 
+def _validate_op_results(
+    op_results: dict[str, tuple | None],
+) -> tuple[tuple[str, tuple], ...]:
+    """纯验证全部 op 结果，成功后返回不可变的待打包项。"""
+    validated: list[tuple[str, tuple]] = []
+    for name, result in op_results.items():
+        if name not in OP_BITS:
+            raise KeyError(name)
+        if result is None:
+            continue
+        if not isinstance(result, tuple):
+            raise TypeError("operator 参数必须是 tuple")
+        for value in result:
+            _validate_leaf(value)
+        validated.append((name, result))
+    return tuple(validated)
+
+
 class ResolvedParams:
     """operator resolve 结果的扁平 Python 暂存：op 名 → tuple + enable。
 
@@ -105,14 +123,9 @@ class ResolvedParams:
     @classmethod
     def pack(cls, op_results: dict[str, tuple | None]) -> ResolvedParams:
         """校验并打包各 op 结果，为非 None 结果设置 enable 位。"""
+        validated = _validate_op_results(op_results)
         rp = cls()
-        for name, result in op_results.items():
-            if result is None:
-                continue
-            if not isinstance(result, tuple):
-                raise TypeError("operator 参数必须是 tuple")
-            for value in result:
-                _validate_leaf(value)
+        for name, result in validated:
             rp._params[name] = result
             rp.enable |= OP_BITS[name]
         return rp

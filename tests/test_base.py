@@ -1,3 +1,5 @@
+import copy
+
 import numpy as np
 import pytest
 
@@ -78,6 +80,27 @@ def test_resolved_params_rejects_invalid_leaf_types(bad_leaf):
 def test_resolved_params_rejects_non_tuple_result():
     with pytest.raises(TypeError):
         ResolvedParams.pack({"exposure": [1.0]})
+
+
+def test_resolved_params_pack_failure_is_atomic_and_keeps_input_unchanged():
+    class _TrackingResolvedParams(ResolvedParams):
+        created = 0
+
+        def __init__(self):
+            type(self).created += 1
+            super().__init__()
+
+    op_results = {
+        "exposure": (2.0,),
+        "hsl": ([1.0],),  # 后置非法叶，确保前项已可通过验证
+    }
+    original = copy.deepcopy(op_results)
+
+    with pytest.raises(TypeError):
+        _TrackingResolvedParams.pack(op_results)
+
+    assert _TrackingResolvedParams.created == 0
+    assert op_results == original
 
 
 def test_op_bits_exact_stable_mapping_and_single_bits():
