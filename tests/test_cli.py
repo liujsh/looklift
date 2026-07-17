@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -124,7 +125,8 @@ def test_refine_auto_end_to_end(tmp_path, sample_analysis, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     template = tmp_path / "look.json"
     template.write_text(json.dumps(sample_analysis), encoding="utf-8")
-    src = tmp_path / "src.jpg"; tgt = tmp_path / "tgt.jpg"
+    src = tmp_path / "src.jpg"
+    tgt = tmp_path / "tgt.jpg"
     Image.new("RGB", (16, 16), (90, 90, 90)).save(src)
     Image.new("RGB", (16, 16), (140, 140, 140)).save(tgt)
 
@@ -150,3 +152,56 @@ def test_gui_help_shows_browser_and_port(capsys):
     out = capsys.readouterr().out
     assert "--browser" in out
     assert "--port" in out
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        ["photo.jpg"],
+        ["--original", "raw.jpg"],
+        ["--name", "look"],
+        ["--json", "out.json"],
+        ["--preset", "out.xmp"],
+        ["--sidecar", "raw.cr3"],
+    ],
+)
+def test_analyze_batch_rejects_single_run_inputs(tmp_path, extra, capsys):
+    rc = cli.main(["analyze", "--batch", str(tmp_path), *extra])
+    assert rc == 1
+    error = capsys.readouterr().err
+    assert "--batch" in error and "互斥" in error
+
+
+def test_analyze_requires_images_or_batch(capsys):
+    assert cli.main(["analyze"]) == 1
+    error = capsys.readouterr().err
+    assert "成片" in error and "--batch" in error
+
+
+def test_analyze_force_requires_batch(capsys):
+    assert cli.main(["analyze", "photo.jpg", "--force"]) == 1
+    assert "--force" in capsys.readouterr().err
+
+
+def test_analyze_batch_cli_reports_progress_and_failure_exit(tmp_path, monkeypatch, capsys):
+    for name in ("good", "bad"):
+        group = tmp_path / name
+        group.mkdir()
+        (group / "photo.jpg").write_bytes(b"image")
+
+    def fake_analyze(images, *, original=None, style_hint=None, backend="auto"):
+        group = Path(images[0]).parent
+        if group.name == "bad":
+            raise RuntimeError("供应商失败")
+        return {"summary": group.name}
+
+    monkeypatch.setattr(cli.analyzer, "analyze", fake_analyze)
+    monkeypatch.setattr(cli.analyzer, "resolve_backend", lambda _: "ollama")
+
+    rc = cli.main(["analyze", "--batch", str(tmp_path), "--backend", "ollama"])
+
+    assert rc == 1
+    output = capsys.readouterr().out
+    assert "可能消耗较多额度" in output
+    assert "good" in output and "bad" in output
+    assert (tmp_path / "good" / ".looklift-result.json").exists(), output
