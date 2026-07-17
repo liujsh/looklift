@@ -18,7 +18,7 @@ from .operators.basic import (
     white_balance_px,
     whites_blacks_px,
 )
-from .operators.color import color_grading_px, hsl_px, saturation_px
+from .operators.color import color_grading_with_tints_px, hsl_px, saturation_px
 from .operators.detail import clarity_px, dehaze_px, texture_px
 from .operators.tone import tone_curve_px
 
@@ -201,6 +201,14 @@ def fused(arr_srgb, params, aux=None):
 
     height, width, _channels = arr_srgb.shape
     output = np.empty_like(arr_srgb)
+    grading_tints = np.zeros(12, dtype=np.float32)
+    if params.enable & _COLOR_GRADING:
+        for zone in range(4):
+            offset = zone * 3
+            angle = params.color_grading[offset] * np.pi / 180.0
+            grading_tints[offset] = np.cos(angle) * 0.5 + 0.5
+            grading_tints[offset + 1] = np.cos(angle - 2.0944) * 0.5 + 0.5
+            grading_tints[offset + 2] = np.cos(angle - 4.1888) * 0.5 + 0.5
     source_px = arr_srgb.reshape((height * width, 3))
     output_px = output.reshape((height * width, 3))
     if aux is not None:
@@ -261,7 +269,9 @@ def fused(arr_srgb, params, aux=None):
                 params.saturation[1],
             )
         if params.enable & _COLOR_GRADING:
-            r, g, b = color_grading_px(r, g, b, params.color_grading)
+            r, g, b = color_grading_with_tints_px(
+                r, g, b, params.color_grading, grading_tints
+            )
         if aux is not None and params.enable & _TEXTURE:
             r, g, b = texture_px(r, g, b, params.texture, blur_mid_px[index])
         if aux is not None and params.enable & _CLARITY:

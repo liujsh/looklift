@@ -59,10 +59,16 @@ def _hsv_to_rgb_px(hue, saturation, value):
 def hsl_px(r, g, b, values):
     hue, saturation, value = _rgb_to_hsv_px(r, g, b)
     for index in range(8):
+        offset = index * 3
+        if (
+            values[offset] == 0.0
+            and values[offset + 1] == 0.0
+            and values[offset + 2] == 0.0
+        ):
+            continue
         center = _CENTER_VALUES[index]
         distance = abs((hue - center + 180.0) % 360.0 - 180.0)
         mask = min(1.0, max(0.0, 1.0 - distance / 45.0))
-        offset = index * 3
         hue = (hue + mask * values[offset] * 0.3) % 360.0
         saturation *= 1.0 + mask * values[offset + 1] / 100.0 * 0.5
         value *= 1.0 + mask * values[offset + 2] / 100.0 * 0.3
@@ -79,7 +85,7 @@ def saturation_px(r, g, b, saturation_shift, vibrance):
 
 
 @register_jitable(inline="always")
-def color_grading_px(r, g, b, values):
+def color_grading_with_tints_px(r, g, b, values, tints):
     luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
     weights = (
         (1.0 - luma) ** 2,
@@ -89,25 +95,34 @@ def color_grading_px(r, g, b, values):
     )
     for index in range(4):
         offset = index * 3
-        hue = values[offset]
         saturation = values[offset + 1]
         luminance = values[offset + 2]
         weight = weights[index]
         if saturation != 0.0:
-            angle = hue * math.pi / 180.0
-            tint_r = math.cos(angle) * 0.5 + 0.5
-            tint_g = math.cos(angle - 2.0944) * 0.5 + 0.5
-            tint_b = math.cos(angle - 4.1888) * 0.5 + 0.5
             amount = weight * saturation / 100.0 * 0.3
-            r += amount * (tint_r - r)
-            g += amount * (tint_g - g)
-            b += amount * (tint_b - b)
+            r += amount * (tints[offset] - r)
+            g += amount * (tints[offset + 1] - g)
+            b += amount * (tints[offset + 2] - b)
         if luminance != 0.0:
             amount = weight * luminance / 100.0 * 0.2
             r += amount
             g += amount
             b += amount
     return r, g, b
+
+
+@register_jitable(inline="always")
+def color_grading_px(r, g, b, values):
+    """operator 级逐像素入口；融合内核会把固定 hue tint 提前烘好。"""
+
+    tints = np.zeros(12, dtype=np.float32)
+    for index in range(4):
+        offset = index * 3
+        angle = values[offset] * math.pi / 180.0
+        tints[offset] = math.cos(angle) * 0.5 + 0.5
+        tints[offset + 1] = math.cos(angle - 2.0944) * 0.5 + 0.5
+        tints[offset + 2] = math.cos(angle - 4.1888) * 0.5 + 0.5
+    return color_grading_with_tints_px(r, g, b, values, tints)
 
 
 class Hsl:

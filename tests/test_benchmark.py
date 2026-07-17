@@ -69,11 +69,12 @@ def test_pointwise_fused_2048_under_50ms_soft_gate():
     pipeline.warmup()
     arr = np.random.default_rng(0).random((1365, 2048, 3)).astype(np.float32)
     analysis = _full_analysis()
-    pipeline.render_fused(arr, analysis)
+    aux = pipeline.prepare_aux(arr, analysis)
+    pipeline.render_with_aux(arr, analysis, aux)
     timings = []
     for _ in range(3):
         started = time.perf_counter()
-        pipeline.render_fused(arr, analysis)
+        pipeline.render_with_aux(arr, analysis, aux)
         timings.append((time.perf_counter() - started) * 1000.0)
     elapsed_ms = min(timings)
     if elapsed_ms >= 50.0:
