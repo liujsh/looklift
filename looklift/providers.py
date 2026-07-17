@@ -181,6 +181,81 @@ class OpenAICompatProvider:
         return _extract_json(text)
 
 
+class OllamaProvider:
+    """Ollama `/api/chat` 视觉模型后端。"""
+
+    name = "ollama"
+
+    def __init__(self, base_url: str, model: str, timeout: int = 300):
+        self.base_url = base_url or "http://localhost:11434"
+        self.model = model
+        self.timeout = timeout
+
+    def complete(self, system: str, blocks: list[dict], schema: dict) -> dict:
+        if not self.model:
+            raise RuntimeError("Ollama 后端需要配置视觉模型 model。")
+
+        text_parts: list[str] = []
+        images: list[str] = []
+        for block in blocks:
+            if block["type"] == "text":
+                text_parts.append(block["text"])
+            else:
+                data, _ = _encode_image(block["path"])
+                text_parts.append(f"这是{block['label']}:")
+                images.append(data)
+        text_parts.append(
+            "最终回答必须且只能是一个 JSON 对象（不要 markdown 代码块），"
+            "严格符合以下 JSON Schema:\n" + json.dumps(schema, ensure_ascii=False)
+        )
+        user_message: dict[str, Any] = {
+            "role": "user",
+            "content": "\n".join(text_parts),
+        }
+        if images:
+            user_message["images"] = images
+        payload = {
+            "model": self.model,
+            "stream": False,
+            "messages": [
+                {"role": "system", "content": system},
+                user_message,
+            ],
+        }
+        try:
+            response = provider_http.post_json(
+                self.base_url.rstrip("/") + "/api/chat",
+                payload,
+                headers={},
+                timeout=self.timeout,
+            )
+        except provider_http.HTTPStatusError as exc:
+            if exc.status == 404 or "model" in exc.body.lower():
+                raise RuntimeError(
+                    f"Ollama 模型不存在，请先运行：ollama pull {self.model}"
+                ) from None
+            if exc.status >= 500:
+                raise RuntimeError("Ollama 服务暂时不可用，重试仍失败。") from None
+            raise RuntimeError(f"Ollama 请求被拒绝（HTTP {exc.status}），请检查模型与配置。") from None
+        except provider_http.HTTPConnectionError:
+            raise RuntimeError(
+                "Ollama 连接失败：确认 `ollama serve` 已启动，并检查 base_url。"
+            ) from None
+
+        if "error" in response:
+            error = str(response["error"])
+            if "model" in error.lower():
+                raise RuntimeError(f"Ollama 模型不存在，请先运行：ollama pull {self.model}")
+            raise RuntimeError(f"Ollama 返回错误：{error}")
+        try:
+            text = response["message"]["content"]
+        except (KeyError, TypeError):
+            raise RuntimeError("Ollama 返回格式异常：缺少模型文本。") from None
+        if not isinstance(text, str):
+            raise RuntimeError("Ollama 返回格式异常：模型文本不是字符串。")
+        return _extract_json(text)
+
+
 def _encode_image(path: str | Path) -> tuple[str, str]:
     """读取图片,必要时缩小,返回 (base64, media_type)。"""
     from PIL import Image
@@ -228,5 +303,11 @@ def get_provider(backend: str = "auto") -> VisionProvider:
             cfg["api_key"],
             cfg["model"],
             config.provider_timeout("openai_compat", cfg["timeout"]),
+        )
+    if backend == "ollama":
+        return OllamaProvider(
+            cfg["base_url"],
+            cfg["model"],
+            config.provider_timeout("ollama", cfg["timeout"]),
         )
     raise RuntimeError(f"未知或尚未实现的 provider：{backend}")

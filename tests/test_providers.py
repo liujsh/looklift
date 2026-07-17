@@ -229,3 +229,74 @@ def test_get_provider_builds_openai_compat_from_config(monkeypatch, tmp_path):
     assert provider.api_key == "sk-cfg"
     assert provider.model == "vision"
     assert provider.timeout == 33
+
+
+def test_ollama_wires_pure_base64_images_and_extracts_json(monkeypatch, tmp_path):
+    from PIL import Image
+
+    image_path = tmp_path / "a.png"
+    Image.new("RGB", (4, 4), (10, 20, 30)).save(image_path)
+    captured = {}
+
+    def fake_post(url, payload, *, headers, timeout):
+        captured.update(url=url, payload=payload, headers=headers, timeout=timeout)
+        return {"message": {"content": '结果如下：{"summary":"ok"}'}}
+
+    monkeypatch.setattr(provider_http, "post_json", fake_post)
+    provider = providers.OllamaProvider("", "qwen2.5vl", timeout=19)
+    result = provider.complete(
+        "SYS",
+        [
+            {"type": "text", "text": "任务"},
+            {"type": "image", "path": image_path, "label": "成片"},
+        ],
+        {"type": "object"},
+    )
+
+    assert result == {"summary": "ok"}
+    assert captured["url"] == "http://localhost:11434/api/chat"
+    assert captured["headers"] == {}
+    assert captured["timeout"] == 19
+    assert captured["payload"]["model"] == "qwen2.5vl"
+    assert captured["payload"]["stream"] is False
+    assert captured["payload"]["messages"][0] == {"role": "system", "content": "SYS"}
+    user = captured["payload"]["messages"][1]
+    assert "任务" in user["content"] and "这是成片" in user["content"]
+    assert "JSON Schema" in user["content"]
+    assert len(user["images"]) == 1
+    assert not user["images"][0].startswith("data:")
+
+
+def test_ollama_maps_connection_error(monkeypatch):
+    def fail(*args, **kwargs):
+        raise provider_http.HTTPConnectionError("refused")
+
+    monkeypatch.setattr(provider_http, "post_json", fail)
+    provider = providers.OllamaProvider("", "qwen2.5vl")
+    with pytest.raises(RuntimeError, match="Ollama 连接失败.*ollama serve.*base_url"):
+        provider.complete("SYS", [{"type": "text", "text": "任务"}], {})
+
+
+@pytest.mark.parametrize("status", [400, 404])
+def test_ollama_maps_missing_model_error(monkeypatch, status):
+    def fail(*args, **kwargs):
+        raise provider_http.HTTPStatusError(status, '{"error":"model not found"}')
+
+    monkeypatch.setattr(provider_http, "post_json", fail)
+    provider = providers.OllamaProvider("", "missing-vl")
+    with pytest.raises(RuntimeError, match=r"模型.*ollama pull missing-vl"):
+        provider.complete("SYS", [{"type": "text", "text": "任务"}], {})
+
+
+def test_get_provider_builds_ollama_defaults_from_config(monkeypatch, tmp_path):
+    from looklift import config
+
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text('provider = "ollama"\nmodel = "qwen2.5vl"\n', encoding="utf-8")
+    monkeypatch.setattr(config, "CONFIG_PATH", cfg_path)
+
+    provider = providers.get_provider("auto")
+    assert isinstance(provider, providers.OllamaProvider)
+    assert provider.base_url == "http://localhost:11434"
+    assert provider.model == "qwen2.5vl"
+    assert provider.timeout == 300
