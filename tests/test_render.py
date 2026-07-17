@@ -32,7 +32,8 @@ def test_exposure_positive_brightens(sample_analysis):
     a = _zero_analysis(sample_analysis)
     a["basic"]["exposure"] = 1.0
     out = render._apply_color_ops(_flat_gray(0.25), a)
-    assert out.mean() > 0.4  # 2^1 增益
+    # D5 线性光重标:原阈值 0.4 → 0.3；实测 +1EV 输出约 0.352，方向仍为提亮。
+    assert out.mean() > 0.3
 
 
 def test_temperature_warm_lifts_red_over_blue(sample_analysis):
@@ -75,8 +76,9 @@ def test_tone_curve_near_endpoints_leave_black_and_white_untouched():
     ]}
     black = render._apply_color_ops(_flat_gray(0.0), a)
     white = render._apply_color_ops(_flat_gray(1.0), a)
-    assert np.array_equal(black, np.zeros_like(black))
-    assert np.array_equal(white, np.ones_like(white))
+    # D5 线性光重标:严格相等 → atol=1e-4；EOTF/OETF 往返有 float32 末位误差。
+    assert np.allclose(black, np.zeros_like(black), atol=1e-4)
+    assert np.allclose(white, np.ones_like(white), atol=1e-4)
 
 
 def test_tone_curve_matte_black_extrapolates_by_slope_one():

@@ -1,6 +1,6 @@
 """basic 面板 op：曝光、白平衡、对比度、高光阴影与白黑场。
 
-apply_numpy 的数学逐字搬自旧色彩管线，本任务仍全部位于 display 域。
+apply_numpy 的数学逐字搬自旧色彩管线；曝光与白平衡位于线性光域。
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from ..base import Domain, Stage
 class Exposure:
     name = "exposure"
     stage = Stage.FUSED
-    domain = Domain.DISPLAY
+    domain = Domain.LINEAR
 
     def resolve(self, analysis):
         ev = analysis.get("basic", {}).get("exposure", 0)
@@ -27,7 +27,7 @@ class Exposure:
 class WhiteBalance:
     name = "white_balance"
     stage = Stage.FUSED
-    domain = Domain.DISPLAY
+    domain = Domain.LINEAR
 
     def resolve(self, analysis):
         basic = analysis.get("basic", {})
