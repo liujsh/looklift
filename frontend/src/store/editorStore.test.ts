@@ -108,4 +108,36 @@ describe("editorStore", () => {
     });
     expect(store.getSnapshot().analysis?.basic.exposure).toBe(0);
   });
+
+  it("拖动期间乐观更新但不堆历史，定格时只压入拖动前快照", () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis(0));
+    const original = store.getSnapshot().analysis!;
+
+    store.previewFragment("basic", { ...original.basic, exposure: 0.5 });
+    store.previewFragment("basic", { ...store.getSnapshot().analysis!.basic, exposure: 1.25 });
+    expect(store.getSnapshot().analysis?.basic.exposure).toBe(1.25);
+    expect(store.getSnapshot().versions).toEqual([]);
+
+    store.finalizePreview("manual");
+    expect(store.getSnapshot().versions).toHaveLength(1);
+    expect(store.getSnapshot().versions[0].analysis).toBe(original);
+    expect(store.getSnapshot().analysis?.basic.exposure).toBe(1.25);
+  });
+
+  it("applyDelta 与分片更新共用版本 push，且不会修改已有快照", () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis(0));
+    const original = store.getSnapshot().analysis!;
+
+    store.applyDelta((current) => ({
+      ...current,
+      basic: { ...current.basic, exposure: current.basic.exposure + 0.75 },
+    }), "chat");
+
+    expect(store.getSnapshot().analysis?.basic.exposure).toBe(0.75);
+    expect(store.getSnapshot().versions).toHaveLength(1);
+    expect(store.getSnapshot().versions[0]).toMatchObject({ analysis: original, source: "chat" });
+    expect(original.basic.exposure).toBe(0);
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canvasErrorMessage, firstSupportedImage, loadPreviewPair } from "./canvasModel";
+import { canvasErrorMessage, firstSupportedImage, loadPreviewPair, previewSignature } from "./canvasModel";
 
 describe("canvasModel", () => {
   it("从真实拖放路径中选择第一个受支持图片", () => {
@@ -32,5 +32,12 @@ describe("canvasModel", () => {
   it("保留可操作中文错误并为未知异常补充上下文", () => {
     expect(canvasErrorMessage(new Error("文件不存在"))).toBe("文件不存在");
     expect(canvasErrorMessage("连接中断")).toBe("无法载入照片：连接中断");
+  });
+
+  it("预览签名同时区分路径、参数和强度", () => {
+    const base = previewSignature("C:/photo.jpg", { basic: { exposure: 1 } }, 1);
+    expect(previewSignature("C:/other.jpg", { basic: { exposure: 1 } }, 1)).not.toBe(base);
+    expect(previewSignature("C:/photo.jpg", { basic: { exposure: 2 } }, 1)).not.toBe(base);
+    expect(previewSignature("C:/photo.jpg", { basic: { exposure: 1 } }, 0.7)).not.toBe(base);
   });
 });

@@ -44,6 +44,12 @@
 - 四区颜色分级采用 MIT 许可的 `react-colorful 5.8.0`，已核对安装包 LICENSE 和 ACKNOWLEDGMENTS；业务范围与组件标准坐标通过参数契约双向映射。
 - 自动验证：前端 `38 passed`、TypeScript/Vite production build 通过；Python `394 passed, 1 skipped`。
 
+## v2.0-B T7 实时预览与版本栈(2026-07-18)
+
+- 参数在本地即时乐观更新，静止 160ms 后发预览；新变化同时清定时器、abort 在途请求，并以请求序号拒绝旧慢响应。
+- 图片切换使用可复用 `cancel()`，取消旧图请求但不销毁调度器；首帧同步使用新图的中性 analysis，避免短暂套用上一张图参数。
+- `editorStore` 在连续拖动期间不堆历史，防抖定格时只 push 一份拖动前快照；`applyDelta` 与分片提交共用同一版本 owner，未添加 undo UI。
+
 ## v0.4 开发中踩的坑(已解决)
 
 | # | 坑 | 解决 |

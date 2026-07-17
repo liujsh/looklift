@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { CanvasPane } from "../components/CanvasPane";
 import { ChatPane } from "../components/ChatPane";
 import { GalleryPane } from "../components/GalleryPane";
@@ -23,6 +24,17 @@ export function EditorShell({
 }: EditorShellProps) {
   const editor = useEditorState();
   const neutral = !editor.analysis && contract ? createNeutralAnalysis(contract) : undefined;
+  const openImage = useCallback((path: string) => {
+    if (!contract) {
+      editorStore.setImagePath(path);
+      return undefined;
+    }
+    const next = createNeutralAnalysis(contract);
+    editorStore.openImage(path, next);
+    return next;
+  }, [contract]);
+  const settleManualPreview = useCallback(() => editorStore.finalizePreview("manual"), []);
+  const setRenderState = useCallback(editorStore.setRenderState, []);
 
   return (
     <main className="editor-shell" data-chat-enabled={chatEnabled}>
@@ -45,10 +57,9 @@ export function EditorShell({
           client={client}
           analysis={editor.analysis ?? neutral}
           factor={editor.factor}
-          onImagePathChange={(path) => {
-            if (contract) editorStore.openImage(path, createNeutralAnalysis(contract));
-            else editorStore.setImagePath(path);
-          }}
+          onImagePathChange={openImage}
+          onPreviewSettled={settleManualPreview}
+          onRenderStateChange={setRenderState}
         />
         <PanelPane contract={contract} />
       </section>

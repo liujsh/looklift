@@ -24,6 +24,9 @@ export type EditorStore = {
   openImage(imagePath: string, analysis: Analysis): void;
   commitAnalysis(analysis: Analysis, source: ChangeSource): void;
   updateFragment<K extends EditableSection>(section: K, value: Analysis[K], source: ChangeSource): void;
+  previewFragment<K extends EditableSection>(section: K, value: Analysis[K]): void;
+  finalizePreview(source: ChangeSource): void;
+  applyDelta(transform: (analysis: Analysis) => Analysis, source: ChangeSource): void;
   setImagePath(path: string | null): void;
   setFactor(factor: number): void;
   setRenderState(render: EditorState["render"]): void;
@@ -50,6 +53,7 @@ function immutableCopy<T>(value: T): T {
 
 export function createEditorStore(): EditorStore {
   let state = INITIAL_STATE;
+  let previewBase: Analysis | null = null;
   const listeners = new Set<() => void>();
 
   const publish = (next: EditorState) => {
@@ -59,9 +63,11 @@ export function createEditorStore(): EditorStore {
 
   const commitAnalysis = (nextAnalysis: Analysis, source: ChangeSource) => {
     const next = immutableCopy(nextAnalysis);
-    const versions = state.analysis
-      ? Object.freeze([...state.versions, Object.freeze({ analysis: state.analysis, source })])
+    const previous = previewBase ?? state.analysis;
+    const versions = previous
+      ? Object.freeze([...state.versions, Object.freeze({ analysis: previous, source })])
       : state.versions;
+    previewBase = null;
     publish({ ...state, analysis: next, versions });
   };
 
@@ -72,6 +78,7 @@ export function createEditorStore(): EditorStore {
       return () => listeners.delete(listener);
     },
     openImage(imagePath, analysis) {
+      previewBase = null;
       publish({
         ...INITIAL_STATE,
         imagePath,
@@ -82,6 +89,27 @@ export function createEditorStore(): EditorStore {
     updateFragment(section, value, source) {
       if (!state.analysis) throw new Error("尚未载入 analysis，不能更新参数分片");
       commitAnalysis({ ...state.analysis, [section]: value }, source);
+    },
+    previewFragment(section, value) {
+      if (!state.analysis) throw new Error("尚未载入 analysis，不能预览参数分片");
+      previewBase ??= state.analysis;
+      publish({ ...state, analysis: immutableCopy({ ...state.analysis, [section]: value }) });
+    },
+    finalizePreview(source) {
+      if (!previewBase || !state.analysis) return;
+      const previous = previewBase;
+      previewBase = null;
+      publish({
+        ...state,
+        versions: Object.freeze([
+          ...state.versions,
+          Object.freeze({ analysis: previous, source }),
+        ]),
+      });
+    },
+    applyDelta(transform, source) {
+      if (!state.analysis) throw new Error("尚未载入 analysis，不能应用参数 delta");
+      commitAnalysis(transform(state.analysis), source);
     },
     setImagePath(imagePath) {
       publish({ ...state, imagePath });

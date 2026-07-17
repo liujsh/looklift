@@ -3,11 +3,22 @@ import type { JsonObject } from "../../api/types";
 export const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"] as const;
 
 export type CanvasApi = {
-  preview(payload: { path: string; analysis: JsonObject; factor: number }): Promise<Blob>;
+  preview(
+    payload: { path: string; analysis: JsonObject; factor: number },
+    signal?: AbortSignal,
+  ): Promise<Blob>;
   upload(file: File): Promise<{ path: string }>;
 };
 
 export type PreviewPair = { before: Blob; after: Blob };
+
+export function previewSignature(
+  path: string,
+  analysis: JsonObject,
+  factor: number,
+): string {
+  return JSON.stringify([path, factor, analysis]);
+}
 
 export function firstSupportedImage(paths: string[]): string | null {
   return paths.find((path) => {

@@ -25,8 +25,8 @@ export function PanelPane({ contract }: PanelPaneProps) {
           label={label}
           rule={requireRule(contract, path)}
           value={editor.analysis!.basic[field]}
-          onChange={(value) => editorStore.updateFragment(
-            "basic", { ...editor.analysis!.basic, [field]: value }, "manual",
+          onChange={(value) => editorStore.previewFragment(
+            "basic", { ...editor.analysis!.basic, [field]: value },
           )}
         />;
       });
@@ -34,16 +34,16 @@ export function PanelPane({ contract }: PanelPaneProps) {
     if (groupId === "hsl") return <HslMixer
       contract={contract}
       value={editor.analysis.hsl}
-      onChange={(value) => editorStore.updateFragment("hsl", value, "manual")}
+      onChange={(value) => editorStore.previewFragment("hsl", value)}
     />;
     if (groupId === "tone-curve") return <ToneCurve
       value={editor.analysis.tone_curve}
-      onChange={(value) => editorStore.updateFragment("tone_curve", value, "manual")}
+      onChange={(value) => editorStore.previewFragment("tone_curve", value)}
     />;
     if (groupId === "color-grading") return <ColorGradingWheels
       contract={contract}
       value={editor.analysis.color_grading}
-      onChange={(value) => editorStore.updateFragment("color_grading", value, "manual")}
+      onChange={(value) => editorStore.previewFragment("color_grading", value)}
     />;
     return EFFECT_CONTROLS.map(({ path, label }) => {
       const field = path.slice("effects.".length) as keyof EffectsAnalysis;
@@ -52,8 +52,8 @@ export function PanelPane({ contract }: PanelPaneProps) {
         label={label}
         rule={requireRule(contract, path)}
         value={editor.analysis!.effects[field]}
-        onChange={(value) => editorStore.updateFragment(
-          "effects", { ...editor.analysis!.effects, [field]: value }, "manual",
+        onChange={(value) => editorStore.previewFragment(
+          "effects", { ...editor.analysis!.effects, [field]: value },
         )}
       />;
     });
