@@ -1,6 +1,8 @@
 from importlib import resources
+from io import BytesIO
 
 import looklift.render as render_pkg
+from PIL import ImageCms
 
 
 def test_render_is_package():
@@ -8,10 +10,14 @@ def test_render_is_package():
     assert hasattr(render_pkg, "__path__")
 
 
-def test_srgb_icc_packaged_resource_nonempty():
-    """标准 sRGB ICC 必须作为 looklift.render 的非空包资源可读取。"""
+def test_srgb_icc_packaged_resource_valid():
+    """随包 ICC 必须是可解析且可识别的标准 sRGB profile。"""
     icc = resources.files("looklift.render").joinpath(
         "data", "sRGB-IEC61966-2.1.icc"
     )
     assert icc.is_file()
-    assert len(icc.read_bytes()) > 0
+    icc_bytes = icc.read_bytes()
+    assert icc_bytes[36:40] == b"acsp"
+
+    profile = ImageCms.ImageCmsProfile(BytesIO(icc_bytes))
+    assert "srgb" in profile.profile.profile_description.casefold()
