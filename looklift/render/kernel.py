@@ -1,11 +1,14 @@
 """Numba 单遍 pointwise 融合内核与固定渲染参数 ABI。"""
+
 from __future__ import annotations
 
 from typing import NamedTuple
 
 import numpy as np
 
-from ._numba import HAS_NUMBA, NumbaError, njit, prange
+from ._numba import HAS_NUMBA as HAS_NUMBA
+from ._numba import NumbaError as NumbaError
+from ._numba import njit, prange
 from .base import OP_BITS
 from .operators.basic import (
     contrast_px,
@@ -90,65 +93,66 @@ def fused(arr_srgb, params, aux=None):
 
     height, width, _channels = arr_srgb.shape
     output = np.empty_like(arr_srgb)
-    for y in prange(height):
-        for x in range(width):
-            r = _srgb_to_linear(arr_srgb[y, x, 0])
-            g = _srgb_to_linear(arr_srgb[y, x, 1])
-            b = _srgb_to_linear(arr_srgb[y, x, 2])
+    source_px = arr_srgb.reshape((height * width, 3))
+    output_px = output.reshape((height * width, 3))
+    for index in prange(height * width):
+        r = _srgb_to_linear(source_px[index, 0])
+        g = _srgb_to_linear(source_px[index, 1])
+        b = _srgb_to_linear(source_px[index, 2])
 
-            if params.enable & _EXPOSURE:
-                r, g, b = exposure_px(r, g, b, params.exposure)
-            if params.enable & _WHITE_BALANCE:
-                r, g, b = white_balance_px(
-                    r,
-                    g,
-                    b,
-                    params.white_balance[0],
-                    params.white_balance[1],
-                )
+        if params.enable & _EXPOSURE:
+            r, g, b = exposure_px(r, g, b, params.exposure)
+        if params.enable & _WHITE_BALANCE:
+            r, g, b = white_balance_px(
+                r,
+                g,
+                b,
+                params.white_balance[0],
+                params.white_balance[1],
+            )
 
-            r = _clip01(_linear_to_srgb(r))
-            g = _clip01(_linear_to_srgb(g))
-            b = _clip01(_linear_to_srgb(b))
+        r = _clip01(_linear_to_srgb(r))
+        g = _clip01(_linear_to_srgb(g))
+        b = _clip01(_linear_to_srgb(b))
 
-            if params.enable & _CONTRAST:
-                r, g, b = contrast_px(r, g, b, params.contrast)
-            r, g, b = _clip01(r), _clip01(g), _clip01(b)
+        if params.enable & _CONTRAST:
+            r, g, b = contrast_px(r, g, b, params.contrast)
+        r, g, b = _clip01(r), _clip01(g), _clip01(b)
 
-            if params.enable & _HIGHLIGHTS_SHADOWS:
-                r, g, b = highlights_shadows_px(
-                    r,
-                    g,
-                    b,
-                    params.highlights_shadows[0],
-                    params.highlights_shadows[1],
-                )
-            if params.enable & _WHITES_BLACKS:
-                r, g, b = whites_blacks_px(
-                    r,
-                    g,
-                    b,
-                    params.whites_blacks[0],
-                    params.whites_blacks[1],
-                )
-            r, g, b = _clip01(r), _clip01(g), _clip01(b)
+        if params.enable & _HIGHLIGHTS_SHADOWS:
+            r, g, b = highlights_shadows_px(
+                r,
+                g,
+                b,
+                params.highlights_shadows[0],
+                params.highlights_shadows[1],
+            )
+        if params.enable & _WHITES_BLACKS:
+            r, g, b = whites_blacks_px(
+                r,
+                g,
+                b,
+                params.whites_blacks[0],
+                params.whites_blacks[1],
+            )
+        r, g, b = _clip01(r), _clip01(g), _clip01(b)
 
-            if params.enable & _TONE_CURVE:
-                r, g, b = tone_curve_px(r, g, b, params.tone_curve_lut)
-            if params.enable & _HSL:
-                r, g, b = hsl_px(r, g, b, params.hsl)
-            if params.enable & (_HSL | _SATURATION):
-                r, g, b = saturation_px(
-                    r,
-                    g,
-                    b,
-                    params.saturation[0],
-                    params.saturation[1],
-                )
-            if params.enable & _COLOR_GRADING:
-                r, g, b = color_grading_px(r, g, b, params.color_grading)
+        if params.enable & _TONE_CURVE:
+            r, g, b = tone_curve_px(r, g, b, params.tone_curve_lut)
+        if params.enable & _HSL:
+            r, g, b = hsl_px(r, g, b, params.hsl)
+        if params.enable & (_HSL | _SATURATION):
+            r, g, b = saturation_px(
+                r,
+                g,
+                b,
+                params.saturation[0],
+                params.saturation[1],
+            )
+        if params.enable & _COLOR_GRADING:
+            r, g, b = color_grading_px(r, g, b, params.color_grading)
 
-            output[y, x, 0] = _clip01(r)
-            output[y, x, 1] = _clip01(g)
-            output[y, x, 2] = _clip01(b)
+        output_px[index, 0] = _clip01(r)
+        output_px[index, 1] = _clip01(g)
+        output_px[index, 2] = _clip01(b)
     return output

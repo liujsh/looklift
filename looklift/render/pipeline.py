@@ -1,11 +1,15 @@
 """分阶段渲染编排；提供线性光与 display 域 NumPy 参考串联。"""
+
 from __future__ import annotations
 
 import numpy as np
+from PIL import Image
 
 from . import color_space as cs, kernel
 from .base import ResolvedParams
 from .operators import REGISTRY
+
+_PROXY_LONG_EDGE = 2048
 
 
 def resolve_params(analysis: dict) -> ResolvedParams:
@@ -133,3 +137,44 @@ def render_fused(arr_srgb: np.ndarray, analysis: dict, aux=None) -> np.ndarray:
         return kernel.fused(arr_srgb.astype(np.float32), params, aux)
     except kernel.NumbaError:
         return render_arr(arr_srgb, analysis)
+
+
+def warmup() -> None:
+    """用极小 dummy 图提前触发 JIT 与磁盘 cache。"""
+
+    dummy = np.full((4, 4, 3), 0.5, dtype=np.float32)
+    render_fused(
+        dummy,
+        {
+            "basic": {"exposure": 0.01},
+            "tone_curve": [],
+            "hsl": [],
+            "color_grading": {},
+            "effects": {},
+        },
+    )
+
+
+def _to_arr(image: Image.Image) -> np.ndarray:
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+    return np.asarray(image, dtype=np.float32) / 255.0
+
+
+def _to_image(arr: np.ndarray) -> Image.Image:
+    pixels = (np.clip(arr, 0, 1) * 255.0 + 0.5).astype(np.uint8)
+    return Image.fromarray(pixels, "RGB")
+
+
+def render_proxy(image: Image.Image, analysis: dict) -> Image.Image:
+    """长边不超过 2048 的交互代理入口。"""
+
+    proxy = image.copy()
+    proxy.thumbnail((_PROXY_LONG_EDGE, _PROXY_LONG_EDGE), Image.Resampling.LANCZOS)
+    return _to_image(render_fused(_to_arr(proxy), analysis))
+
+
+def render_full(image: Image.Image, analysis: dict) -> Image.Image:
+    """保持原尺寸的全分辨率融合入口。"""
+
+    return _to_image(render_fused(_to_arr(image), analysis))
