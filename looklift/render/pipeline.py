@@ -54,6 +54,8 @@ def marshal_render_params(resolved: ResolvedParams) -> kernel.RenderParams:
         vector("hsl", 24, packed=True),
         vector("saturation", 2),
         vector("color_grading", 12, packed=True),
+        scalar("texture"),
+        scalar("clarity"),
     )
 
 
@@ -92,7 +94,7 @@ def apply_color_ops_numpy(arr: np.ndarray, analysis: dict) -> np.ndarray:
     return np.clip(arr, 0, 1).astype(np.float32)
 
 
-def render_arr(arr_srgb: np.ndarray, analysis: dict) -> np.ndarray:
+def render_arr(arr_srgb: np.ndarray, analysis: dict, aux=None) -> np.ndarray:
     """先在线性光执行曝光/白平衡，再在 display 域执行其余颜色操作。
 
     单管线只在两段边界切换一次光域；线性段不裁剪，中间值允许超过 1。
@@ -133,6 +135,15 @@ def render_arr(arr_srgb: np.ndarray, analysis: dict) -> np.ndarray:
             arr = operators[name].apply_numpy(arr, (0.0, 0.0))
             saturation_applied = True
 
+    if aux is None and (
+        resolved.is_enabled("texture") or resolved.is_enabled("clarity")
+    ):
+        aux = prepare_aux(arr_srgb, analysis)
+    for name in ("texture", "clarity"):
+        params = resolved.get(name)
+        if params is not None:
+            arr = operators[name].apply_numpy(arr, params, aux)
+
     return np.clip(arr, 0, 1).astype(np.float32)
 
 
@@ -140,13 +151,17 @@ def render_fused(arr_srgb: np.ndarray, analysis: dict, aux=None) -> np.ndarray:
     """生产 pointwise 路径；numba 缺失/JIT 不可用时回退纯 NumPy。"""
 
     if not kernel.HAS_NUMBA:
-        return render_arr(arr_srgb, analysis)
+        return render_arr(arr_srgb, analysis, aux)
     resolved = resolve_params(analysis)
+    if aux is None and (
+        resolved.is_enabled("texture") or resolved.is_enabled("clarity")
+    ):
+        aux = prepare_aux(arr_srgb, analysis)
     params = marshal_render_params(resolved)
     try:
         return kernel.fused(arr_srgb.astype(np.float32), params, aux)
     except kernel.NumbaError:
-        return render_arr(arr_srgb, analysis)
+        return render_arr(arr_srgb, analysis, aux)
 
 
 def warmup() -> None:

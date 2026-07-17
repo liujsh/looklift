@@ -18,6 +18,8 @@ EXPECTED_RENDER_PARAM_LAYOUT = (
     ("hsl", "float32", (24,)),
     ("saturation", "float32", (2,)),
     ("color_grading", "float32", (12,)),
+    ("texture", "float32", ()),
+    ("clarity", "float32", ()),
 )
 
 

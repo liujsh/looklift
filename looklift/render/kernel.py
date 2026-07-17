@@ -19,6 +19,7 @@ from .operators.basic import (
     whites_blacks_px,
 )
 from .operators.color import color_grading_px, hsl_px, saturation_px
+from .operators.detail import clarity_px, texture_px
 from .operators.tone import tone_curve_px
 
 
@@ -33,6 +34,8 @@ RENDER_PARAM_LAYOUT = (
     ("hsl", "float32", (24,)),
     ("saturation", "float32", (2,)),
     ("color_grading", "float32", (12,)),
+    ("texture", "float32", ()),
+    ("clarity", "float32", ()),
 )
 
 
@@ -49,6 +52,8 @@ class RenderParams(NamedTuple):
     hsl: np.ndarray
     saturation: np.ndarray
     color_grading: np.ndarray
+    texture: np.float32
+    clarity: np.float32
 
 
 _EXPOSURE = OP_BITS["exposure"]
@@ -60,6 +65,8 @@ _TONE_CURVE = OP_BITS["tone_curve"]
 _HSL = OP_BITS["hsl"]
 _SATURATION = OP_BITS["saturation"]
 _COLOR_GRADING = OP_BITS["color_grading"]
+_TEXTURE = OP_BITS["texture"]
+_CLARITY = OP_BITS["clarity"]
 
 
 @njit(inline="always")
@@ -193,6 +200,9 @@ def fused(arr_srgb, params, aux=None):
     output = np.empty_like(arr_srgb)
     source_px = arr_srgb.reshape((height * width, 3))
     output_px = output.reshape((height * width, 3))
+    if aux is not None:
+        blur_mid_px = aux.blur_mid.reshape(height * width)
+        blur_large_px = aux.blur_large.reshape(height * width)
     for index in prange(height * width):
         r = _srgb_to_linear(source_px[index, 0])
         g = _srgb_to_linear(source_px[index, 1])
@@ -249,6 +259,10 @@ def fused(arr_srgb, params, aux=None):
             )
         if params.enable & _COLOR_GRADING:
             r, g, b = color_grading_px(r, g, b, params.color_grading)
+        if aux is not None and params.enable & _TEXTURE:
+            r, g, b = texture_px(r, g, b, params.texture, blur_mid_px[index])
+        if aux is not None and params.enable & _CLARITY:
+            r, g, b = clarity_px(r, g, b, params.clarity, blur_large_px[index])
 
         output_px[index, 0] = _clip01(r)
         output_px[index, 1] = _clip01(g)
