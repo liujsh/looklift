@@ -97,6 +97,8 @@ effects: {vignette_amount, grain_amount}
 - v0.4(GUI alpha:pywebview 窗口/浏览器双模式、本地 HTTP server、强度滑杆、
   风格库面板、报告页):已实现,详见下方「v0.4 新增设计」(§16-19);
   原 spec:[specs/v0.4/](specs/v0.4/)
+- v0.5(OpenAI-compatible/Ollama provider、可续跑目录批量分析、GUI 配置):已实现,
+  详见下方「v0.5 新增设计」;原 spec:[specs/v0.5/](specs/v0.5/)
 - v0.7 打包方向(PyInstaller 单 exe):尚未实现,细节见 [specs/v0.7/](specs/v0.7/)
 
 ### 9. 测试与 CI
@@ -138,7 +140,9 @@ prompt/schema/normalize,组装 blocks 后交给 provider。
 - `ClaudeCliProvider` / `AnthropicProvider`:即原 §1 的 cli/api 后端实现原样迁入,
   行为不变(cli 走 stdin 传 prompt;api 用 json_schema 结构化输出,图片长边压到
   `MAX_EDGE=1568`)
-- `get_provider("auto")` 解析顺序:config.toml 显式指定 provider(cli/api)→
+- `OpenAICompatProvider` / `OllamaProvider`:分别翻译为标准 Chat Completions vision
+  data URI 与 `/api/chat` 纯 base64；两者经 `_extract_json` 后仍由 analyzer 统一 normalize
+- `get_provider("auto")` 解析顺序:config.toml 显式指定任一 provider→
   有 API key(环境变量 `ANTHROPIC_API_KEY` 或 config 的 `api_key`)→
   `which("claude")` → 报错
 - `_extract_json`:cli 后端输出无 schema 硬约束,容错提取(剥 markdown 代码块、
@@ -147,8 +151,10 @@ prompt/schema/normalize,组装 blocks 后交给 provider。
 ### 11. 配置(config.py)
 
 - `load_config()`:读 `~/.looklift/config.toml`(`tomllib`),键
-  `provider/model/api_key/base_url/looks_dir`;同名环境变量 `LOOKLIFT_*`
+  `provider/model/api_key/base_url/looks_dir/timeout`;同名环境变量 `LOOKLIFT_*`
   非空时覆盖
+- `provider_timeout()`:校验正整数秒；空值按 cli/api/openai_compat/ollama 分别取
+  600/120/120/300 秒
 - `looks_dir()`:cwd 下有 `looks/` 优先(兼容 v0.1/v0.2 项目内风格库)→
   配置项 `looks_dir` → 默认 `~/.looklift/looks/`
 - `AnthropicProvider` 的 model 取 `config.load_config()["model"] or MODEL`
@@ -300,3 +306,31 @@ Handler 类型。
 | 上传文件名 | 原始文件名可能带路径分隔符、Windows 保留字符(`< > : " \| ? *`)、控制字符——曾复现静默截断 / NTFS 备用数据流触发 / 未捕获 `OSError` 500 且响应体泄漏本机路径+用户名 | `upload.sanitize_filename`:剥路径分隔符只留末段 → 保留字符/控制字符替换为 `_` → 去首尾点/空格 → 清洗后为空回退固定名;写入失败统一转 400 通用中文文案,不回显 `str(exc)` |
 | 风格库名 | 库名要在 UI 原样展示,不能像上传文件名一样静默清洗(会导致"存的名字"和"看到的名字"对不上) | `_validate_look_name` 拒绝式校验:空/纯空白、超长、含 `..`、含路径分隔符或 Windows 保留字符一律 400,不静默改写;路径穿越额外靠 `server.py` 对整条请求路径先 `unquote()` 再按 `/` 分段比较段数兜底(编码过的 `..%2f` 在匹配路由前就已展开,段数对不上直接 404) |
 | 本地 server 暴露面 | 监听地址若误绑 `0.0.0.0` 会让局域网其他设备访问到分析接口 | 显式绑定 `127.0.0.1`,不做用户鉴权(同机单用户模型,鉴权对此场景过度设计),写进代码注释避免后续误改 |
+
+---
+
+## v0.5 新增设计
+
+> 原 spec:[specs/v0.5/](specs/v0.5/)；本节只记录已实现实况。
+
+### 20. 多供应商 HTTP 层
+
+- `provider_http.py` 用标准库 `urllib.request` 发送 JSON；连接错误与 5xx 退避后重试
+  一次，4xx 不重试；测试可替换 opener/sleeper，全程离线
+- OpenAI-compatible 请求地址为 `base_url + /chat/completions`，图片是完整 data URI；
+  Ollama 请求地址为 `base_url + /api/chat`，图片数组只含 base64
+- provider 负责 wire 格式与中文错误映射；`analyzer.py` 仍是输出 normalize 的唯一入口
+
+### 21. 可续跑批量分析
+
+- `batch.py` 把根目录下每个含图片的一级子目录视为一组；图片按 mtime/文件名稳定排序，
+  最多取 5 张
+- 成功结果经同目录临时文件 + `os.replace` 原子写成 `.looklift-result.json`，同时作为
+  断点；默认跳过已有结果，`--force` 删除旧断点后重算
+- 单组异常只进入失败摘要，不中断其余组；任一失败时 CLI 最终退出码为 1
+
+### 22. GUI 配置扩展
+
+- 同一份设置表单增加 `openai_compat`/`ollama`、base_url/model/timeout；向导继续克隆复用
+- provider 切换时隐藏无意义字段，Ollama 不显示 API key；配置 API 回显非敏感字段，
+  密钥仍只返回 `has_key`

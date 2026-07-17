@@ -41,6 +41,28 @@ def test_cli_provider_builds_read_instructions(monkeypatch):
     assert "JSON Schema" in captured["prompt"]
 
 
+def test_cli_provider_uses_configured_timeout(monkeypatch, tmp_path):
+    from looklift import config
+
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text("timeout = 41\n", encoding="utf-8")
+    monkeypatch.setattr(config, "CONFIG_PATH", cfg_path)
+    captured = {}
+
+    def fake_run(*args, **kwargs):
+        captured["timeout"] = kwargs["timeout"]
+        return types.SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps({"result": '{"summary":"ok"}'}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(providers.subprocess, "run", fake_run)
+    monkeypatch.setattr(providers.shutil, "which", lambda _: "claude")
+    providers.ClaudeCliProvider().complete("SYS", [], {})
+    assert captured["timeout"] == 41
+
+
 def test_get_provider_auto(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-x")
     assert isinstance(providers.get_provider("auto"), providers.AnthropicProvider)
@@ -128,7 +150,11 @@ def test_api_provider_wires_config_key_baseurl_and_model(monkeypatch, tmp_path):
     )
 
     assert out == {"summary": "ok"}
-    assert captured["client_kwargs"] == {"api_key": "sk-cfg", "base_url": "https://proxy.example"}
+    assert captured["client_kwargs"] == {
+        "api_key": "sk-cfg",
+        "base_url": "https://proxy.example",
+        "timeout": 120,
+    }
     assert captured["stream_kwargs"]["model"] == "claude-custom"
     content = captured["stream_kwargs"]["messages"][0]["content"]
     assert content[0] == {"type": "text", "text": "任务说明"}
@@ -147,7 +173,7 @@ def test_api_provider_no_config_key_falls_back_to_sdk_default(monkeypatch, tmp_p
     p = providers.AnthropicProvider()
     p.complete("SYS", [{"type": "text", "text": "hi"}], {"type": "object"})
 
-    assert captured["client_kwargs"] == {"api_key": None, "base_url": None}
+    assert captured["client_kwargs"] == {"api_key": None, "base_url": None, "timeout": 120}
 
 
 def test_openai_compat_wires_vision_request_and_extracts_json(monkeypatch, tmp_path):

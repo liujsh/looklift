@@ -62,13 +62,14 @@ class ClaudeCliProvider:
         )
         # prompt 从 stdin 传入:Windows 上 claude 是 .CMD 包装,命令行参数有 ~8K 长度上限,
         # 带完整 JSON Schema 的 prompt 会被截断
+        cfg = config.load_config()
         proc = subprocess.run(
             [claude, "-p", "--output-format", "json", "--allowedTools", "Read"],
             input="\n".join(parts),
             capture_output=True,
             text=True,
             encoding="utf-8",
-            timeout=600,
+            timeout=config.provider_timeout("cli", cfg["timeout"]),
         )
         if proc.returncode != 0:
             raise RuntimeError(f"claude CLI 调用失败:\n{proc.stderr or proc.stdout}")
@@ -97,7 +98,11 @@ class AnthropicProvider:
                 content.append({"type": "text", "text": f"这是{b['label']}:"})
                 content.append(_image_block(b["path"]))
         cfg = config.load_config()
-        client = anthropic.Anthropic(api_key=cfg["api_key"] or None, base_url=cfg["base_url"] or None)
+        client = anthropic.Anthropic(
+            api_key=cfg["api_key"] or None,
+            base_url=cfg["base_url"] or None,
+            timeout=config.provider_timeout("api", cfg["timeout"]),
+        )
         model = cfg["model"] or MODEL
         with client.messages.stream(
             model=model,

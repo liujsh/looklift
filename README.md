@@ -5,7 +5,7 @@
 > 预设生成、渲染、风格库全部在你电脑上;AI 分析只把照片发给你自己选的模型,接本地模型可彻底离线。
 
 分析照片的调色/影调参数,生成 Lightroom 可导入的预设和 RAW sidecar。
-喂一张喜欢的成片,AI(Claude 视觉模型)逆向推断出基本面板、HSL、颜色分级、曲线等全套参数,
+喂一张喜欢的成片,AI 视觉模型逆向推断出基本面板、HSL、颜色分级、曲线等全套参数,
 并用中文讲解这种风格是怎么调出来的。
 
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
@@ -34,11 +34,36 @@ pip install -e ".[gui]"
 
 之后直接使用 `looklift` 命令(下面示例中的 `python -m looklift` 同样可用)。
 
-AI 分析二选一:
+AI 分析支持四类后端:
 - **本地 Claude Code CLI**(推荐,走 Claude Code 登录额度,无需 API key):已安装 `claude` 命令即可
 - **Anthropic API**:设置环境变量 `ANTHROPIC_API_KEY`
+- **OpenAI-compatible**:标准 Chat Completions vision 接口,可接 OpenAI 或兼容中转站
+- **Ollama**:本机视觉模型,照片不离开电脑
 
-默认 `--backend auto`:有 API key 走 API,否则走本地 CLI。
+默认 `--backend auto`:若 config 已固定 provider 就使用它；否则有 API key 走 API，
+再否则走本地 CLI。
+
+也可在 `~/.looklift/config.toml` 固定后端。OpenAI-compatible 示例:
+
+```toml
+provider = "openai_compat"
+base_url = "https://your-endpoint.example/v1"
+api_key = "sk-..."
+model = "your-vision-model"
+timeout = 120
+```
+
+Ollama 示例（先自行 `ollama pull <视觉模型名>`）:
+
+```toml
+provider = "ollama"
+base_url = "http://localhost:11434"
+model = "qwen2.5vl:7b"
+timeout = 300
+```
+
+`timeout` 可留空；默认值分别为 CLI 600 秒、Anthropic/OpenAI-compatible 120 秒、
+Ollama 300 秒。命令行也可用 `--backend openai_compat` 或 `--backend ollama` 临时选择。
 
 ## GUI 使用
 
@@ -68,6 +93,12 @@ looklift analyze master.jpg --name "胶片青橙"
 
 # 多张同风格成片一起分析,归纳共同风格(降低单张偶然性,上限 5 张)
 looklift analyze a.jpg b.jpg c.jpg --name "某摄影师风格"
+
+# 批量分析:根目录下每个一级子目录是一组,成功结果写入组内 .looklift-result.json
+looklift analyze --batch D:/reference-looks --backend ollama
+
+# 已有结果默认跳过;需要全部重算时显式加 --force
+looklift analyze --batch D:/reference-looks --force
 
 # 生成 HTML 风格报告(概述+步骤+参数表+曲线图),可直接分享
 looklift report "胶片青橙"
@@ -134,6 +165,19 @@ looklift refine 胶片青橙 --auto --source raw-export.jpg --target master.jpg
 3. 不够像?导出效果图,`refine` 一轮,重新导入预设(会自动备份上一版)
 4. 之后任何 RAW 直接 `apply <名字> --sidecar` 一键套用
 
+批量目录约定如下；每组图片按修改时间升序取前 5 张，失败组不会阻塞后续组，重跑会从
+没有 `.looklift-result.json` 的组继续:
+
+```text
+reference-looks/
+├── warm-film/       # 一组同风格照片
+│   ├── 01.jpg
+│   └── 02.jpg
+└── cool-cinema/     # 另一组
+    ├── a.jpg
+    └── b.jpg
+```
+
 ## 生成的文件怎么用
 
 - **预设 .xmp**:Lightroom → 修改照片 → 预设面板 → `+` → 导入预设,之后一键套用到任何照片
@@ -146,6 +190,7 @@ looklift refine 胶片青橙 --auto --source raw-export.jpg --target master.jpg
 - AI 推断是估计值,建议套用后按讲解微调,或用 `refine` 命令迭代校准
 - `preview` 是本地近似渲染(sRGB 输入,Pillow+numpy 实现),用于快速预览方向和 `refine --auto` 打分,不等价于 Lightroom 的精确色彩管线
 - `export-lut` 只覆盖全局色彩(曝光/白平衡/对比/曲线/HSL/颜色分级),暗角、颗粒等空间效果不进 LUT
+- v0.5 批量模式只按目录分组,不做自动风格聚类
 
 ## License
 
