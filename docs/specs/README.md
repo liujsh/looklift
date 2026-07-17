@@ -2,9 +2,13 @@
 
 > 本目录存放**每个迭代版本**的规格文档。规范敲定于 2026-07-16(与作者确认)。
 
+> 2026-07-17 更新:产品升级为 v2 一站式应用(见 [../requirements.md](../requirements.md) 定位升级)。
+> v2 大版本线分阶段,每阶段仍是一个 spec 文件夹:`v2.0-A`(引擎重构)、`v2.0-B`(Tauri 三栏 GUI)、
+> `v2.1`(聊天调参)、`v2.x`(远期)。v0.5 供应商先收口。
+
 ## 结构约定
 
-每个迭代一个文件夹 `docs/specs/v0.X/`,固定三份文档:
+每个迭代一个文件夹 `docs/specs/<版本>/`,固定三份文档:
 
 | 文档 | 内容 | 回答的问题 |
 |---|---|---|
@@ -33,6 +37,16 @@
 ## 待作者决策(汇总,不阻塞草拟)
 
 来自各版本 spec 撰写过程,按版本归类;定了之后写回对应 spec 并从这里划掉:
+
+**v2 一站式(2026-07-17 敲定的锁定项,不再是待决)**:渲染=手搓提升 numpy(numba+线性光+pyvips,不换 Rust);
+GUI=Tauri+React+Python sidecar;先全局不做局部;不做抓图只手动传;内置大师模板并入(原 U16);
+v0.5 先收口再开 v2。**仍待作者拍板(不阻塞)**:
+- [ ] **改名**:定位从"LR 伴侣"扩到"一站式",是否改名?建议保留 looklift(look/lift 皆调色术语)。纯品牌决策。
+- [ ] **商业化意图**:影响许可(现 MIT;方案全程许可干净不碰 GPL);若商业化需确认各宽松依赖逐个合规。
+- [ ] **v0.4 收尾取舍**:终审 16 项——引擎/安全层必修(carry forward),纯 pywebview 前端小问题随 v2 React 重写自然消解,是否认可?
+- [ ] **Tauri+Python sidecar 打包**:定为 v2.0-B 第一个 gated 任务(go/no-go,失败回退 pywebview),不预先假定成功。
+
+
 
 - [x] **v0.4**:pywebview 依赖方式——~~已确认为 optional extra~~,已实现:
   `looklift[gui]`(`pyproject.toml` `[project.optional-dependencies]`),CLI-only
