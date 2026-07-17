@@ -35,10 +35,15 @@
 ## T2 operator 基类与扁平参数结构
 
 `base.py`:定义 `Operator` 协议(`name`/`stage`/`domain`/`resolve`/`apply_numpy`/`apply_px`)、
-`Stage`/`Domain` 枚举、扁平 `RenderParams` 结构 + per-op enable 位掩码(见 [design.md §1.2/§1.4](./design.md))。
+`Stage`/`Domain` 枚举、扁平 Python 暂存容器 `ResolvedParams` + 稳定 per-op enable 位掩码
+(见 [design.md §1.2/§1.4](./design.md))。`ResolvedParams` 只允许保存
+`op name -> tuple[标量/定长小数组, ...]`,禁止嵌套 dict;它供 numpy 参考路径使用,也是 T6b
+固定 `RenderParams` 的输入。`OP_BITS` 位次严格按 exposure 至 grain 的固定 operator 顺序,
+编码切换不占 bit。
 
-**验收**:pytest 覆盖一个 stub operator 的 `resolve` 全 0 返回 `None`(enable=False)、非 0 返回
-参数元组;`RenderParams` 打包/取用往返一致。
+**验收**:pytest 覆盖一个同时实现 `apply_numpy`/`apply_px` 的 stub operator,并用 runtime Protocol
+检查接口;`resolve` 全 0 返回 `None`(enable=False)、非 0 返回参数元组;`ResolvedParams`
+打包/取用往返一致且拒绝嵌套 dict;`OP_BITS` 精确映射固定顺序、每个值都是唯一 single bit。
 
 ## T3 色彩空间基元(`color_space.py`)
 
@@ -74,7 +79,9 @@ tone_curve/hsl/saturation/color_grading 九步的数学**逐字搬进各 operato
 cache=True)` 的 `fused()`;linear 段→编码→display 段的单次光域切换在内核内完成(见
 [design.md §3](./design.md))。**这是本迭代最大的单块工作,分子步推进,不当一行估:**
 - T6a:把已迁入的 `apply_px` 逐个 inline,先跑通「linear 段(exposure/WB/叠色)→编码→display 段」骨架;
-- T6b:接 RenderParams 扁平结构 + per-op enable 位掩码(0 值 op 内核里 `if` 短路);
+- T6b:在 T4/T5 参数形态完整后,把 `ResolvedParams` 机械 marshal 成固定布局 numba
+  `RenderParams`(NamedTuple/定长 record);验证 dtype/layout/enable,内核只接该 record + aux,
+  绝不接 Python dict;0 值 op 按稳定 `OP_BITS` 在内核里 `if` 短路;
 - T6c:开 `parallel=True, fastmath=True, cache=True`,处理浮点结合序带来的容差;
 - **风险**:`fastmath` 数值发散(用容差 ≤1/255 而非严格相等)、冷编译首帧延迟(见 T7 预热)。
 

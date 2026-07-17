@@ -75,12 +75,26 @@ class Operator(Protocol):
 | `vignette` | `effects.vignette_amount` | display(位置相关) | 有(现在 spatial) |
 | `grain` | `effects.grain_amount` | 输出前(display,噪声场) | **新增像素实现** |
 
-### 1.4 扁平全局参数结构(`RenderParams`)
+### 1.4 两层扁平参数结构(`ResolvedParams` → `RenderParams`)
 
-镜像 AlcedoStudio 的「扁平 `OperatorParams` + per-op enable」:pipeline 遍历 operator 注册表,
-逐个 `resolve(analysis)` 把预计算标量写进**一个扁平结构**(numba `NamedTuple` / 定长 record,
-无嵌套,便于 marshal 进内核),外加一个 enable 位掩码。融合内核只吃这一个结构 + 辅助缓冲,
-不吃 Python dict。曲线这类「小数组参数」预计算成定长 LUT(如 1024 项)一并放入。
+镜像 AlcedoStudio 的「扁平 `OperatorParams` + per-op enable」,但明确拆成两层,避免把 Python
+组织结构误当成 numba ABI:
+
+- **T2 `ResolvedParams`**:pipeline 遍历 operator 注册表,逐个 `resolve(analysis)`,把结果暂存为
+  `op name -> tuple`。tuple 只能由标量或定长小数组组成,**禁止嵌套 dict**;它供 numpy 参考路径
+  使用,也是 T6b 构建固定 record 的唯一输入。`resolve()` 返回 `None` 时对应 enable 位为 0,
+  有 tuple 时置位。
+- **稳定 `OP_BITS`**:T2 即冻结位次为 exposure、white_balance、contrast、
+  highlights_shadows、whites_blacks、tone_curve、hsl、saturation、color_grading、texture、
+  clarity、dehaze、vignette、grain,即第 i 项严格使用 `1 << i`。编码/光域切换不是 operator,
+  不占 bit。
+- **T6b `RenderParams`**:等 T4/T5 完整确定 pointwise operator 的参数形态后,再把
+  `ResolvedParams` 机械 marshal 成 numba 可接受的固定布局 `NamedTuple` / 定长 record。
+  该 record 带同一个 enable 整数,曲线等小数组预计算成定长 LUT 后写入固定字段。推迟到
+  T6b 才冻结标量字段/offset,是为避免 T2 提前锁 ABI 后随 T4/T5 反复返工。
+
+融合内核只接收固定 `RenderParams` + 辅助缓冲,**绝不接收 Python dict 或
+`ResolvedParams`**。numpy 参考路径可以直接读取 `ResolvedParams`。
 
 **关键:operator 是组织/契约/测试层,融合内核是执行层。** operator 不在每像素上被当 Python
 对象调用(那会慢),而是它的 `apply_px` 被 numba **inline 进单个内核**——既拿到单一职责的
@@ -251,9 +265,9 @@ looklift/render/
   __init__.py       # 对外契约:render / score / preview;兼容 re-export(见 §七迁移)
   contract.py       # 参数契约单一真相源(D1):param_paths() / param_bounds(path) + hsl 数组/global_ 解析规则
   color_space.py    # sRGB↔linear、ICC 嵌入(pyvips 封装 + 纯 numpy 兜底);P3 转换留位(v2.x)
-  base.py           # Operator 协议、Stage/Domain 枚举、RenderParams 扁平结构定义
-  pipeline.py       # 分阶段编排 S0-S4;build_params(analysis)->RenderParams;proxy/full 两入口
-  kernel.py         # @njit 融合内核 + 预处理辅助 njit(可分离模糊/大气光/噪声/曲线烘 LUT)
+  base.py           # Operator 协议、Stage/Domain、ResolvedParams 与稳定 OP_BITS
+  pipeline.py       # 分阶段编排;resolve_params(analysis)->ResolvedParams;T6b marshal RenderParams
+  kernel.py         # T6b 固定 RenderParams + @njit 融合内核 + 预处理辅助 njit
   operators/
     __init__.py     # operator 注册表(按 Stage 排序的有序列表)
     basic.py        # exposure / white_balance / contrast / highlights_shadows / whites_blacks
