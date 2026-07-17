@@ -144,6 +144,20 @@ def test_post_config_accepts_new_providers_and_timeout(running_server):
         assert cfg["timeout"] == 45
 
 
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ({"provider": "openai_compat", "model": "vision"}, "base_url"),
+        ({"provider": "openai_compat", "base_url": "https://proxy.example/v1"}, "model"),
+        ({"provider": "ollama", "model": ""}, "model"),
+    ],
+)
+def test_post_config_rejects_incomplete_new_provider(running_server, payload, expected):
+    status, data = _request(running_server, "POST", "/api/config", payload)
+    assert status == 400
+    assert expected in data["error"]
+
+
 def test_post_config_rejects_invalid_timeout(running_server):
     status, data = _request(running_server, "POST", "/api/config", {"timeout": "soon"})
     assert status == 400
@@ -196,19 +210,19 @@ def test_post_config_empty_api_key_keeps_existing_key(running_server, monkeypatc
     assert config.load_config()["api_key"] == "sk-keep-me"
 
 
-def test_post_config_empty_base_url_keeps_existing(running_server, monkeypatch):
-    """代码评审(Must-fix，base_url 静默清空):设置表单/向导每次都提交
-    `base_url: ""`（前端出于对称考虑不回填），而 `_post_config` 原本无条件
-    写入任何出现的字段——导致已配好的 OpenAI 兼容代理地址（国内用户关键）
-    在任何一次保存设置时被清空。要求 `base_url` 跟 `api_key` 一样吃"空字符串
-    = 保留原值"的待遇。"""
+def test_post_config_empty_base_url_clears_existing(running_server, monkeypatch):
+    """v0.5 起 GET 会回填 base_url，因此显式空值必须允许用户恢复默认地址。
+
+    与 api_key 不同，base_url 不是密钥、会展示在表单中；把空字符串吞掉会让用户
+    无法从 OpenAI-compatible 地址切回 Ollama 的默认 localhost 地址。
+    """
     monkeypatch.setattr(api.shutil, "which", lambda _: None)
     _request(running_server, "POST", "/api/config", {"provider": "api", "base_url": "https://proxy.example.com/v1"})
 
     status, data = _request(running_server, "POST", "/api/config", {"provider": "api", "base_url": ""})
 
     assert status == 200
-    assert config.load_config()["base_url"] == "https://proxy.example.com/v1"
+    assert config.load_config()["base_url"] == ""
 
 
 def test_get_config_reports_on_disk_provider_model_not_env(running_server, monkeypatch):
@@ -275,8 +289,13 @@ def test_post_config_does_not_bake_transient_env_override_into_saved_file(runnin
 def test_analyze_would_work_true_when_provider_explicit():
     assert api._analyze_would_work({"provider": "cli", "api_key": "", "model": "", "base_url": ""}) is True
     assert api._analyze_would_work({"provider": "api", "api_key": "", "model": "", "base_url": ""}) is True
-    assert api._analyze_would_work({"provider": "openai_compat", "api_key": "", "model": "", "base_url": ""}) is True
-    assert api._analyze_would_work({"provider": "ollama", "api_key": "", "model": "", "base_url": ""}) is True
+    assert api._analyze_would_work({"provider": "openai_compat", "api_key": "", "model": "vision", "base_url": "https://proxy.example/v1"}) is True
+    assert api._analyze_would_work({"provider": "ollama", "api_key": "", "model": "qwen-vl", "base_url": ""}) is True
+
+
+def test_analyze_would_not_work_for_incomplete_new_provider():
+    assert api._analyze_would_work({"provider": "openai_compat", "api_key": "", "model": "", "base_url": ""}) is False
+    assert api._analyze_would_work({"provider": "ollama", "api_key": "", "model": "", "base_url": ""}) is False
 
 
 def test_analyze_would_work_true_when_api_key_present():
