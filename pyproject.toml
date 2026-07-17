@@ -14,6 +14,7 @@ dependencies = [
     "anthropic>=0.116.0",
     "Pillow>=10.0.0",
     "numpy>=1.26",
+    "numba>=0.60",
 ]
 keywords = ["lightroom", "photography", "color-grading", "preset", "xmp", "claude"]
 
@@ -25,9 +26,10 @@ looklift = "looklift.cli:main"
 
 [project.optional-dependencies]
 gui = ["pywebview>=5,<6"]
+render = ["pyvips>=2.2"]
 
 [tool.setuptools]
-packages = ["looklift", "looklift.gui"]
+packages = ["looklift", "looklift.gui", "looklift.render", "looklift.render.operators"]
 
 [tool.setuptools.package-data]
-looklift = ["gui/static/**"]
+looklift = ["gui/static/**", "render/data/*.icc"]
