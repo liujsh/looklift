@@ -364,8 +364,9 @@ review 发现 LUT 导出与应用渲染存在**数学分叉**风险(白盒两条
 
 **TDD 迁移顺序(方向断言先行,分层落地,见 [tasks.md](./tasks.md)):**
 
-1. 先把现 9 步数学**逐字搬进各 operator 的 `apply_numpy`**(仍在 display 域)→ 跑现有
-   `test_render.py`,方向断言全绿(此步不改数值,只搬家)。
+1. 先把现色彩数学搬进各 operator 的 `apply_numpy`(仍在 display 域);tone curve 例外地在
+   `resolve` 直接烘成固定 1024 项 float32 LUT,两种 apply 只消费 LUT。跑现有
+   `test_render.py`,方向断言全绿,整管线相对旧实现误差 ≤1/255。
 2. 只把 exposure/white_balance **搬进 linear**(S1/S4 编解码),color_grading 留 display → 新增线性光
    正确性断言(1 档=2×)。此步**会改变数值**(更亮更干净),但现有测试是**方向断言**(exposure>0
    更亮),仍绿;无逐像素 golden 值测试会被打破。
