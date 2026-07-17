@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from PIL import Image
 from looklift import render
 
@@ -31,7 +32,8 @@ def test_exposure_positive_brightens(sample_analysis):
     a = _zero_analysis(sample_analysis)
     a["basic"]["exposure"] = 1.0
     out = render._apply_color_ops(_flat_gray(0.25), a)
-    assert out.mean() > 0.4  # 2^1 增益
+    # D5 线性光重标:原阈值 0.4 → 0.3；实测 +1EV 输出约 0.352，方向仍为提亮。
+    assert out.mean() > 0.3
 
 
 def test_temperature_warm_lifts_red_over_blue(sample_analysis):
@@ -63,6 +65,28 @@ def test_tone_curve_lifted_black(sample_analysis):
     a["tone_curve"] = [{"input": 0, "output": 40}, {"input": 255, "output": 255}]
     out = render._apply_color_ops(_flat_gray(0.0), a)
     assert out.mean() > 0.1  # 40/255 ≈ 0.157
+
+
+def test_tone_curve_near_endpoints_leave_black_and_white_untouched():
+    """曲线控制点接近但不等于 (0,0)/(255,255) 时(GUI-T9 review 发现的域外
+    夹平问题),定义域外应按斜率 1 外推——纯黑/纯白必须严格不变,而不是被
+    np.interp 夹到端点 y 值。"""
+    a = {"tone_curve": [
+        {"input": 15, "output": 15}, {"input": 128, "output": 128}, {"input": 240, "output": 240},
+    ]}
+    black = render._apply_color_ops(_flat_gray(0.0), a)
+    white = render._apply_color_ops(_flat_gray(1.0), a)
+    # D5 线性光重标:严格相等 → atol=1e-4；EOTF/OETF 往返有 float32 末位误差。
+    assert np.allclose(black, np.zeros_like(black), atol=1e-4)
+    assert np.allclose(white, np.ones_like(white), atol=1e-4)
+
+
+def test_tone_curve_matte_black_extrapolates_by_slope_one():
+    """端点不接近 0 的哑光黑曲线:x=0 处的输出应按斜率 1 从最近控制点外推
+    (40 - 15 = 25),而不是被夹到 40。"""
+    a = {"tone_curve": [{"input": 15, "output": 40}, {"input": 255, "output": 255}]}
+    out = render._apply_color_ops(_flat_gray(0.0), a)
+    assert out.mean() == pytest.approx(25 / 255, abs=1e-3)
 
 
 def test_saturation_negative_desaturates(sample_analysis):

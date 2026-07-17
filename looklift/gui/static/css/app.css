@@ -1,0 +1,472 @@
+/* 只用 tokens.css 里的 token 变量，禁止裸 hex。
+ * SPA 壳样式：顶栏 + 导航 + 三个面板容器的布局，业务面板内容由后续任务填充。
+ * 分区：布局 / 顶栏 / 导航 / 面板 / 工具类。
+ */
+
+/* ─── 布局 ──────────────────────────────────────────────────────────── */
+.topbar-inner {
+  max-width: var(--container-max);
+  margin-inline: auto;
+  padding-inline: var(--container-gutter-desktop);
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+.main {
+  max-width: var(--container-max);
+  margin-inline: auto;
+  padding: var(--space-8) var(--container-gutter-desktop);
+}
+
+@media (max-width: 639px) {
+  .topbar-inner {
+    padding-inline: var(--container-gutter-phone);
+    flex-wrap: wrap;
+    row-gap: var(--space-3);
+  }
+  .main {
+    padding: var(--space-6) var(--container-gutter-phone);
+  }
+}
+
+/* ─── 顶栏（产品名衬线 wordmark + 小字 tagline）──────────────────────── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.brand-word {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+  color: var(--fg);
+  letter-spacing: var(--tracking-display);
+}
+
+.brand-tagline {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--meta);
+}
+
+/* ─── 导航（三个页签，激活态用 --accent）────────────────────────────── */
+.nav {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.nav-item {
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-4);
+  cursor: pointer;
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard);
+}
+
+.nav-item:hover {
+  color: var(--fg);
+  background: var(--surface-warm);
+}
+
+.nav-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.nav-item[aria-current="page"] {
+  color: var(--accent-on);
+  background: var(--accent);
+}
+
+/* ─── 面板容器 ─────────────────────────────────────────────────────── */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.panel .card h2 {
+  margin-bottom: var(--space-1);
+}
+
+/* ─── 设置表单：provider 单选组 ────────────────────────────────────── */
+.radio-option {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--fg-2);
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.radio-option input[type="radio"] {
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.field details summary {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.field details input {
+  margin-block-start: var(--space-2);
+}
+
+/* ─── 首次配置向导：全屏遮罩 + 居中卡片 ─────────────────────────────── */
+.wizard-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: color-mix(in oklab, var(--bg), transparent 15%);
+  backdrop-filter: blur(2px);
+}
+
+.wizard-overlay[hidden] {
+  display: none;
+}
+
+.wizard-card {
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100vh - var(--space-12));
+  overflow-y: auto;
+}
+
+/* ─── 分析面板:拖拽区 ──────────────────────────────────────────────── */
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  border: 1px dashed var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface-warm);
+  text-align: center;
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard);
+}
+
+.dropzone[aria-disabled="true"] {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.dropzone-text {
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  color: var(--fg-2);
+  margin: 0;
+}
+
+.dropzone-or {
+  font-size: var(--text-xs);
+  color: var(--meta);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+/* ─── 分析面板:风格提示(弱化的一行输入框)───────────────────────────── */
+.field-hint label {
+  font-weight: 400;
+  color: var(--meta);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.field-hint input {
+  font-size: var(--text-sm);
+}
+
+/* ─── 分析面板:分析中状态(token 上色的简洁 spinner)──────────────────── */
+.analyze-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-block: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.analyze-progress[hidden] {
+  display: none;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--border-soft);
+  border-top-color: var(--accent);
+  animation: looklift-spin 800ms linear infinite;
+}
+
+@keyframes looklift-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ─── 分析结果:风格概述 / 后期步骤 / 基本面板参数(编辑式排版)────────── */
+.analyze-summary {
+  margin: 0;
+}
+
+.analyze-section-label {
+  margin-block-start: var(--space-4);
+}
+
+.analyze-steps {
+  margin: 0;
+  padding-inline-start: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  color: var(--fg-2);
+  font-size: var(--text-base);
+  line-height: var(--leading-body);
+}
+
+.analyze-basic {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1) var(--space-6);
+}
+
+@media (max-width: 639px) {
+  .analyze-basic {
+    grid-template-columns: 1fr;
+  }
+}
+
+.analyze-basic-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-block: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+
+.analyze-basic-label {
+  color: var(--meta);
+}
+
+.analyze-basic-value {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.analyze-basic-value.is-positive {
+  color: var(--accent);
+}
+
+.analyze-basic-value.is-negative {
+  color: var(--muted);
+}
+
+/* ─── 分析结果:预览与强度(before/after 对比条 + 强度滑杆,U20)──────────
+ * 决策 5:原生 <input type="range"> + accent-color token 上色,两张 img
+ * 绝对叠放,上层 after 用 clip-path 由滑杆驱动,不引入 Shoelace。
+ */
+.preview-compare {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-warm);
+}
+
+.preview-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+
+#preview-after {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.preview-divider {
+  position: absolute;
+  inset-block: 0;
+  left: 100%;
+  width: 2px;
+  margin-inline-start: -1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.preview-intensity {
+  margin-block-start: var(--space-4);
+}
+
+.preview-intensity label {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+  color: var(--meta);
+  margin-block-end: var(--space-2);
+}
+
+.preview-intensity input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+/* ─── 分析结果:收藏到风格库 / 导出(GUI-T10)──────────────────────────────
+ * 控件物理上长在分析结果卡片里,业务逻辑在 panels/looks.js(风格库领域,见
+ * 该文件顶部注释)。一行输入 + 按钮的紧凑排布,sidecar 那一行用
+ * .field-inline-muted 弱化(字号更小、透明度更低),呼应它是"弱化,一行"的
+ * 次要操作。
+ */
+.field-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.field-inline input[type="text"] {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+}
+
+.field-inline-muted {
+  margin-block-start: var(--space-2);
+  opacity: 0.85;
+}
+
+.field-inline-muted input,
+.field-inline-muted button {
+  font-size: var(--text-xs);
+}
+
+.btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ─── 风格库面板:卡片网格(GUI-T10,U4/U8)────────────────────────────────
+ * 名字用衬线标题(继承 .card h3 的 --font-display),[预设✓] 徽标复用
+ * vendor/claude 的 .badge-success 配方,不额外定义新的徽标样式。
+ */
+.looks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-4);
+}
+
+.looks-empty {
+  padding: var(--space-8) 0;
+  text-align: center;
+}
+
+.look-card-name {
+  margin: 0;
+}
+
+.look-card-badges {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.look-card-summary {
+  font-size: var(--text-sm);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.look-card-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-block-start: auto;
+  padding-block-start: var(--space-2);
+}
+
+/* ─── 工具类：提示条（App.toast）────────────────────────────────────── */
+.toast-root {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-6);
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+
+.toast {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--accent-on);
+  background: var(--fg);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elev-raised);
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity var(--motion-base) var(--ease-standard),
+    transform var(--motion-base) var(--ease-standard);
+}
+
+.toast.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}

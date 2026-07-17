@@ -1,7 +1,7 @@
 # looklift 设计文档
 
 > 产品定位、用户故事、路线图见 [requirements.md](requirements.md)。本文档记录**已实现**的技术架构与关键设计决策。
-> 未实现迭代的详细设计写在 `docs/specs/`(每迭代一份 spec,实现后要点回填本文档)。当前:[v0.3 spec](specs/2026-07-16-v0.3-precision-loop.md)。
+> 未实现迭代的详细设计写在 `docs/specs/`(每迭代一份 spec,实现后要点回填本文档)。当前:[v0.5 spec](specs/v0.5/)。
 
 ## 架构总览
 
@@ -94,18 +94,10 @@ effects: {vignette_amount, grain_amount}
 
 - v0.3(provider 抽象、preview 渲染、auto-refine、LUT 导出):已实现,详见下方「v0.3 新增设计」(§10-15);
   原 spec:[specs/2026-07-16-v0.3-precision-loop.md](specs/2026-07-16-v0.3-precision-loop.md)
-- v0.4 GUI 架构方向(已定形态,细节届时写 spec):
-  - **形态(2026-07-16 敲定)**:同一套 HTML 界面,发布默认 **pywebview 独立窗口**
-    (Windows 依赖 WebView2,Win11 自带),`--browser` 参数走本地 web + 浏览器,
-    用于开发调试和兜底;**不引入 Electron/Node 栈**,保持 Python 单语言
-  - **视觉基底(2026-07-16 敲定)**:vendored 的 Claude 风设计系统
-    `assets/design-system/claude/`(取自 Open Design 仓库,Apache 2.0,纯 CSS 变量
-    + 纯 HTML 组件配方,零框架依赖)。tokens.css 直接引入,组件优先照
-    components.html 配方写;复杂控件(滑杆/对话框)如配方不够再引入
-    Shoelace(Web Components,MIT,本地 vendored)
-  - 原则:GUI 只是壳,所有逻辑留在核心模块,CLI 与 GUI 永远共享同一实现;
-    零外部网络请求(字体/CSS/JS 全部本地)
-  - 打包(v0.7):PyInstaller 单 exe
+- v0.4(GUI alpha:pywebview 窗口/浏览器双模式、本地 HTTP server、强度滑杆、
+  风格库面板、报告页):已实现,详见下方「v0.4 新增设计」(§16-19);
+  原 spec:[specs/v0.4/](specs/v0.4/)
+- v0.7 打包方向(PyInstaller 单 exe):尚未实现,细节见 [specs/v0.7/](specs/v0.7/)
 
 ### 9. 测试与 CI
 
@@ -125,9 +117,11 @@ effects: {vignette_amount, grain_amount}
   - `test_lut.py`:.cube 格式(SIZE/DOMAIN/行数/取值范围)程序化校验
   - `test_cli.py`:`_resolve_template` 名字/路径解析、`_expand_raws` 通配符、
     `apply` 端到端(tmp_path 下生成文件)
-  - 共 57 个用例
+  - v0.3 末共 71 个用例;v0.4 GUI alpha 新增 143 个(见下方「v0.4 测试」),
+    当前共 **214 个**,全部离线(不触网、不调 AI、不碰真实 `~/.looklift`)
 - `.github/workflows/ci.yml`:push/PR 触发,matrix = {ubuntu, windows, macos} × py3.12,
-  `pip install -e . pytest` → `pytest -q`
+  `pip install -e . pytest` → `pytest -q`(不装 `[gui]` extra 也能跑;GUI 测试
+  全部走 `create_server`/monkeypatch,不依赖真实 pywebview/WebView2)
 
 ---
 
@@ -209,3 +203,100 @@ float32 0-1 numpy 数组,在关键节点 clip 回 `[0,1]`(高光/阴影蒙版前
 - 行序 R 变化最快、G 次之、B 最慢(`.cube` 标准顺序)
 - 暗角、颗粒是空间效果,LUT 是逐像素颜色映射表、无法承载,导出时按设计跳过
   (CLI 输出中会提示)
+
+---
+
+## v0.4 新增设计
+
+> 原 spec:[specs/v0.4/](specs/v0.4/)(requirements.md / design.md / tasks.md)。
+> 本节只回填**已实现**的架构要点,完整决策权衡见 spec 的 design.md。
+
+### 16. GUI 架构(looklift/gui/)
+
+```
+looklift gui [--browser]
+        │
+   gui/app.py ── 起 gui/server.py(ThreadingHTTPServer,127.0.0.1:随机端口)
+        │            → window 分支:webview.create_window + 注册原生拖放桥
+        │              (import webview 失败 / 启动异常 → 自动降级到 browser 分支)
+        │            → browser 分支:webbrowser.open,阻塞到 Ctrl-C
+        ▼
+   gui/server.py ── 显式路由白名单:/ 、/static/* 、/api/* 、/report/*(其余 404)
+        ▼
+   gui/api.py ── 薄粘合 handler 表:HTTP 参数校验 → 调核心模块 → JSON/二进制响应
+        │
+   ┌────┼──────────────┬────────────────┬───────────────┐
+   ▼    ▼               ▼                ▼               ▼
+ gui/tasks.py      gui/upload.py    gui/lookstore.py  intensity.py(新)
+ 后台线程任务表      multipart 落      风格库 json+xmp    scale_analysis
+ status/message/    临时文件+文件名    文件 IO(不碰       (强度缩放纯函数,
+ result/error        硬化清洗          HTTP 层)           §17)
+```
+
+- `app.py`:唯一入口,只做「起 server → 选窗口/浏览器分支」;两条分支退出前
+  统一调 `_stop(srv)`(`shutdown()` + `server_close()`),不留残余监听线程/端口
+- `server.py`:`ThreadingHTTPServer` + 显式前缀路由白名单;`/static/*` 额外做
+  路径穿越防护(解析后的路径必须落在 `STATIC_DIR` 内才提供服务);handler 抛出
+  的任何异常在 `_dispatch` 顶层统一兜底转 500 JSON,不吐 traceback
+- `api.py`:`ROUTES: dict[(method, pattern), Handler]`,handler 只做「HTTP 参数
+  校验 → 调核心模块(`analyzer`/`render`/`intensity`/`xmp_writer`/`report`/
+  `config`)→ 响应」,业务逻辑一律留在核心模块——CLI 与 GUI 长期共享同一套实现
+- `tasks.py`:内存态 `{task_id: {status, message, result, error}}`,后台
+  daemon 线程跑耗时函数(`analyzer.analyze` 单次 30-120s),HTTP 请求处理线程
+  立即拿 `task_id` 返回,前端轮询 `GET /api/tasks/<id>` 拿进度/结果
+- `upload.py`:browser 模式专用(window 模式走 pywebview 原生拖放桥,零拷贝拿
+  真实文件路径)——用 stdlib `email` 模块解析 multipart(`cgi.FieldStorage`
+  在 Python 3.13 已移除),文件名清洗(剥路径分隔符只留末段、Windows 保留字符
+  `< > : " | ? *` 与控制字符替换为 `_`、去首尾点/空格、清洗后为空回退固定名),
+  50MB 上限,落 `tempfile.mkdtemp()` 惰性创建的进程级临时目录
+- `lookstore.py`:风格库文件 IO(`<name>.json` + `<name>.xmp`),不碰 HTTP 层;
+  与 CLI(`cli.cmd_analyze`/`cmd_list`)读写同一份 `config.looks_dir()` 目录,
+  落盘形状必须与 CLI 一致,否则两边互相看不懂对方存的东西
+
+### 17. 强度缩放语义(intensity.scale_analysis)
+
+`scale_analysis(analysis, factor) -> dict`(纯函数,`factor∈[0,1]`,越界裁剪,
+不改入参):
+
+| 字段 | 缩放规则 |
+|---|---|
+| `basic` 13 项、`hsl[].{hue,saturation,luminance}`、`color_grading.{shadows,midtones,highlights,global_}.{saturation,luminance}`、`color_grading.balance`、`effects.*` | 乘 `factor`(全是相对中性基准的偏移量) |
+| `color_grading.{...}.hue` | **不缩放**——色轮绝对角度(0-360),缩放角度没有物理意义 |
+| `color_grading.blending` | **不缩放**——中间调过渡范围的技术参数,不代表强度 |
+| `tone_curve[].output` | 向恒等线插值:`output' = input + factor*(output-input)`;`input` 不变 |
+| `summary`/`steps` | 透传不变 |
+
+`factor=1` 与原值完全一致(浮点误差内);`factor=0` 退化为"无调整"(曲线变对
+角线)。GUI 侧滑杆变化 → `scale_analysis` → 同时喂 `render.render`(预览)和
+`xmp_writer.analysis_to_crs`(导出),保证导出的预设/sidecar 是滑杆当前强度而
+不是永远 100%。配套修了 `render.py` 一处曲线域外插值缺口:`_apply_color_ops`
+第 6 步对超出控制点定义域的像素,原来是把 `np.interp` 直接夹到边界 y 值,改成
+按斜率 1(恒等)外推——否则控制点不严格贴 0/255 时(如
+`[(15,15),(128,128),(240,240)]`),`factor=0` 生成的"恒等曲线"渲染出来纯黑
+会变成 15/255,不是真正的纯黑。
+
+### 18. 双响应形态(server.py 分发)
+
+`api.py` 的 handler 返回两种形状之一,`server.py` 按元组长度分发,不拆两套
+Handler 签名:
+
+| 返回值 | 分发方式 | 用例 |
+|---|---|---|
+| `(status, dict)` | `_send_json`:`json.dumps(ensure_ascii=False)` | 除下一行外的全部路由 |
+| `(status, bytes, content_type)` | `_send_binary`:原样写字节 + 指定 Content-Type | `POST /api/preview`(JPEG 字节)、`GET /report/<name>`(HTML 字节) |
+
+请求上下文同样统一成一个 dict:`{"params", "body": bytes | None, "content_type",
+"query"}`——`body` 只有 `Content-Length` 头存在且 >0 才不是 `None`(区分"没有
+body"和"空 body");需要读 body 的 handler(`/api/upload`/`/api/analyze`/...)
+和只需要段参数的 handler(`/api/tasks/<id>`)用同一套签名,不必分裂成两种
+Handler 类型。
+
+### 19. 安全清单
+
+| 项 | 问题 | 缓解 |
+|---|---|---|
+| XSS(双层) | `report.py` 对 `hsl[].color` 走 `_HSL_CN.get(color, color)` 原样回退进 HTML;早期 `POST /api/looks` 只检查 `analysis` 是不是 dict,任意内容都能落盘,`GET /report/<name>` 又原样把它吐回浏览器,构成存储型 XSS | `report.py` 补 `escape()`(第一层);`api.py` 新增 `_validate_analysis`,只挡"会被当受信任枚举/固定类型使用"的字段(如 `hsl[].color` 必须在 8 色枚举内),不重新实现一遍完整 `ANALYSIS_SCHEMA`(第二层) |
+| `api_key` 回传 | 配置面板若原样回显密钥,浏览器 DevTools/日志可见 | `GET /api/config` 只回 `has_key: bool`,从不回传密钥原文;`POST /api/config` 里空字符串代表"保留原值"而非"清空" |
+| 上传文件名 | 原始文件名可能带路径分隔符、Windows 保留字符(`< > : " \| ? *`)、控制字符——曾复现静默截断 / NTFS 备用数据流触发 / 未捕获 `OSError` 500 且响应体泄漏本机路径+用户名 | `upload.sanitize_filename`:剥路径分隔符只留末段 → 保留字符/控制字符替换为 `_` → 去首尾点/空格 → 清洗后为空回退固定名;写入失败统一转 400 通用中文文案,不回显 `str(exc)` |
+| 风格库名 | 库名要在 UI 原样展示,不能像上传文件名一样静默清洗(会导致"存的名字"和"看到的名字"对不上) | `_validate_look_name` 拒绝式校验:空/纯空白、超长、含 `..`、含路径分隔符或 Windows 保留字符一律 400,不静默改写;路径穿越额外靠 `server.py` 对整条请求路径先 `unquote()` 再按 `/` 分段比较段数兜底(编码过的 `..%2f` 在匹配路由前就已展开,段数对不上直接 404) |
+| 本地 server 暴露面 | 监听地址若误绑 `0.0.0.0` 会让局域网其他设备访问到分析接口 | 显式绑定 `127.0.0.1`,不做用户鉴权(同机单用户模型,鉴权对此场景过度设计),写进代码注释避免后续误改 |

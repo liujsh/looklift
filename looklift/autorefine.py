@@ -38,7 +38,11 @@ def auto_refine(
             def evaluate(params: dict, i: int) -> tuple[float, Path]:
                 rendered = render.render(src, params)
                 attempt_path = tmp_dir / f"attempt_{i}.jpg"
-                rendered.save(attempt_path, quality=92)
+                rendered.save(
+                    attempt_path,
+                    quality=92,
+                    icc_profile=rendered.info["icc_profile"],
+                )
                 return render.score(rendered, tgt), attempt_path
 
             s, attempt = evaluate(current, 0)

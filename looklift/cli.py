@@ -210,7 +210,8 @@ def cmd_preview(args) -> int:
     analysis = json.loads(template.read_text(encoding="utf-8"))
     img = Image.open(args.photo)
     out = Path(args.out) if args.out else Path(args.photo).with_stem(Path(args.photo).stem + "_preview")
-    render.render(img, analysis).save(out, quality=92)
+    rendered = render.render(img, analysis)
+    rendered.save(out, quality=92, icc_profile=rendered.info["icc_profile"])
     print(f"[preview] 已生成: {out}  (本地近似渲染,方向参考,不等于 LR 效果)")
     if args.target:
         s = render.score(Image.open(out), Image.open(args.target))
@@ -262,6 +263,11 @@ def cmd_refine(args) -> int:
         path = xmp_writer.write_sidecar(crs, raw)
         print(f"[sidecar] 已生成: {path}")
     return 0
+
+
+def cmd_gui(args) -> int:
+    from .gui import app as gui_app  # 惰性导入:CLI-only 用户不强制装 gui 相关依赖
+    return gui_app.main(browser=args.browser, port=args.port)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -336,6 +342,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--sidecar", action="append", metavar="RAW", help="顺便用新参数生成 sidecar")
     p.add_argument("--backend", choices=["auto", "cli", "api"], default="auto")
     p.set_defaults(func=cmd_refine)
+
+    p = sub.add_parser("gui", help="启动本地图形界面(默认独立窗口,--browser 走系统浏览器)")
+    p.add_argument("--browser", action="store_true", help="不弹独立窗口,改用系统浏览器打开")
+    p.add_argument("--port", type=int, default=0, help="调试用固定端口(默认 0,由系统自动分配)")
+    p.set_defaults(func=cmd_gui)
 
     args = parser.parse_args(argv)
     try:

@@ -1,6 +1,6 @@
 # v0.4 Spec:GUI alpha —— 设计
 
-> 状态:草拟,待作者 review。
+> 状态:已确认(2026-07-17,作者授权自主推进;人工验收项后置)。
 > 需求见同目录 [requirements.md](requirements.md);任务分解见同目录 [tasks.md](tasks.md);
 > 当前已实现架构见 [../../design.md](../../design.md)(§8 已记录本迭代的形态/视觉基底决策,
 > 本文档是它的展开)。

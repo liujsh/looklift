@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  full-runtime:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -16,5 +16,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -e . pytest
+      - run: pip install -e ".[render]" pytest
       - run: pytest -q
+
+  minimal-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e . --no-deps
+      - run: pip install "Pillow>=10" "numpy>=1.26" pytest
+      - run: python -c "import importlib.util; assert importlib.util.find_spec('numba') is None; assert importlib.util.find_spec('pyvips') is None"
+      - run: python -m pytest tests/test_no_numba_runtime.py -q
+      - run: python -m pytest tests/test_kernel_fusion.py tests/test_output_icc.py tests/test_contract_external.py -q -k "numpy_fallback or icc or render"

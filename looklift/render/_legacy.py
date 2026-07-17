@@ -121,8 +121,21 @@ def _apply_color_ops(arr: np.ndarray, analysis: dict) -> np.ndarray:
         ((p["input"], p["output"]) for p in analysis.get("tone_curve", [])),
     )
     if len(curve) >= 2:
-        xs = np.array([p[0] for p in curve]) / 255.0
-        ys = np.array([p[1] for p in curve]) / 255.0
+        xs = [p[0] for p in curve]
+        ys = [p[1] for p in curve]
+        # schema 只要求控制点"接近"0/255 端点,不保证严格达到;np.interp 对
+        # 超出定义域的输入会直接夹到边界 y 值,若端点不是 (0,0)/(255,255)
+        # 就会把定义域外的像素错误地拉平。曲线域外按斜率 1 外推,保证恒等
+        # 曲线严格恒等:在两端各补一个虚拟端点,把定义域强制补满到 0-255,
+        # 超界部分按 45° 斜率延伸而不是被夹平。
+        if xs[0] > 0:
+            xs = [0] + xs
+            ys = [ys[0] - xs[1]] + ys
+        if xs[-1] < 255:
+            ys = ys + [ys[-1] + (255 - xs[-1])]
+            xs = xs + [255]
+        xs = np.array(xs, dtype=np.float64) / 255.0
+        ys = np.clip(np.array(ys, dtype=np.float64), 0, 255) / 255.0
         arr = np.interp(arr, xs, ys).astype(np.float32)
 
     # 7) HSL 定向 + 8) 饱和度/自然饱和度:HSV 域一次完成

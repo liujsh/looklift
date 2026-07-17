@@ -26,6 +26,12 @@ git clone https://github.com/liujsh/looklift && cd looklift
 pip install -e .
 ```
 
+想用图形界面(拖拽照片、强度滑杆、风格库面板)而不是命令行,装 `[gui]` extra:
+
+```
+pip install -e ".[gui]"
+```
+
 之后直接使用 `looklift` 命令(下面示例中的 `python -m looklift` 同样可用)。
 
 AI 分析二选一:
@@ -33,6 +39,26 @@ AI 分析二选一:
 - **Anthropic API**:设置环境变量 `ANTHROPIC_API_KEY`
 
 默认 `--backend auto`:有 API key 走 API,否则走本地 CLI。
+
+## GUI 使用
+
+不想敲命令行也可以,GUI 复用和 CLI 完全相同的分析/渲染/风格库逻辑:
+
+```
+pip install -e ".[gui]"
+looklift gui
+```
+
+默认弹出独立窗口(Windows 用系统自带的 WebView2);没装 `pywebview` 或窗口组件启动失败
+(如 WebView2 缺失)时自动降级为系统浏览器打开,并打印中文提示,不会崩溃退出。
+
+| 参数 | 作用 |
+|---|---|
+| `--browser` | 不弹窗口,直接用系统浏览器打开(开发调试 / WebView2 缺失兜底) |
+| `--port` | 指定本地端口(默认 `0`,由系统分配空闲端口) |
+
+首次启动会看到一个可跳过的配置向导(选 provider、填 key);跳过也能先逛风格库和报告页,
+只有点"分析"才真正需要配置好 AI 后端。
 
 ## 用法
 
