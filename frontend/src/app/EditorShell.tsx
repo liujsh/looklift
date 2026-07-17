@@ -4,20 +4,25 @@ import { GalleryPane } from "../components/GalleryPane";
 import { PanelPane } from "../components/PanelPane";
 import { FEATURES } from "./featureFlags";
 import type { LookliftClient } from "../api/client";
+import type { ParamContract } from "../api/types";
+import { createNeutralAnalysis } from "../panel/contractModel";
 import { editorStore, useEditorState } from "../store/editorStore";
 
 type EditorShellProps = {
   chatEnabled?: boolean;
   engineLabel?: string;
   client?: LookliftClient;
+  contract?: ParamContract;
 };
 
 export function EditorShell({
   chatEnabled = FEATURES.chatPane,
   engineLabel = "本地引擎已连接",
   client,
+  contract,
 }: EditorShellProps) {
   const editor = useEditorState();
+  const neutral = !editor.analysis && contract ? createNeutralAnalysis(contract) : undefined;
 
   return (
     <main className="editor-shell" data-chat-enabled={chatEnabled}>
@@ -38,11 +43,14 @@ export function EditorShell({
         <ChatPane enabled={chatEnabled} />
         <CanvasPane
           client={client}
-          analysis={editor.analysis ?? undefined}
+          analysis={editor.analysis ?? neutral}
           factor={editor.factor}
-          onImagePathChange={editorStore.setImagePath}
+          onImagePathChange={(path) => {
+            if (contract) editorStore.openImage(path, createNeutralAnalysis(contract));
+            else editorStore.setImagePath(path);
+          }}
         />
-        <PanelPane />
+        <PanelPane contract={contract} />
       </section>
 
       <GalleryPane />

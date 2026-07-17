@@ -21,6 +21,7 @@ export type EditorState = Readonly<{
 export type EditorStore = {
   getSnapshot(): EditorState;
   subscribe(listener: () => void): () => void;
+  openImage(imagePath: string, analysis: Analysis): void;
   commitAnalysis(analysis: Analysis, source: ChangeSource): void;
   updateFragment<K extends EditableSection>(section: K, value: Analysis[K], source: ChangeSource): void;
   setImagePath(path: string | null): void;
@@ -69,6 +70,13 @@ export function createEditorStore(): EditorStore {
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    openImage(imagePath, analysis) {
+      publish({
+        ...INITIAL_STATE,
+        imagePath,
+        analysis: immutableCopy(analysis),
+      });
     },
     commitAnalysis,
     updateFragment(section, value, source) {

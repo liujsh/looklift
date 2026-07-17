@@ -21,6 +21,7 @@ function App() {
   return (
     <EditorShell
       client={engine.client}
+      contract={engine.contract}
       engineLabel={`${engine.numba} · libvips ${engine.libvips}`}
     />
   );

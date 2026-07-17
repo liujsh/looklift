@@ -37,6 +37,13 @@
 门禁判定为 **GO（2026-07-18 作者确认）**：技术链路与干净 Windows
 安装/SmartScreen 人工验收均已通过，可以进入 T2。
 
+## v2.0-B T6 参数控件实证(2026-07-18)
+
+- 参数路径、范围、默认值和复位值均从 `/api/param-contract` 获取；前端只保留路径与中文标签映射。
+- `ColorCurve` 仓库虽附 MIT LICENSE，但 README 明确声明 JavaScript 基于 GIMP curves code，按项目“不碰 GPL”红线弃用，未引用其代码；曲线采用独立实现的极简单调 Hermite 编辑器。
+- 四区颜色分级采用 MIT 许可的 `react-colorful 5.8.0`，已核对安装包 LICENSE 和 ACKNOWLEDGMENTS；业务范围与组件标准坐标通过参数契约双向映射。
+- 自动验证：前端 `38 passed`、TypeScript/Vite production build 通过；Python `394 passed, 1 skipped`。
+
 ## v0.4 开发中踩的坑(已解决)
 
 | # | 坑 | 解决 |

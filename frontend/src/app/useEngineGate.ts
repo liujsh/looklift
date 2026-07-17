@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { clientFromStatus, readSidecarStatus } from "../api/client";
 import type { LookliftClient } from "../api/client";
-import type { SidecarStatus } from "../api/types";
+import type { ParamContract, SidecarStatus } from "../api/types";
 
 type EngineGate =
   | { phase: "starting"; error: null; numba: null; libvips: null }
-  | { phase: "ready"; error: null; numba: string; libvips: string; client: LookliftClient }
+  | { phase: "ready"; error: null; numba: string; libvips: string; client: LookliftClient; contract: ParamContract }
   | { phase: "error"; error: string; numba: null; libvips: null };
 
 const STARTING: EngineGate = {
@@ -17,10 +17,11 @@ const STARTING: EngineGate = {
 
 async function probeEngine(status: SidecarStatus): Promise<EngineGate> {
   const client = clientFromStatus(status);
-  const [ping, probe] = await Promise.all([
+  const [ping, probe, , contract] = await Promise.all([
     client.ping(),
     client.engineProbe(),
     client.listLooks(),
+    client.paramContract(),
   ]);
   if (!ping.ok || !probe.rendered) throw new Error("本地引擎自检未通过");
   return {
@@ -29,6 +30,7 @@ async function probeEngine(status: SidecarStatus): Promise<EngineGate> {
     numba: probe.numba,
     libvips: probe.libvips,
     client,
+    contract,
   };
 }
 

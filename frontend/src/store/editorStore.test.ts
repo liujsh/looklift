@@ -93,4 +93,19 @@ describe("editorStore", () => {
     });
     expect(store.getSnapshot().versions).toEqual([]);
   });
+
+  it("打开新图片同时装入中性 analysis，并清空上一张图的版本栈", () => {
+    const store = createEditorStore();
+    store.openImage("C:/first.jpg", analysis(0));
+    store.commitAnalysis(analysis(1), "manual");
+
+    store.openImage("C:/second.jpg", analysis(0));
+
+    expect(store.getSnapshot()).toMatchObject({
+      imagePath: "C:/second.jpg",
+      factor: 1,
+      versions: [],
+    });
+    expect(store.getSnapshot().analysis?.basic.exposure).toBe(0);
+  });
 });
