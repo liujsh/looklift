@@ -57,7 +57,7 @@ tone_curve/hsl/saturation/color_grading 九步的数学**逐字搬进各 operato
 **验收**:每个 op 有方向单测(exposure>0 更亮、contrast>0 反差增大、HSV 往返等);现有
 `test_render.py` 全绿;此步渲染输出与重构前**数值一致**(证明纯搬家)。
 
-## T5 曝光/白平衡/叠色迁入线性光
+## T5 曝光/白平衡迁入线性光
 
 按 [design.md §二](./design.md):只有 `exposure`/`white_balance` 移到 linear 段(S1 编码进、
 编码 display 后再走其余 op);`color_grading` 整体留在 display 段。linear 中间值不得提前 clip。
@@ -99,7 +99,8 @@ grain 噪声场留给 S4,融合内核主体不得叠 grain
 (见 [design.md §3.3/§六](./design.md))。子步:
 - T8a:可分离高斯模糊 njit(小/中/大半径);大半径用低分辨率估 + 上采样控成本;
 - T8b:噪声场(定种子);
-- T8c:**S2 专项 benchmark**——S2 预处理不是 pointwise,单独计量、单独设预算(见开放问题决策)。
+- T8c:**S2 专项 benchmark**——S2 预处理不是 pointwise,代理路径独立软门槛 **<200ms**;
+  完整帧只记录,不与融合内核 <50ms 混算。
 
 **验收**:模糊/噪声各有单测(模糊核归一、噪声定种子可复现);预处理输出形状与主内核对接正确;
 **S2 专项 benchmark 记录**——代理路径 S2 仍落在交互预算内(必要时更低分辨率估辅助缓冲);全分辨率
