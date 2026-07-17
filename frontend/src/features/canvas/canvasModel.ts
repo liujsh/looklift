@@ -1,9 +1,9 @@
-import type { Analysis } from "../../api/types";
+import type { JsonObject } from "../../api/types";
 
 export const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"] as const;
 
 export type CanvasApi = {
-  preview(payload: { path: string; analysis: Analysis; factor: number }): Promise<Blob>;
+  preview(payload: { path: string; analysis: JsonObject; factor: number }): Promise<Blob>;
   upload(file: File): Promise<{ path: string }>;
 };
 
@@ -19,7 +19,7 @@ export function firstSupportedImage(paths: string[]): string | null {
 export async function loadPreviewPair(
   client: CanvasApi,
   path: string,
-  analysis: Analysis,
+  analysis: JsonObject,
   factor: number,
 ): Promise<PreviewPair> {
   const [before, after] = await Promise.all([

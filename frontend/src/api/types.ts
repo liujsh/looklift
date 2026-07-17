@@ -1,5 +1,49 @@
 export type JsonObject = Record<string, unknown>;
-export type Analysis = JsonObject;
+
+export type BasicAnalysis = {
+  temperature_shift: number;
+  tint_shift: number;
+  exposure: number;
+  contrast: number;
+  highlights: number;
+  shadows: number;
+  whites: number;
+  blacks: number;
+  texture: number;
+  clarity: number;
+  dehaze: number;
+  vibrance: number;
+  saturation: number;
+};
+
+export type ToneCurvePoint = { input: number; output: number };
+export type HslEntry = {
+  color: string;
+  hue: number;
+  saturation: number;
+  luminance: number;
+};
+export type ColorGradingZone = { hue: number; saturation: number; luminance: number };
+export type ColorGradingAnalysis = {
+  shadows: ColorGradingZone;
+  midtones: ColorGradingZone;
+  highlights: ColorGradingZone;
+  global_: ColorGradingZone;
+  blending: number;
+  balance: number;
+};
+export type EffectsAnalysis = { vignette_amount: number; grain_amount: number };
+
+/** 与 Python ANALYSIS_SCHEMA 同构的前端唯一参数对象。 */
+export type Analysis = {
+  summary: string;
+  steps: string[];
+  basic: BasicAnalysis;
+  tone_curve: ToneCurvePoint[];
+  hsl: HslEntry[];
+  color_grading: ColorGradingAnalysis;
+  effects: EffectsAnalysis;
+};
 
 export type SidecarStatus = {
   state: "starting" | "ready" | "error" | "stopping";
@@ -33,7 +77,7 @@ export type AnalyzeRequest = {
 
 export type PreviewRequest = {
   path: string;
-  analysis: Analysis;
+  analysis: JsonObject;
   factor: number;
 };
 

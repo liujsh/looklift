@@ -32,7 +32,7 @@
 | Tauri 往返 | release 应用自动拉起 sidecar；带启动 token 的 ping/engine-probe 均通过 |
 | 生命周期 | 正常关闭主窗口后主进程与 sidecar 同时退出，无孤儿进程 |
 | 安装器 | NSIS `looklift_0.5.0_x64-setup.exe`，65.1 MB；本机 Defender 扫描无威胁 |
-| 自动测试 | Python `394 passed, 1 skipped`；TypeScript/Vite build、Vitest `13 passed` 和 Rust `cargo check` 通过 |
+| 自动测试 | Python `394 passed, 1 skipped`；TypeScript/Vite build、Vitest `21 passed` 和 Rust `cargo check` 通过 |
 
 门禁判定为 **GO（2026-07-18 作者确认）**：技术链路与干净 Windows
 安装/SmartScreen 人工验收均已通过，可以进入 T2。

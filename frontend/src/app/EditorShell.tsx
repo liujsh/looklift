@@ -4,6 +4,7 @@ import { GalleryPane } from "../components/GalleryPane";
 import { PanelPane } from "../components/PanelPane";
 import { FEATURES } from "./featureFlags";
 import type { LookliftClient } from "../api/client";
+import { editorStore, useEditorState } from "../store/editorStore";
 
 type EditorShellProps = {
   chatEnabled?: boolean;
@@ -16,6 +17,8 @@ export function EditorShell({
   engineLabel = "本地引擎已连接",
   client,
 }: EditorShellProps) {
+  const editor = useEditorState();
+
   return (
     <main className="editor-shell" data-chat-enabled={chatEnabled}>
       <header className="app-bar" data-tauri-drag-region>
@@ -33,7 +36,12 @@ export function EditorShell({
 
       <section className="workbench" aria-label="照片编辑工作区">
         <ChatPane enabled={chatEnabled} />
-        <CanvasPane client={client} />
+        <CanvasPane
+          client={client}
+          analysis={editor.analysis ?? undefined}
+          factor={editor.factor}
+          onImagePathChange={editorStore.setImagePath}
+        />
         <PanelPane />
       </section>
 

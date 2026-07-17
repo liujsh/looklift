@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
 import type { LookliftClient } from "../api/client";
-import type { Analysis } from "../api/types";
+import type { JsonObject } from "../api/types";
 import { ComparisonView } from "../features/canvas/ComparisonView";
 import {
   canvasErrorMessage,
@@ -16,11 +16,17 @@ type PreviewUrls = { before: string; after: string };
 
 type CanvasPaneProps = {
   client?: LookliftClient;
-  analysis?: Analysis;
+  analysis?: JsonObject;
   factor?: number;
+  onImagePathChange?(path: string): void;
 };
 
-export function CanvasPane({ client, analysis = {}, factor = 1 }: CanvasPaneProps) {
+export function CanvasPane({
+  client,
+  analysis = {},
+  factor = 1,
+  onImagePathChange,
+}: CanvasPaneProps) {
   const paneRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const urlsRef = useRef<PreviewUrls | null>(null);
@@ -42,6 +48,7 @@ export function CanvasPane({ client, analysis = {}, factor = 1 }: CanvasPaneProp
 
   const loadPath = useCallback(async (path: string) => {
     if (!client) return;
+    onImagePathChange?.(path);
     const requestId = ++requestRef.current;
     setPhase("loading");
     setError(null);
@@ -63,7 +70,7 @@ export function CanvasPane({ client, analysis = {}, factor = 1 }: CanvasPaneProp
       setError(canvasErrorMessage(reason));
       setPhase("error");
     }
-  }, [analysis, client, factor, replaceUrls]);
+  }, [analysis, client, factor, onImagePathChange, replaceUrls]);
 
   const uploadFile = useCallback(async (file: File) => {
     if (!client) return;
