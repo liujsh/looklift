@@ -3,6 +3,9 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
+
+from looklift import provider_http
 from looklift import providers
 
 
@@ -51,7 +54,6 @@ def test_get_provider_none_available(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "none.toml")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setattr(providers.shutil, "which", lambda _: None)
-    import pytest
     with pytest.raises(RuntimeError):
         providers.get_provider("auto")
 
@@ -146,3 +148,84 @@ def test_api_provider_no_config_key_falls_back_to_sdk_default(monkeypatch, tmp_p
     p.complete("SYS", [{"type": "text", "text": "hi"}], {"type": "object"})
 
     assert captured["client_kwargs"] == {"api_key": None, "base_url": None}
+
+
+def test_openai_compat_wires_vision_request_and_extracts_json(monkeypatch, tmp_path):
+    from PIL import Image
+
+    image_path = tmp_path / "a.png"
+    Image.new("RGB", (4, 4), (10, 20, 30)).save(image_path)
+    captured = {}
+
+    def fake_post(url, payload, *, headers, timeout):
+        captured.update(url=url, payload=payload, headers=headers, timeout=timeout)
+        return {"choices": [{"message": {"content": '```json\n{"summary":"ok"}\n```'}}]}
+
+    monkeypatch.setattr(provider_http, "post_json", fake_post)
+    provider = providers.OpenAICompatProvider(
+        "https://proxy.example/v1/", "sk-test", "vision-model", timeout=17
+    )
+    result = provider.complete(
+        "SYS",
+        [
+            {"type": "text", "text": "任务"},
+            {"type": "image", "path": image_path, "label": "成片"},
+        ],
+        {"type": "object"},
+    )
+
+    assert result == {"summary": "ok"}
+    assert captured["url"] == "https://proxy.example/v1/chat/completions"
+    assert captured["headers"]["Authorization"] == "Bearer sk-test"
+    assert captured["timeout"] == 17
+    assert captured["payload"]["model"] == "vision-model"
+    assert captured["payload"]["max_tokens"] == 16000
+    assert captured["payload"]["messages"][0] == {"role": "system", "content": "SYS"}
+    content = captured["payload"]["messages"][1]["content"]
+    assert content[0] == {"type": "text", "text": "任务"}
+    assert content[1] == {"type": "text", "text": "这是成片:"}
+    assert content[2]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+    assert "JSON Schema" in content[-1]["text"]
+
+
+@pytest.mark.parametrize(
+    ("status", "message"),
+    [(401, "api_key"), (404, "模型.*base_url"), (429, "请求被拒绝")],
+)
+def test_openai_compat_maps_http_errors_to_chinese(monkeypatch, status, message):
+    def fail(*args, **kwargs):
+        raise provider_http.HTTPStatusError(status, "bad")
+
+    monkeypatch.setattr(provider_http, "post_json", fail)
+    provider = providers.OpenAICompatProvider("https://proxy.example/v1", "bad", "model")
+    with pytest.raises(RuntimeError, match=message):
+        provider.complete("SYS", [{"type": "text", "text": "任务"}], {})
+
+
+def test_openai_compat_maps_connection_error(monkeypatch):
+    def fail(*args, **kwargs):
+        raise provider_http.HTTPConnectionError("refused")
+
+    monkeypatch.setattr(provider_http, "post_json", fail)
+    provider = providers.OpenAICompatProvider("https://proxy.example/v1", "key", "model")
+    with pytest.raises(RuntimeError, match="连接失败.*base_url"):
+        provider.complete("SYS", [{"type": "text", "text": "任务"}], {})
+
+
+def test_get_provider_builds_openai_compat_from_config(monkeypatch, tmp_path):
+    from looklift import config
+
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text(
+        'provider = "openai_compat"\nbase_url = "https://proxy.example/v1"\n'
+        'api_key = "sk-cfg"\nmodel = "vision"\ntimeout = 33\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config, "CONFIG_PATH", cfg_path)
+
+    provider = providers.get_provider("auto")
+    assert isinstance(provider, providers.OpenAICompatProvider)
+    assert provider.base_url == "https://proxy.example/v1"
+    assert provider.api_key == "sk-cfg"
+    assert provider.model == "vision"
+    assert provider.timeout == 33

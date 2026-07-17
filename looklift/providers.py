@@ -15,7 +15,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Protocol
 
-from . import config
+from . import config, provider_http
 
 MODEL = "claude-opus-4-8"
 MAX_EDGE = 1568  # 控制图片 token 消耗;分析色调影调无需原始分辨率
@@ -112,6 +112,75 @@ class AnthropicProvider:
         return json.loads(next(b.text for b in response.content if b.type == "text"))
 
 
+class OpenAICompatProvider:
+    """标准 OpenAI Chat Completions vision 兼容后端。"""
+
+    name = "openai_compat"
+
+    def __init__(self, base_url: str, api_key: str, model: str, timeout: int = 120):
+        self.base_url = base_url
+        self.api_key = api_key
+        self.model = model
+        self.timeout = timeout
+
+    def complete(self, system: str, blocks: list[dict], schema: dict) -> dict:
+        if not self.base_url or not self.model:
+            raise RuntimeError("OpenAI-compatible 后端需要配置 base_url 和 model。")
+
+        content: list[dict[str, Any]] = []
+        for block in blocks:
+            if block["type"] == "text":
+                content.append({"type": "text", "text": block["text"]})
+            else:
+                data, media_type = _encode_image(block["path"])
+                content.append({"type": "text", "text": f"这是{block['label']}:"})
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{media_type};base64,{data}"},
+                })
+        content.append({
+            "type": "text",
+            "text": (
+                "最终回答必须且只能是一个 JSON 对象（不要 markdown 代码块），"
+                "严格符合以下 JSON Schema:\n" + json.dumps(schema, ensure_ascii=False)
+            ),
+        })
+        payload = {
+            "model": self.model,
+            "max_tokens": 16000,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": content},
+            ],
+        }
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        try:
+            response = provider_http.post_json(
+                self.base_url.rstrip("/") + "/chat/completions",
+                payload,
+                headers=headers,
+                timeout=self.timeout,
+            )
+        except provider_http.HTTPStatusError as exc:
+            if exc.status in (401, 403):
+                raise RuntimeError("OpenAI-compatible 鉴权失败：api_key 无效，请检查配置。") from None
+            if exc.status == 404:
+                raise RuntimeError("OpenAI-compatible 未找到模型或接口，请检查 model 与 base_url。") from None
+            if exc.status >= 500:
+                raise RuntimeError("OpenAI-compatible 服务暂时不可用，重试仍失败。") from None
+            raise RuntimeError(f"OpenAI-compatible 请求被拒绝（HTTP {exc.status}），请检查配置。") from None
+        except provider_http.HTTPConnectionError:
+            raise RuntimeError("OpenAI-compatible 连接失败，请检查网络与 base_url。") from None
+
+        try:
+            text = response["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            raise RuntimeError("OpenAI-compatible 返回格式异常：缺少模型文本。") from None
+        if not isinstance(text, str):
+            raise RuntimeError("OpenAI-compatible 返回格式异常：模型文本不是字符串。")
+        return _extract_json(text)
+
+
 def _encode_image(path: str | Path) -> tuple[str, str]:
     """读取图片,必要时缩小,返回 (base64, media_type)。"""
     from PIL import Image
@@ -135,12 +204,13 @@ def _image_block(path: str | Path) -> dict[str, Any]:
 
 
 def get_provider(backend: str = "auto") -> VisionProvider:
+    cfg = config.load_config()
     if backend == "auto":
-        configured = config.load_config()["provider"]
-        if configured in ("cli", "api"):
+        configured = cfg["provider"]
+        if configured in ("cli", "api", "openai_compat", "ollama"):
             backend = configured
     if backend == "auto":
-        if os.environ.get("ANTHROPIC_API_KEY") or config.load_config()["api_key"]:
+        if os.environ.get("ANTHROPIC_API_KEY") or cfg["api_key"]:
             backend = "api"
         elif shutil.which("claude"):
             backend = "cli"
@@ -148,4 +218,15 @@ def get_provider(backend: str = "auto") -> VisionProvider:
             raise RuntimeError(
                 "未找到可用后端:请设置 ANTHROPIC_API_KEY,或安装 Claude Code CLI(claude 命令)。"
             )
-    return AnthropicProvider() if backend == "api" else ClaudeCliProvider()
+    if backend == "cli":
+        return ClaudeCliProvider()
+    if backend == "api":
+        return AnthropicProvider()
+    if backend == "openai_compat":
+        return OpenAICompatProvider(
+            cfg["base_url"],
+            cfg["api_key"],
+            cfg["model"],
+            config.provider_timeout("openai_compat", cfg["timeout"]),
+        )
+    raise RuntimeError(f"未知或尚未实现的 provider：{backend}")
