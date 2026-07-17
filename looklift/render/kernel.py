@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import NamedTuple
 
 import numpy as np
+from PIL import Image
 
 from ._numba import HAS_NUMBA as HAS_NUMBA
 from ._numba import NumbaError as NumbaError
@@ -85,6 +86,103 @@ def probe_render_params(params):
     """触发并验证固定 record 可进入 nopython。"""
 
     return params.enable
+
+
+def _gaussian_kernel_1d(radius: float) -> np.ndarray:
+    """生成归一化一维高斯核。"""
+
+    sigma = max(radius / 3.0, 0.5)
+    extent = int(radius) + 1
+    positions = np.arange(-extent, extent + 1, dtype=np.float32)
+    weights = np.exp(-(positions**2) / (2.0 * sigma**2))
+    return (weights / weights.sum()).astype(np.float32)
+
+
+@njit(inline="always")
+def _reflect_index(index, size):
+    if size <= 1:
+        return 0
+    while index < 0 or index >= size:
+        if index < 0:
+            index = -index
+        if index >= size:
+            index = 2 * size - index - 2
+    return index
+
+
+@njit(parallel=True, fastmath=True, cache=True)
+def _blur_horizontal(luma, weights):
+    height, width = luma.shape
+    extent = weights.size // 2
+    output = np.empty_like(luma)
+    for y in prange(height):
+        for x in range(width):
+            total = 0.0
+            for offset in range(-extent, extent + 1):
+                source_x = _reflect_index(x + offset, width)
+                total += luma[y, source_x] * weights[offset + extent]
+            output[y, x] = total
+    return output
+
+
+@njit(parallel=True, fastmath=True, cache=True)
+def _blur_vertical(luma, weights):
+    height, width = luma.shape
+    extent = weights.size // 2
+    output = np.empty_like(luma)
+    for y in prange(height):
+        for x in range(width):
+            total = 0.0
+            for offset in range(-extent, extent + 1):
+                source_y = _reflect_index(y + offset, height)
+                total += luma[source_y, x] * weights[offset + extent]
+            output[y, x] = total
+    return output
+
+
+def gaussian_blur_separable(luma: np.ndarray, radius: float) -> np.ndarray:
+    """反射边界的可分离高斯模糊；numba 缺失时同函数退化为 Python 循环。"""
+
+    source = np.ascontiguousarray(luma, dtype=np.float32)
+    if radius <= 0:
+        return source.copy()
+    weights = _gaussian_kernel_1d(radius)
+    return _blur_vertical(_blur_horizontal(source, weights), weights)
+
+
+def blur_lowres_upsample(luma: np.ndarray, radius: float) -> np.ndarray:
+    """在 1/4 分辨率估算大半径模糊，再双线性恢复原尺寸。"""
+
+    source = np.ascontiguousarray(luma, dtype=np.float32)
+    height, width = source.shape
+    low_size = (max(1, width // 4), max(1, height // 4))
+    low = np.asarray(
+        Image.fromarray(source, mode="F").resize(low_size, Image.Resampling.BILINEAR),
+        dtype=np.float32,
+    )
+    blurred = gaussian_blur_separable(low, max(radius / 4.0, 0.5))
+    return np.asarray(
+        Image.fromarray(blurred, mode="F").resize(
+            (width, height), Image.Resampling.BILINEAR
+        ),
+        dtype=np.float32,
+    )
+
+
+def noise_field(shape: tuple[int, int], seed: int) -> np.ndarray:
+    """生成可复现、均值约零的 float32 高斯噪声场。"""
+
+    return np.random.default_rng(seed).standard_normal(shape).astype(np.float32)
+
+
+def build_aux(luma: np.ndarray, seed: int = 1):
+    """集中构建 S2 中频/大半径亮度与 grain 噪声辅助场。"""
+
+    return (
+        gaussian_blur_separable(luma, 6.0),
+        blur_lowres_upsample(luma, 40.0),
+        noise_field(luma.shape, seed),
+    )
 
 
 @njit(parallel=True, fastmath=True, cache=True)

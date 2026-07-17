@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 import numpy as np
 from PIL import Image
 
@@ -10,6 +12,14 @@ from .base import ResolvedParams
 from .operators import REGISTRY
 
 _PROXY_LONG_EDGE = 2048
+
+
+class AuxBuffers(NamedTuple):
+    """S2 预处理结果；可跨 pointwise 滑杆变化复用。"""
+
+    blur_mid: np.ndarray
+    blur_large: np.ndarray
+    noise: np.ndarray
 
 
 def resolve_params(analysis: dict) -> ResolvedParams:
@@ -178,3 +188,24 @@ def render_full(image: Image.Image, analysis: dict) -> Image.Image:
     """保持原尺寸的全分辨率融合入口。"""
 
     return _to_image(render_fused(_to_arr(image), analysis))
+
+
+def prepare_aux(arr_srgb: np.ndarray, analysis: dict) -> AuxBuffers:
+    """生成一次 S2 辅助缓冲；analysis 预留给后续空间参数缓存键。"""
+
+    del analysis
+    source = np.ascontiguousarray(arr_srgb, dtype=np.float32)
+    luma = (
+        source[..., 0] * 0.2126
+        + source[..., 1] * 0.7152
+        + source[..., 2] * 0.0722
+    ).astype(np.float32)
+    return AuxBuffers(*kernel.build_aux(luma))
+
+
+def render_with_aux(
+    arr_srgb: np.ndarray, analysis: dict, aux: AuxBuffers
+) -> np.ndarray:
+    """复用已准备 S2，仅重跑融合内核。"""
+
+    return render_fused(arr_srgb, analysis, aux)
