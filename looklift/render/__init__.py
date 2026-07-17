@@ -22,9 +22,15 @@ from ._legacy import (  # noqa: F401  迁移期兼容 re-export
 
 
 def _apply_color_ops(arr: np.ndarray, analysis: dict) -> np.ndarray:
-    """迁移期兼容入口，颜色处理统一转入分阶段 NumPy 管线。"""
+    """LUT 兼容入口：完整光域往返，仅包含位置无关色彩子集。"""
 
-    return pipeline.render_fused(arr, analysis)
+    color_analysis = dict(analysis)
+    basic = dict(analysis.get("basic", {}))
+    for name in ("texture", "clarity", "dehaze"):
+        basic[name] = 0
+    color_analysis["basic"] = basic
+    color_analysis["effects"] = {"vignette_amount": 0, "grain_amount": 0}
+    return pipeline.render_arr(arr, color_analysis)
 
 
 def _apply_spatial_ops(arr: np.ndarray, analysis: dict) -> np.ndarray:
