@@ -44,7 +44,6 @@ class Hsl:
             hsv[..., 0] = (hsv[..., 0] + mask * hue * 0.3) % 360
             hsv[..., 1] *= 1 + mask * saturation / 100 * 0.5
             hsv[..., 2] *= 1 + mask * luminance / 100 * 0.3
-        hsv[..., 1] = np.clip(hsv[..., 1], 0, 1)
         return _hsv_to_rgb(hsv)
 
 

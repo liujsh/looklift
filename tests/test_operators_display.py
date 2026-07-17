@@ -45,6 +45,24 @@ def test_display_pipeline_preserves_legacy_magenta_center(sample_analysis):
     np.testing.assert_allclose(actual, expected, atol=1e-7)
 
 
+def test_hsl_and_negative_saturation_preserve_legacy_overrange_hsv(sample_analysis):
+    analysis = _zero(sample_analysis)
+    analysis["hsl"] = [
+        {"color": "red", "hue": 0, "saturation": 100, "luminance": 0}
+    ]
+    analysis["basic"]["saturation"] = -50
+    arr = np.asarray(
+        [
+            [[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]],
+            [[1.0, 0.2, 0.2], [0.0, 1.0, 1.0]],
+        ],
+        dtype=np.float32,
+    )
+    expected = _legacy._apply_color_ops(arr.copy(), analysis)
+    actual = pipeline.apply_color_ops_numpy(arr.copy(), analysis)
+    assert np.max(np.abs(actual - expected)) <= 1.0 / 255
+
+
 def test_exposure_operator_direction_and_zero(sample_analysis):
     from looklift.render.operators.basic import Exposure
 
@@ -200,6 +218,21 @@ def test_hsl_operator_directions_and_zero(sample_analysis):
     assert op.apply_numpy(red, op.resolve(analysis)).max() < red.max()
 
 
+def test_hsl_nonzero_hue_follows_direction_and_legacy(sample_analysis):
+    arr = np.asarray([[[1.0, 0.2, 0.2]]], dtype=np.float32)
+    outputs = {}
+    for hue in (-30, 30):
+        analysis = _zero(sample_analysis)
+        analysis["hsl"] = [
+            {"color": "red", "hue": hue, "saturation": 0, "luminance": 0}
+        ]
+        expected = _legacy._apply_color_ops(arr.copy(), analysis)
+        actual = pipeline.apply_color_ops_numpy(arr.copy(), analysis)
+        assert np.max(np.abs(actual - expected)) <= 1.0 / 255
+        outputs[hue] = _legacy._rgb_to_hsv(actual)[0, 0, 0]
+    assert outputs[30] < 180 < outputs[-30]
+
+
 def test_saturation_operator_directions_and_zero(sample_analysis):
     from looklift.render.operators.color import Saturation
 
@@ -233,6 +266,35 @@ def test_color_grading_operator_directions_zero_and_contract_only(sample_analysi
     analysis["color_grading"]["balance"] = 100
     changed = op.apply_numpy(_gray(), op.resolve(analysis))
     np.testing.assert_array_equal(changed, baseline)
+
+
+def test_color_grading_nonzero_tint_changes_pixels_and_matches_legacy(sample_analysis):
+    analysis = _zero(sample_analysis)
+    analysis["color_grading"]["global_"] = {
+        "hue": 210,
+        "saturation": 50,
+        "luminance": 0,
+    }
+    arr = _gray()
+    expected = _legacy._apply_color_ops(arr.copy(), analysis)
+    actual = pipeline.apply_color_ops_numpy(arr.copy(), analysis)
+    assert not np.array_equal(actual, arr)
+    assert np.max(np.abs(actual - expected)) <= 1.0 / 255
+
+
+def test_zero_analysis_pipeline_is_exact_float32_identity_without_mutation(
+    sample_analysis,
+):
+    analysis = _zero(sample_analysis)
+    arr = np.asarray(
+        [[[0.0, 0.25, 1.0], [1.0, 0.5, 0.0]]],
+        dtype=np.float32,
+    )
+    before = arr.copy()
+    actual = pipeline.apply_color_ops_numpy(arr, analysis)
+    np.testing.assert_array_equal(actual, before)
+    np.testing.assert_array_equal(arr, before)
+    assert actual.dtype == np.float32
 
 
 def test_registry_order_domains_and_resolved_leaf_contract(sample_analysis):
