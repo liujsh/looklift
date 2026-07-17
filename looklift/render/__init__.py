@@ -42,11 +42,7 @@ def _apply_spatial_ops(arr: np.ndarray, analysis: dict) -> np.ndarray:
 def render(image: Image.Image, analysis: dict) -> Image.Image:
     """按冻结签名渲染图像，空间操作继续复用旧参考实现。"""
 
-    if image.mode != "RGB":
-        image = image.convert("RGB")
-    arr = np.asarray(image, dtype=np.float32) / 255.0
-    arr = pipeline.render_complete(arr, analysis)
-    return Image.fromarray((arr * 255 + 0.5).astype(np.uint8), "RGB")
+    return pipeline.render(image, analysis)
 
 
 __all__ = ["render", "score"]

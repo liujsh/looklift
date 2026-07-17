@@ -267,3 +267,19 @@ def render_complete(arr_srgb: np.ndarray, analysis: dict) -> np.ndarray:
     aux = prepare_aux(arr_srgb, analysis) if needs_aux else None
     arr = render_fused(arr_srgb, analysis, aux)
     return apply_output_effects(arr, resolved, aux)
+
+
+def render(image: Image.Image, analysis: dict) -> Image.Image:
+    """生产入口；返回图像默认携带 sRGB ICC。"""
+
+    output = _to_image(render_complete(_to_arr(image), analysis))
+    output.info["icc_profile"] = cs.srgb_icc_bytes()
+    return output
+
+
+def export(image: Image.Image, analysis: dict, out_path) -> object:
+    """保存带 sRGB ICC 的成片；本期仅支持 sRGB。"""
+
+    output = render(image, analysis)
+    output.save(out_path, icc_profile=output.info["icc_profile"])
+    return out_path

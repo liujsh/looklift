@@ -454,7 +454,12 @@ def _render_preview(image_path: Path, analysis: dict, factor: float) -> bytes:
     scaled = intensity.scale_analysis(analysis, factor)
     rendered = render.render(img, scaled)
     buf = io.BytesIO()
-    rendered.save(buf, format="JPEG", quality=_PREVIEW_JPEG_QUALITY)
+    rendered.save(
+        buf,
+        format="JPEG",
+        quality=_PREVIEW_JPEG_QUALITY,
+        icc_profile=rendered.info["icc_profile"],
+    )
     return buf.getvalue()
 
 

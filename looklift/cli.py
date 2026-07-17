@@ -210,7 +210,8 @@ def cmd_preview(args) -> int:
     analysis = json.loads(template.read_text(encoding="utf-8"))
     img = Image.open(args.photo)
     out = Path(args.out) if args.out else Path(args.photo).with_stem(Path(args.photo).stem + "_preview")
-    render.render(img, analysis).save(out, quality=92)
+    rendered = render.render(img, analysis)
+    rendered.save(out, quality=92, icc_profile=rendered.info["icc_profile"])
     print(f"[preview] 已生成: {out}  (本地近似渲染,方向参考,不等于 LR 效果)")
     if args.target:
         s = render.score(Image.open(out), Image.open(args.target))
