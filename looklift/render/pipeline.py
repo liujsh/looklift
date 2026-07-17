@@ -56,6 +56,7 @@ def marshal_render_params(resolved: ResolvedParams) -> kernel.RenderParams:
         vector("color_grading", 12, packed=True),
         scalar("texture"),
         scalar("clarity"),
+        scalar("dehaze"),
     )
 
 
@@ -136,10 +137,12 @@ def render_arr(arr_srgb: np.ndarray, analysis: dict, aux=None) -> np.ndarray:
             saturation_applied = True
 
     if aux is None and (
-        resolved.is_enabled("texture") or resolved.is_enabled("clarity")
+        resolved.is_enabled("texture")
+        or resolved.is_enabled("clarity")
+        or resolved.is_enabled("dehaze")
     ):
         aux = prepare_aux(arr_srgb, analysis)
-    for name in ("texture", "clarity"):
+    for name in ("texture", "clarity", "dehaze"):
         params = resolved.get(name)
         if params is not None:
             arr = operators[name].apply_numpy(arr, params, aux)
@@ -154,7 +157,9 @@ def render_fused(arr_srgb: np.ndarray, analysis: dict, aux=None) -> np.ndarray:
         return render_arr(arr_srgb, analysis, aux)
     resolved = resolve_params(analysis)
     if aux is None and (
-        resolved.is_enabled("texture") or resolved.is_enabled("clarity")
+        resolved.is_enabled("texture")
+        or resolved.is_enabled("clarity")
+        or resolved.is_enabled("dehaze")
     ):
         aux = prepare_aux(arr_srgb, analysis)
     params = marshal_render_params(resolved)

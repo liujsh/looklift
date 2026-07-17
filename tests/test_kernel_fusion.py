@@ -20,6 +20,7 @@ EXPECTED_RENDER_PARAM_LAYOUT = (
     ("color_grading", "float32", (12,)),
     ("texture", "float32", ()),
     ("clarity", "float32", ()),
+    ("dehaze", "float32", ()),
 )
 
 

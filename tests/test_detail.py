@@ -6,6 +6,8 @@ from PIL import Image
 from looklift import render
 from looklift.render import pipeline
 from looklift.render.operators.detail import Clarity, Texture
+from looklift.render._legacy import _rgb_to_hsv
+from looklift.render.operators.detail import Dehaze
 
 
 def _edge_image(size=64):
@@ -71,3 +73,43 @@ def test_texture_and_clarity_are_visible_through_public_render(sample_analysis):
     baseline = np.asarray(render.render(image, zero))
     output = np.asarray(render.render(image, detailed))
     assert np.any(output != baseline)
+
+
+def test_dehaze_positive_increases_hazy_contrast_and_saturation(sample_analysis):
+    rng = np.random.default_rng(3)
+    hazy = 0.5 + (rng.random((64, 64, 3)).astype(np.float32) - 0.5) * 0.08
+    analysis = _isolated_analysis(sample_analysis, dehaze=80)
+    output = pipeline.render_arr(hazy, analysis)
+    assert output.std() > hazy.std()
+    assert _rgb_to_hsv(output)[..., 1].mean() > _rgb_to_hsv(hazy)[..., 1].mean()
+
+
+def test_dehaze_zero_disables_and_negative_adds_haze(sample_analysis):
+    assert Dehaze().resolve({"basic": {"dehaze": 0}}) is None
+    source = _edge_image()
+    analysis = _isolated_analysis(sample_analysis, dehaze=-80)
+    output = pipeline.render_arr(source, analysis)
+    assert output.std() < source.std()
+    assert _rgb_to_hsv(output)[..., 1].mean() < _rgb_to_hsv(source)[..., 1].mean()
+
+
+def test_dehaze_fused_matches_numpy_for_shared_aux(sample_analysis):
+    source = _edge_image()
+    analysis = _isolated_analysis(sample_analysis, dehaze=65)
+    aux = pipeline.prepare_aux(source, analysis)
+    expected = pipeline.render_arr(source, analysis, aux)
+    actual = pipeline.render_fused(source, analysis, aux)
+    assert np.max(np.abs(actual - expected)) <= 1.0 / 255
+
+
+def test_dehaze_is_visible_through_public_render(sample_analysis):
+    source = _edge_image(32)
+    image = Image.fromarray((source * 255).astype(np.uint8), "RGB")
+    baseline = np.asarray(render.render(image, _isolated_analysis(sample_analysis)))
+    positive = np.asarray(
+        render.render(image, _isolated_analysis(sample_analysis, dehaze=70))
+    )
+    negative = np.asarray(
+        render.render(image, _isolated_analysis(sample_analysis, dehaze=-70))
+    )
+    assert positive.std() > baseline.std() > negative.std()

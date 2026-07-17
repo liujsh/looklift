@@ -19,7 +19,7 @@ from .operators.basic import (
     whites_blacks_px,
 )
 from .operators.color import color_grading_px, hsl_px, saturation_px
-from .operators.detail import clarity_px, texture_px
+from .operators.detail import clarity_px, dehaze_px, texture_px
 from .operators.tone import tone_curve_px
 
 
@@ -36,6 +36,7 @@ RENDER_PARAM_LAYOUT = (
     ("color_grading", "float32", (12,)),
     ("texture", "float32", ()),
     ("clarity", "float32", ()),
+    ("dehaze", "float32", ()),
 )
 
 
@@ -54,6 +55,7 @@ class RenderParams(NamedTuple):
     color_grading: np.ndarray
     texture: np.float32
     clarity: np.float32
+    dehaze: np.float32
 
 
 _EXPOSURE = OP_BITS["exposure"]
@@ -67,6 +69,7 @@ _SATURATION = OP_BITS["saturation"]
 _COLOR_GRADING = OP_BITS["color_grading"]
 _TEXTURE = OP_BITS["texture"]
 _CLARITY = OP_BITS["clarity"]
+_DEHAZE = OP_BITS["dehaze"]
 
 
 @njit(inline="always")
@@ -263,6 +266,8 @@ def fused(arr_srgb, params, aux=None):
             r, g, b = texture_px(r, g, b, params.texture, blur_mid_px[index])
         if aux is not None and params.enable & _CLARITY:
             r, g, b = clarity_px(r, g, b, params.clarity, blur_large_px[index])
+        if aux is not None and params.enable & _DEHAZE:
+            r, g, b = dehaze_px(r, g, b, params.dehaze, blur_mid_px[index])
 
         output_px[index, 0] = _clip01(r)
         output_px[index, 1] = _clip01(g)
