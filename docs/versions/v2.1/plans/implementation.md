@@ -110,11 +110,11 @@ class AiProxy:
 def prepare_ai_proxy(source: Path, *, include_metadata: bool) -> Iterator[AiProxy]: ...
 ```
 
-- [ ] 先写带 EXIF 的 JPEG 测试，断言代理图最长边 ≤2048、RGB JPEG、重新编码且 `getexif()` 为空。
-- [ ] 测试安全字段仅含 ISO、快门、光圈、焦距、曝光补偿、白平衡和色彩空间；GPS、机身序列号、作者、版权和自由文本永不返回。
-- [ ] 测试关闭元数据后返回空对象；临时代理在上下文退出后删除。
-- [ ] 实现 Pillow 读取、缩放和无 EXIF 重编码；provider 仍只接收代理路径，不能自己退回原图路径。
-- [ ] 给 provider 图像编码补回归测试，证明二次缩放仍满足 ≤2048 且不会重新附加元数据。
+- [x] 先写带 EXIF 的 JPEG 测试，断言代理图最长边 ≤2048、RGB JPEG、重新编码且 `getexif()` 为空。
+- [x] 测试安全字段仅含 ISO、快门、光圈、焦距、曝光补偿、白平衡和色彩空间；GPS、机身序列号、作者、版权和自由文本永不返回。
+- [x] 测试关闭元数据后返回空对象；临时代理在上下文退出后删除。
+- [x] 实现 Pillow 读取、缩放和无 EXIF 重编码；provider 仍只接收代理路径，不能自己退回原图路径。
+- [x] 给 provider 图像编码补回归测试，证明二次缩放仍满足 ≤2048 且不会重新附加元数据。
 
 Run: `.venv\Scripts\python.exe -m pytest tests/test_ai_proxy.py tests/test_providers.py -q`
 
