@@ -33,4 +33,15 @@ describe("EditorShell", () => {
     expect(css).toMatch(/\.workbench\s*\{[^}]*min-width:\s*0[^}]*min-height:\s*0[^}]*overflow:\s*hidden/s);
     expect(css).toMatch(/\.contact-sheet\s*\{[^}]*overflow-x:\s*auto/s);
   });
+
+  it("聊天隐藏时画布与控制面板仍固定在主列和右列", () => {
+    const cssPath = fileURLToPath(new URL("../theme/layout.css", import.meta.url));
+    const css = readFileSync(cssPath, "utf8");
+
+    expect(css).toMatch(/\.workbench\s*\{[^}]*grid-template-areas:\s*"chat canvas controls"/s);
+    expect(css).toMatch(/\.chat-pane\s*\{[^}]*grid-area:\s*chat/s);
+    expect(css).toMatch(/\.canvas-pane\s*\{[^}]*grid-area:\s*canvas/s);
+    expect(css).toMatch(/\.panel-pane\s*\{[^}]*grid-area:\s*controls/s);
+    expect(css).toMatch(/@media\s*\(max-width:\s*820px\)[\s\S]*?\.workbench\s*\{[^}]*grid-template-areas:\s*"canvas controls"/s);
+  });
 });

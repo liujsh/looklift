@@ -93,6 +93,11 @@
   `analysis` 与 `factor`，任一变化都会禁用旧风格导出，避免预览与导出强度不一致。
 - PR 前自动验证：Python `398 passed, 1 skipped`；前端 Vitest `62 passed`；TypeScript/Vite
   production build、Rust `cargo test`、本分支改动 Python 文件的 Ruff 检查均通过。
+- M2 开始验收时发现聊天 feature flag 关闭后，隐藏的 `ChatPane` 退出 CSS Grid 自动排布，导致
+  `CanvasPane` 落入 0px 预留列，界面只剩参数面板且看不到拖图入口。改用显式命名区域
+  `chat / canvas / controls`，820px 断点固定为 `canvas / controls`；作者已在 `tauri dev` 中确认
+  画布、选择照片和真实拖图恢复。新增布局回归后前端 `63 passed`，最终安装包已重新生成；
+  M1–M8 仍须用该新安装包正式执行，v2.1 对话栏不属于 v2.0-B 验收范围。
 
 ## v0.4 开发中踩的坑(已解决)
 
