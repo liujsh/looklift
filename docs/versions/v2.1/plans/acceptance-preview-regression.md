@@ -1,7 +1,5 @@
 # v2.1 Acceptance Preview Regression Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Repository rules prohibit subagent execution.
-
 **Goal:** Restore responsive template/manual/AI previews, gate candidate decisions on the matching rendered frame, and make each AI refine click perform exactly one bounded round.
 
 **Architecture:** Keep the Tauri drag/drop subscription stable for the lifetime of a Canvas/client and route events through the latest `loadPath` callback held in a ref. Treat every display-analysis mutation as a render invalidation, then let the Canvas mark only the completed request ready. Keep refinement count in the workflow so each explicit click advances one round and concurrent clicks are rejected.
@@ -15,6 +13,7 @@
 - Never commit a candidate until its current preview has status `ready`.
 - Keep a failed candidate available for discard/retry; the formal version must not change.
 - One “AI 精修” click performs one provider call; at most two extra refinement rounds follow the initial request.
+- 迭代中只运行受影响的 Vitest 文件与 `pnpm exec tsc --noEmit`；全量前端回归只在 Task 4 收口时运行一次。
 - Do not add backend API or database schema changes.
 
 ---
@@ -46,7 +45,7 @@ expect(client.preview).toHaveBeenLastCalledWith(
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `pnpm vitest run src/components/CanvasPane.lifecycle.test.tsx`
+Run: `pnpm exec vitest run src/components/CanvasPane.lifecycle.test.tsx`
 
 Expected: FAIL because changing `analysis` rebuilds `loadPath`, which tears down and recreates the native listener.
 
@@ -77,7 +76,9 @@ useEffect(() => {
 
 - [ ] **Step 4: Run lifecycle and existing Canvas tests and verify GREEN**
 
-Run: `pnpm vitest run src/components/CanvasPane.lifecycle.test.tsx src/features/canvas`
+Run: `pnpm exec vitest run src/components/CanvasPane.lifecycle.test.tsx src/features/canvas/canvasModel.test.ts src/features/canvas/ComparisonView.test.tsx`
+
+Run: `pnpm exec tsc --noEmit`
 
 Expected: all selected tests PASS; no repeated listener registration on prop rerender.
 
@@ -116,7 +117,7 @@ expect(html).toContain("正在渲染候选预览");
 
 - [ ] **Step 2: Run focused tests and verify RED**
 
-Run: `pnpm vitest run src/store/editorStore.test.ts src/components/ChatPane.test.tsx src/features/sessions/sessionCoordinator.test.ts`
+Run: `pnpm exec vitest run src/store/editorStore.test.ts src/components/ChatPane.test.tsx src/features/sessions/sessionCoordinator.test.ts`
 
 Expected: FAIL because mutations retain stale `ready`, render errors clear pending, and ChatPane has no render-status gate.
 
@@ -134,7 +135,9 @@ Apply it to display-changing mutations and remove the line that clears pending o
 
 - [ ] **Step 4: Run focused tests and verify GREEN**
 
-Run: `pnpm vitest run src/store/editorStore.test.ts src/components/ChatPane.test.tsx src/features/sessions/sessionCoordinator.test.ts`
+Run: `pnpm exec vitest run src/store/editorStore.test.ts src/components/ChatPane.test.tsx src/features/sessions/sessionCoordinator.test.ts`
+
+Run: `pnpm exec tsc --noEmit`
 
 Expected: all selected tests PASS.
 
@@ -173,7 +176,7 @@ expect(chatStep).toHaveBeenCalledTimes(3);
 
 - [ ] **Step 2: Run focused tests and verify RED**
 
-Run: `pnpm vitest run src/features/chat/chatWorkflow.test.ts src/components/ChatPane.test.tsx`
+Run: `pnpm exec vitest run src/features/chat/chatWorkflow.test.ts src/components/ChatPane.test.tsx`
 
 Expected: FAIL because one `refine()` currently loops over two rounds.
 
@@ -181,15 +184,15 @@ Expected: FAIL because one `refine()` currently loops over two rounds.
 
 Change `send` to call `runStep(message, 0)`. In `refine`, reject while `phase === "requesting"`, stop without a provider call when `round >= 2`, otherwise call `runStep` once with `round + 1`. Preserve `done`, `no_changes`, cancellation, and pending candidate behavior. Update ChatPane progress copy to distinguish the initial request from `AI 精修第 N/2 轮`.
 
-- [ ] **Step 4: Run focused and full frontend verification**
+- [ ] **Step 4: Run focused frontend verification**
 
-Run: `pnpm vitest run src/features/chat/chatWorkflow.test.ts src/components/ChatPane.test.tsx`
+Run: `pnpm exec vitest run src/features/chat/chatWorkflow.test.ts src/components/ChatPane.test.tsx`
 
 Expected: focused tests PASS.
 
-Run: `pnpm vitest run; pnpm exec tsc --noEmit; pnpm build`
+Run: `pnpm exec tsc --noEmit`
 
-Expected: all frontend tests PASS, TypeScript passes, and Vite production build succeeds.
+Expected: focused tests and TypeScript pass；本任务未改依赖、Vite 配置或静态资源，不运行 production build。
 
 - [ ] **Step 5: Commit Task 3**
 
@@ -198,7 +201,7 @@ git add frontend/src/features/chat/chatWorkflow.ts frontend/src/features/chat/ch
 git commit -m "fix(chat): 单次触发一轮 AI 精修"
 ```
 
-### Task 4: Release-side verification and acceptance handoff
+### Task 4: Frontend closure verification and acceptance handoff
 
 **Files:**
 - Modify: `docs/versions/v2.1/tasks.md`
@@ -208,19 +211,11 @@ git commit -m "fix(chat): 单次触发一轮 AI 精修"
 - Consumes: completed frontend fixes and the existing sidecar staging workflow.
 - Produces: an acceptance-ready v2.1 dev build and documented manual checks.
 
-- [ ] **Step 1: Run repository regression checks**
+- [ ] **Step 1: Run the single frontend closure regression**
 
-Run: `.venv\Scripts\python.exe -m pytest -q`
+Run: `pnpm test && pnpm build`
 
-Expected: Python suite passes with only the existing optional skip.
-
-Run: `.venv\Scripts\python.exe -m ruff check looklift tests`
-
-Expected: PASS.
-
-Run: `cargo check --manifest-path frontend/src-tauri/Cargo.toml`
-
-Expected: PASS.
+Expected: all frontend tests pass，且 `build` 内含的 TypeScript 与 Vite production build 成功；本计划只改前端，不运行 Python、Ruff 或 Rust 全量检查。
 
 - [ ] **Step 2: Update acceptance notes without pre-checking human-only results**
 

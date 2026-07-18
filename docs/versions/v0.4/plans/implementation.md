@@ -1,6 +1,5 @@
 # looklift v0.4「GUI alpha」实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development.
 > 本计划有意比 v0.3 计划更精简:版本三文档(`docs/versions/v0.4/`)已含完整技术细节
 > (API 路由表、强度缩放字段表、五个设计决策、逐任务验收),实现者**必须先读**
 > 任务简报指定的 spec 章节,那里的表格与决策文本是 binding 需求,本计划只定
@@ -20,7 +19,7 @@
 - api.py 只做「HTTP 参数→核心函数→JSON」粘合,禁止业务逻辑
 - 中文界面文案;错误响应统一 JSON 格式 `{"error": "..."}`
 - 作者 binding:层次清晰、单文件职责单一、不堆代码山(static/js/app.js 若超 ~400 行需按面板拆文件)
-- 每任务 `pytest -q` 全绿再提交;pywebview 不作为测试依赖(测试环境不装也全绿)
+- 迭代中只运行当前任务涉及的 pytest 文件；全量套件仅在 GUI-T11 收口时运行一次；pywebview 不作为测试依赖
 
 ---
 
@@ -29,7 +28,7 @@
 **Files:** pyproject.toml(optional-dependencies gui、package-data);looklift/gui/{__init__,app,server,api,tasks}.py 占位;looklift/gui/static/{index.html,css/app.css,js/app.js,vendor/claude/{tokens.css,components.css}}
 **Interfaces:** 包可 import;tokens.css 逐字复制自 assets/design-system/claude/tokens.css;components.css 从 components.html `<style>` 摘出按钮/卡片/表单/徽标配方(注明来源注释)
 **Tests:** `import looklift.gui` 冒烟;package-data 声明存在性(读 pyproject 断言)
-**验收:** `pip install -e ".[gui]"` 成功(报告中给出输出);全量 pytest 绿
+**验收:** `pip install -e ".[gui]"` 成功（本步涉及打包依赖）；运行 GUI import 与 package-data 相关测试
 
 ### GUI-T2 config.save_config + intensity.scale_analysis(spec T2+T3)
 
@@ -84,7 +83,7 @@
 
 ### GUI-T11 文档收尾(spec T16)
 
-README「GUI 使用」节;`docs/history/legacy-tasks.md` v0.4 记录(保留人工验收清单为未勾选);pyproject version 0.4.0 + `looklift/__init__.py` 同步(v0.3 教训);`docs/product/architecture.md` 回填 GUI 架构要点(§8 v0.4 行改指实况章节);`docs/history/legacy-spec-process.md` 待决清单中 v0.4 已定项划掉并注明结论;CI 不需改动(pywebview 非测试依赖)。全量 pytest 绿。
+README「GUI 使用」节;`docs/history/legacy-tasks.md` v0.4 记录(保留人工验收清单为未勾选);pyproject version 0.4.0 + `looklift/__init__.py` 同步(v0.3 教训);`docs/product/architecture.md` 回填 GUI 架构要点(§8 v0.4 行改指实况章节);`docs/history/legacy-spec-process.md` 待决清单中 v0.4 已定项划掉并注明结论;CI 不需改动(pywebview 非测试依赖)。收口时运行一次 `pytest -q`。
 
 ---
 

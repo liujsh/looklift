@@ -187,7 +187,7 @@ Pillow 嵌 profile 仍产出合法带 profile 文件。(P3 色块落点验收随
 `docs/design.md` 按惯例在实现后回填本迭代架构要点(operator/线性光/融合/分阶段/ICC);
 `docs/tasks.md` 补 v2.0-A 历史记录;版本号推进;CI 绿(含 numba 编译、benchmark 软门槛)。
 
-**验收**:`pytest -q` 全绿;design.md 新增引擎重构小节;CI 三平台矩阵通过(numba/pyvips 可选依赖
+**收口验收**:`pytest -q` 仅在版本收口运行一次并全绿;design.md 新增引擎重构小节;CI 三平台矩阵通过(numba/pyvips 可选依赖
 在缺失时有兜底,不装也能跑核心测试)。
 
 ---

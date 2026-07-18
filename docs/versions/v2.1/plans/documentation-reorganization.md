@@ -1,7 +1,5 @@
 # LookLift Documentation Reorganization Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 本仓库禁止子代理，必须内联执行。
-
 **Goal:** 将所有现有文档迁入 `product/`、`versions/`、`history/`、`research/` 四个唯一分类，消除 `specs/`、根 `plans/` 和 `superpowers/` 的重复入口，并修复全部仓库内链接。
 
 **Architecture:** 迁移以 `docs/README.md` 的一对一映射为契约，内容文件只做路径移动和相对链接修复，不改写产品或版本范围。先建立目标路径并逐文件移动，再统一更新导航与引用，最后用路径清单、旧引用扫描和本地 Markdown 链接检查证明没有遗漏。

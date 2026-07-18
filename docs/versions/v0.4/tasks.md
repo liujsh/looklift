@@ -146,7 +146,7 @@ README 加"GUI 使用"小节(启动命令、`--browser` 用法、首次配置向
 惯例,在实现完成后回填本迭代的架构要点(§8 从"未来迭代设计"移到"已实现");
 CI 绿。
 
-**验收**:README/`docs/tasks.md` 更新且 `pytest -q` 全绿。
+**收口验收**:README/`docs/tasks.md` 更新，版本收口时运行一次 `pytest -q` 并全绿。
 
 ---
 

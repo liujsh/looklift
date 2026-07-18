@@ -1,7 +1,5 @@
 # looklift v0.3「像——精度闭环」实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** 实现本地近似渲染 preview + 还原度评分 + refine 自动闭环 + .cube LUT 导出,并完成 provider 抽象与配置体系(spec: `docs/versions/v0.3/spec.md`)。
 
 **Architecture:** 新增 `config.py`(配置/目录解析)、`providers.py`(VisionProvider 接口,现有 cli/api 后端迁入)、`render.py`(渲染管线+评分)、`lut.py`(cube 导出)、`autorefine.py`(闭环);`analyzer.py` 瘦身为 prompt 组装 + 调 provider;`cli.py` 加 `preview`/`export-lut` 子命令和 `refine --auto`。
@@ -14,7 +12,7 @@
 - preview/评分/LUT 假设 sRGB JPEG/PNG 输入;不承诺与 LR 渲染一致
 - 行为兼容:现有 23 个测试必须全程保持绿色;cwd 下有 `looks/` 时优先用它
 - 中文用户文案;代码注释风格与现有模块一致
-- 每个 Task 结束时 `pytest -q` 全绿再 commit
+- 迭代中只运行当前 Task 涉及的测试文件；全量套件仅在 Task 9 收口时运行一次
 
 ---
 
@@ -122,7 +120,7 @@ def looks_dir() -> Path:
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `pytest tests/test_config.py -q` → PASS;`pytest -q` 全绿
+Run: `pytest tests/test_config.py -q` → PASS
 
 - [ ] **Step 5: Commit**
 
@@ -177,7 +175,7 @@ def _looks_dir() -> Path:
 
 把 `_resolve_template`、`cmd_list`、`_emit_outputs`、`cmd_analyze` 中所有 `LOOKS_DIR` 替换为 `_looks_dir()` 调用(`mkdir(exist_ok=True)` 处改 `d = _looks_dir(); d.mkdir(parents=True, exist_ok=True)`,全局目录父级可能不存在)。报错与提示文案中的 `looks/` 改为动态 `f"{_looks_dir()}"`。
 
-- [ ] **Step 4: 跑全部测试** — `pytest -q` 全绿(老测试在 tmp_path 下建过 `looks/`,cwd 优先逻辑保证兼容)
+- [ ] **Step 4: 跑相关测试** — `pytest tests/test_cli.py tests/test_config.py -q` 全绿（覆盖 cwd 优先与配置目录回退）
 
 - [ ] **Step 5: Commit**
 
@@ -432,7 +430,7 @@ def refine(current_params, attempt, target, backend="auto"):
 
 `tests/test_analyzer.py` 中 `resolve_backend`/`_extract_json` 的既有测试:`_extract_json` 在 analyzer 保留一个 `from .providers import _extract_json` 转发;若测试 monkeypatch 的对象路径失效,**修测试指向新家,不改断言语义**。
 
-- [ ] **Step 5: 跑全部测试** — `pytest -q` 全绿(23 旧 + 新增)
+- [ ] **Step 5: 跑相关测试** — `pytest tests/test_providers.py tests/test_analyzer.py -q` 全绿
 
 - [ ] **Step 6: Commit**
 
@@ -698,7 +696,7 @@ def render(image: Image.Image, analysis: dict) -> Image.Image:
 
 `_rgb_to_hsv`/`_hsv_to_rgb` 写完整向量化实现(实现时若断言精度不达标,微调系数,**方向断言不许改**)。`pyproject.toml` dependencies 加 `"numpy>=1.26"`。
 
-- [ ] **Step 4: 跑测试** — `pytest tests/test_render.py -q` → PASS;`pytest -q` 全绿
+- [ ] **Step 4: 跑测试** — `pytest tests/test_render.py -q` → PASS
 
 - [ ] **Step 5: Commit**
 
@@ -782,7 +780,7 @@ def score(rendered: Image.Image, target: Image.Image) -> float:
     return round(100 * (0.6 * hist_sim + 0.4 * color_sim), 1)
 ```
 
-- [ ] **Step 4: 跑测试** — PASS;全量绿
+- [ ] **Step 4: 跑相关测试** — `pytest tests/test_render.py -q` → PASS
 
 - [ ] **Step 5: Commit**
 
@@ -961,7 +959,7 @@ def cmd_export_lut(args) -> int:
     p.set_defaults(func=cmd_export_lut)
 ```
 
-- [ ] **Step 7: 跑全部测试** — `pytest -q` 全绿
+- [ ] **Step 7: 跑相关测试** — `pytest tests/test_lut.py tests/test_cli.py -q` 全绿
 
 - [ ] **Step 8: Commit**
 
@@ -1137,7 +1135,7 @@ def test_refine_auto_requires_source(tmp_path, sample_analysis, monkeypatch):
     assert rc == 1
 ```
 
-- [ ] **Step 6: 跑全部测试** — `pytest -q` 全绿
+- [ ] **Step 6: 跑相关测试** — `pytest tests/test_autorefine.py tests/test_cli.py -q` 全绿
 
 - [ ] **Step 7: Commit**
 

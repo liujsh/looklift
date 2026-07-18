@@ -134,7 +134,7 @@
 **Produces:** 包含最终 UI、真实引擎 sidecar、只读内置模板和可写用户库的 Windows 安装产物。
 
 - [x] 把最终前端与 T1 已验证 sidecar/cache 策略收口到 release bundle。
-- [x] 跑 Python 全量 pytest、前端 unit/component/e2e、TypeScript check、Vite build、Tauri release build 和冻结 sidecar smoke。
+- [x] 只在本任务收口运行一次全量回归：`.venv\Scripts\python.exe -m pytest -q`；前端统一运行 `pnpm test && pnpm build`（不再单列 `tsc --noEmit`）；Rust 运行 `cargo check`，随后执行 Tauri release build 和冻结 sidecar smoke。
 - [x] 自审成型 diff：单文件职责、中文 UI/错误、离线测试、密钥/路径安全、许可、孤儿进程、契约单一真相源。
 - [x] 回填已实现架构与打包/人工验收记录；不在实况文档记录未实现设计。
 - [ ] 作者集中执行 M1–M8，其中 M3/M4 完成最终视觉与布局微调。
