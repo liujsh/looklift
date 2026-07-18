@@ -141,11 +141,11 @@ def chat_step(
 
 响应包含 `analysis`、规范化 `changes`、中文 `explanation`、`limitations`、`manual_steps`、`provider`、`proxy_count` 和 `metadata_sent`；provider 原始 JSON 不直接透传前端。
 
-- [ ] 先用捕获 blocks/schema 的 mock provider 写失败测试：单轮成功、最近上下文裁剪、代理图路径、元数据开关与 provider 名称。
-- [ ] 写 provider 超时/鉴权/取消、非法 JSON 结构、全部操作非法和只有能力说明的测试。
-- [ ] 定义严格输出 schema 与中文 system prompt，明确禁止把局部请求偷换成无关全局参数。
-- [ ] 调用 `apply_chat_operations` 规范化结果；同一 mock 输入必须得到确定性结果。
-- [ ] 将底层 provider 异常映射成稳定错误类别，保留中文可执行提示，不包含 API key、原始响应或本机临时路径。
+- [x] 先用捕获 blocks/schema 的 mock provider 写失败测试：单轮成功、最近上下文裁剪、代理图路径、元数据开关与 provider 名称。
+- [x] 写 provider 超时/鉴权/取消、非法 JSON 结构、全部操作非法和只有能力说明的测试。
+- [x] 定义严格输出 schema 与中文 system prompt，明确禁止把局部请求偷换成无关全局参数。
+- [x] 调用 `apply_chat_operations` 规范化结果；同一 mock 输入必须得到确定性结果。
+- [x] 将底层 provider 异常映射成稳定错误类别，保留中文可执行提示，不包含 API key、原始响应或本机临时路径。
 
 Run: `.venv\Scripts\python.exe -m pytest tests/test_chat.py tests/test_providers.py -q`
 
