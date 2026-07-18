@@ -133,6 +133,17 @@ describe("LookliftClient", () => {
     expect(new Headers(queue.requests[1].init.headers).has("X-Looklift-Token")).toBe(false);
   });
 
+  it("读取调用前供应商配置且不暴露密钥字段", async () => {
+    const queue = responseQueue([Response.json({
+      configured: true, provider: "ollama", model: "vision", base_url: "http://localhost",
+      timeout: 300, has_key: false,
+    })]);
+    const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
+    await expect(client.config()).resolves.toMatchObject({ provider: "ollama", has_key: false });
+    expect(queue.requests[0].url).toBe("http://127.0.0.1:9/api/config");
+    expect(new Headers(queue.requests[0].init.headers).get("X-Looklift-Token")).toBe("token");
+  });
+
   it("覆盖对话候选与正式会话端点，并透传取消信号", async () => {
     const snapshot = { id: "session-1", current_version_id: "version-1" };
     const queue = responseQueue([

@@ -32,6 +32,8 @@ type CanvasPaneProps = {
   onPreviewSettled?(): void;
   onAnalysisComplete?(analysis: Analysis): void;
   onRenderStateChange?(render: EditorState["render"]): void;
+  onPreviewRendered?(analysis: JsonObject): void;
+  analysisDisabled?: boolean;
 };
 
 export function CanvasPane({
@@ -42,6 +44,8 @@ export function CanvasPane({
   onPreviewSettled,
   onAnalysisComplete,
   onRenderStateChange,
+  onPreviewRendered,
+  analysisDisabled = false,
 }: CanvasPaneProps) {
   const paneRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -94,6 +98,7 @@ export function CanvasPane({
         lastRenderedSignatureRef.current = request.signature;
         setError(null);
         onRenderStateChange?.({ status: "ready", error: null });
+        onPreviewRendered?.(request.analysis);
       },
       onError: (reason) => {
         const message = canvasErrorMessage(reason);
@@ -106,7 +111,7 @@ export function CanvasPane({
       scheduler.dispose();
       if (schedulerRef.current === scheduler) schedulerRef.current = null;
     };
-  }, [client, onPreviewSettled, onRenderStateChange, replaceAfter]);
+  }, [client, onPreviewRendered, onPreviewSettled, onRenderStateChange, replaceAfter]);
 
   const loadPath = useCallback(async (path: string) => {
     if (!client) return;
@@ -248,7 +253,7 @@ export function CanvasPane({
       <div className="canvas-toolbar" aria-label="画布工具">
         <span>适合窗口</span>
         {phase === "ready" ? (
-          <button type="button" disabled={analyzing} onClick={() => void runAnalysis()}>
+          <button type="button" disabled={analyzing || analysisDisabled} onClick={() => void runAnalysis()}>
             {analyzing ? "AI 分析中…" : "AI 分析"}
           </button>
         ) : <span>100%</span>}

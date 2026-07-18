@@ -29,13 +29,17 @@ export function EditorShell({
   const [activeLookName, setActiveLookName] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
-  const chatWorkflow = useMemo(
-    () => client ? createChatWorkflow(client, editorStore) : null,
-    [client],
-  );
+  const [providerLabel, setProviderLabel] = useState("正在读取…");
+  const manualCommitPending = useRef(false);
   const sessionCoordinator = useMemo(
     () => client ? createSessionCoordinator(client, editorStore) : null,
     [client],
+  );
+  const chatWorkflow = useMemo(
+    () => client ? createChatWorkflow(client, editorStore, {
+      onMessagesOnly: (exchange) => sessionCoordinator?.recordMessages(exchange),
+    }) : null,
+    [client, sessionCoordinator],
   );
   const activeLookSnapshot = useRef({ analysis: editor.analysis, factor: editor.factor });
   const neutral = !editor.analysis && contract ? createNeutralAnalysis(contract) : undefined;
@@ -56,11 +60,24 @@ export function EditorShell({
       });
     return next;
   }, [chatWorkflow, contract, sessionCoordinator]);
-  const settleManualPreview = useCallback(() => editorStore.finalizePreview("manual"), []);
+  const persistFormal = useCallback((analysis: Parameters<typeof editorStore.commitAnalysis>[0], source: "manual" | "library" | "analysis") => {
+    void sessionCoordinator?.commitFormal(analysis, source).catch((reason) => {
+      setExportStatus(`版本保存失败：${reason instanceof Error ? reason.message : String(reason)}`);
+    });
+  }, [sessionCoordinator]);
+  const settleManualPreview = useCallback(() => {
+    manualCommitPending.current = editorStore.finalizePreview("manual");
+  }, []);
+  const persistRenderedManual = useCallback((analysis: Parameters<typeof editorStore.commitAnalysis>[0]) => {
+    if (!manualCommitPending.current) return;
+    manualCommitPending.current = false;
+    persistFormal(analysis, "manual");
+  }, [persistFormal]);
   const applyAnalysis = useCallback((analysis: Parameters<typeof editorStore.commitAnalysis>[0]) => {
     editorStore.setFactor(1);
     editorStore.commitAnalysis(analysis, "ai");
-  }, []);
+    persistFormal(analysis, "analysis");
+  }, [persistFormal]);
   const setRenderState = useCallback(editorStore.setRenderState, []);
   const activateLook = useCallback((name: string) => {
     const current = editorStore.getSnapshot();
@@ -68,6 +85,17 @@ export function EditorShell({
     setActiveLookName(name);
     setExportStatus(null);
   }, []);
+
+  useEffect(() => {
+    if (!client) return;
+    let cancelled = false;
+    void client.config().then((current) => {
+      if (!cancelled) setProviderLabel(
+        current.provider === "auto" ? "自动选择（调用时确定）" : current.provider,
+      );
+    }).catch(() => { if (!cancelled) setProviderLabel("配置读取失败"); });
+    return () => { cancelled = true; };
+  }, [client]);
 
   useEffect(() => {
     if (activeLookName && !isCurrentLookSnapshot(
@@ -116,7 +144,7 @@ export function EditorShell({
       </header>
 
       <section className="workbench" aria-label="照片编辑工作区">
-        <ChatPane enabled={chatEnabled} workflow={chatWorkflow} coordinator={sessionCoordinator} />
+        <ChatPane enabled={chatEnabled} workflow={chatWorkflow} coordinator={sessionCoordinator} providerLabel={providerLabel} />
         <CanvasPane
           client={client}
           analysis={editor.displayAnalysis ?? neutral}
@@ -125,11 +153,13 @@ export function EditorShell({
           onPreviewSettled={settleManualPreview}
           onAnalysisComplete={applyAnalysis}
           onRenderStateChange={setRenderState}
+          onPreviewRendered={(analysis) => persistRenderedManual(analysis as Parameters<typeof editorStore.commitAnalysis>[0])}
+          analysisDisabled={editor.pendingPreview !== null}
         />
-        <PanelPane contract={contract} />
+        <PanelPane contract={contract} onFormalAnalysis={persistFormal} />
       </section>
 
-      <GalleryPane client={client} onActiveLookChange={activateLook} />
+      <GalleryPane client={client} onActiveLookChange={activateLook} onFormalAnalysis={persistFormal} />
     </main>
   );
 }

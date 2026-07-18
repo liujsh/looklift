@@ -12,6 +12,7 @@ import type {
   LookSummary,
   ParamContract,
   PreviewRequest,
+  ProviderConfig,
   RecordSessionMessagesRequest,
   SaveLookRequest,
   SidecarStatus,
@@ -75,6 +76,10 @@ export class LookliftClient {
       body: JSON.stringify(payload),
       signal,
     });
+  }
+
+  config(): Promise<ProviderConfig> {
+    return this.json("/api/config");
   }
 
   chatStep(payload: ChatStepRequest, signal?: AbortSignal): Promise<ChatStepResponse> {

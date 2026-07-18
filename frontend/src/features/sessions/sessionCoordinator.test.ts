@@ -59,4 +59,41 @@ describe("sessionCoordinator", () => {
     await coordinator.recordMessages(exchange);
     expect(client.recordSessionMessages).toHaveBeenCalledTimes(2);
   });
+
+  it("手调、模板和初始 AI 分析以无消息正式版本提交", async () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis());
+    const client = {
+      createSession: vi.fn(),
+      commitSession: vi.fn().mockResolvedValue(snapshot(analysis(1))),
+    };
+    const coordinator = createSessionCoordinator(client, store, "s1");
+    await coordinator.commitFormal(analysis(1), "manual");
+    await coordinator.commitFormal(analysis(2), "library");
+    await coordinator.commitFormal(analysis(3), "analysis");
+    expect(client.commitSession.mock.calls.map((call) => call[1])).toMatchObject([
+      { exchange: [], source: "manual" },
+      { exchange: [], source: "library" },
+      { exchange: [], source: "analysis" },
+    ]);
+  });
+
+  it("串行化正式写入，避免慢手调覆盖后提交的聊天版本", async () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis());
+    let release!: (value: SessionSnapshot) => void;
+    const firstWrite = new Promise<SessionSnapshot>((resolve) => { release = resolve; });
+    const client = {
+      createSession: vi.fn(),
+      commitSession: vi.fn().mockReturnValueOnce(firstWrite).mockResolvedValue(snapshot(analysis(2))),
+    };
+    const coordinator = createSessionCoordinator(client, store, "s1");
+    const first = coordinator.commitFormal(analysis(1), "manual");
+    const second = coordinator.commitFormal(analysis(2), "analysis");
+    await Promise.resolve();
+    expect(client.commitSession).toHaveBeenCalledTimes(1);
+    release(snapshot(analysis(1)));
+    await Promise.all([first, second]);
+    expect(client.commitSession).toHaveBeenCalledTimes(2);
+  });
 });

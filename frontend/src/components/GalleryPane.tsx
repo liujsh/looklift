@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { LookliftClient } from "../api/client";
-import type { LookSummary } from "../api/types";
+import type { Analysis, LookSummary } from "../api/types";
 import { loadLookIntoEditor, looksForSource, type GallerySource } from "../features/gallery/galleryStore";
 import { exportLookFile, openLookReport, saveCurrentLook } from "../features/looks/lookActions";
 import { editorStore, useEditorState } from "../store/editorStore";
@@ -9,13 +9,14 @@ type GalleryPaneProps = {
   client?: LookliftClient;
   initialLooks?: readonly LookSummary[];
   onActiveLookChange?(name: string): void;
+  onFormalAnalysis?(analysis: Analysis, source: "library"): Promise<void> | void;
 };
 
 function actionError(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
 }
 
-export function GalleryPane({ client, initialLooks, onActiveLookChange }: GalleryPaneProps) {
+export function GalleryPane({ client, initialLooks, onActiveLookChange, onFormalAnalysis }: GalleryPaneProps) {
   const editor = useEditorState();
   const [source, setSource] = useState<GallerySource>("built_in");
   const [looks, setLooks] = useState<readonly LookSummary[]>(initialLooks ?? []);
@@ -43,10 +44,11 @@ export function GalleryPane({ client, initialLooks, onActiveLookChange }: Galler
     setLoadingName(look.name);
     setError(null);
     try {
-      await loadLookIntoEditor(client, look.name, (analysis, factor) => {
+      const analysis = await loadLookIntoEditor(client, look.name, (analysis, factor) => {
         editorStore.setFactor(factor);
         editorStore.commitAnalysis(analysis, "library");
       });
+      await onFormalAnalysis?.(analysis, "library");
       onActiveLookChange?.(look.name);
       setActionStatus(`已载入：${look.name}`);
     } catch (reason) {
@@ -121,7 +123,7 @@ export function GalleryPane({ client, initialLooks, onActiveLookChange }: Galler
             <button
               className="look-load"
               type="button"
-              disabled={!client || loadingName !== null}
+              disabled={!client || loadingName !== null || editor.pendingPreview !== null}
               onClick={() => void load(look)}
             >
               <span aria-hidden="true" />

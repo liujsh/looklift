@@ -11,21 +11,22 @@ function workflow(state: Partial<ChatWorkflowState> = {}): ChatWorkflow {
   };
   return {
     getSnapshot: () => snapshot, subscribe: () => () => {}, send: vi.fn(), refine: vi.fn(),
-    cancel: vi.fn(), setIncludeMetadata: vi.fn(), restoreMessages: vi.fn(),
+    cancel: vi.fn(), setIncludeMetadata: vi.fn(), restoreMessages: vi.fn(), settlePending: vi.fn(),
   };
 }
 
 const coordinator = {
   acceptPending: vi.fn(), discardPending: vi.fn(), continueManual: vi.fn(), recordMessages: vi.fn(),
-  open: vi.fn(), getSessionId: () => "s1",
+  commitFormal: vi.fn(), open: vi.fn(), getSessionId: () => "s1",
 } as SessionCoordinator;
 
 describe("ChatPane", () => {
   it("空态包含输入、附件 seam、隐私摘要和折叠入口", () => {
-    const html = renderToStaticMarkup(<ChatPane enabled workflow={workflow()} coordinator={coordinator} />);
+    const html = renderToStaticMarkup(<ChatPane enabled workflow={workflow()} coordinator={coordinator} providerLabel="ollama" />);
     expect(html).toContain("说说你想怎么调整");
     expect(html).toContain('aria-label="添加附件或模板"');
     expect(html).toContain("1 张安全代理图");
+    expect(html).toContain("供应商：ollama");
     expect(html).toContain("发送元数据");
     expect(html).toContain('aria-label="折叠 AI 对话"');
   });

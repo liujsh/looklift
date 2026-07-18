@@ -10,9 +10,12 @@ import { StrengthSlider } from "../panel/StrengthSlider";
 import { ToneCurve } from "../panel/ToneCurve";
 import { editorStore, useEditorState } from "../store/editorStore";
 
-type PanelPaneProps = { contract?: ParamContract };
+type PanelPaneProps = {
+  contract?: ParamContract;
+  onFormalAnalysis?(analysis: ReturnType<typeof createNeutralAnalysis>, source: "manual"): void;
+};
 
-export function PanelPane({ contract }: PanelPaneProps) {
+export function PanelPane({ contract, onFormalAnalysis }: PanelPaneProps) {
   const editor = useEditorState();
   const analysis = editor.displayAnalysis;
   const pending = editor.pendingPreview !== null;
@@ -77,7 +80,9 @@ export function PanelPane({ contract }: PanelPaneProps) {
           onClick={() => {
             if (!contract) return;
             editorStore.setFactor(1);
-            editorStore.commitAnalysis(createNeutralAnalysis(contract), "manual");
+            const neutral = createNeutralAnalysis(contract);
+            editorStore.commitAnalysis(neutral, "manual");
+            onFormalAnalysis?.(neutral, "manual");
           }}
         >重置</button>
       </header>

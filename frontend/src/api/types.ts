@@ -81,6 +81,15 @@ export type PreviewRequest = {
   factor: number;
 };
 
+export type ProviderConfig = {
+  configured: boolean;
+  provider: string;
+  model: string;
+  base_url: string;
+  timeout: number;
+  has_key: boolean;
+};
+
 export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
@@ -127,7 +136,7 @@ export type EditVersion = {
   id: string;
   parent_id: string | null;
   analysis: Analysis;
-  source: "chat" | "manual" | "library" | "initial";
+  source: "chat" | "manual" | "library" | "analysis" | "initial";
   summary: string;
   created_at: string;
 };
@@ -148,7 +157,7 @@ export type CreateSessionRequest = { path: string; initial_analysis: Analysis };
 export type CommitSessionRequest = {
   exchange: ChatMessage[];
   analysis: Analysis;
-  source: "chat" | "manual" | "library";
+  source: "chat" | "manual" | "library" | "analysis";
 };
 
 export type RecordSessionMessagesRequest = { exchange: ChatMessage[] };

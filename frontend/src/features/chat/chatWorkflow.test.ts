@@ -67,7 +67,9 @@ describe("chatWorkflow", () => {
     await workflow.refine();
     expect(noChange).toHaveBeenCalledTimes(1);
     expect(workflow.getSnapshot().stopReason).toBe("no_changes");
+    expect(workflow.getSnapshot().phase).toBe("pending");
     expect(store.getSnapshot().displayAnalysis?.basic.exposure).toBe(1);
+    expect(store.getSnapshot().pendingPreview?.exchange).toHaveLength(2);
 
     const aborting = vi.fn((_request, signal?: AbortSignal) => new Promise<ChatStepResponse>((_resolve, reject) => {
       signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
@@ -78,5 +80,51 @@ describe("chatWorkflow", () => {
     await running;
     expect(aborting).toHaveBeenCalledTimes(1);
     expect(cancelled.getSnapshot().stopReason).toBe("cancelled");
+  });
+
+  it("无变化、取消和失败通过消息钩子形成正式记录", async () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis());
+    const recorded: Array<readonly unknown[]> = [];
+    const noChange = vi.fn().mockResolvedValue({ ...response(0), changes: [] });
+    const current = createChatWorkflow({ chatStep: noChange }, store, {
+      onMessagesOnly: async (items) => { recorded.push(items); },
+    });
+    await current.send("看看");
+    expect(recorded[0]).toMatchObject([{ role: "user" }, { role: "assistant", status: "done" }]);
+
+    const aborting = vi.fn((_request, signal?: AbortSignal) => new Promise<ChatStepResponse>((_resolve, reject) => {
+      signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    }));
+    const cancelled = createChatWorkflow({ chatStep: aborting }, store, {
+      onMessagesOnly: async (items) => { recorded.push(items); },
+    });
+    const running = cancelled.send("取消它");
+    cancelled.cancel();
+    await running;
+    expect(recorded[1]).toMatchObject([{ role: "user" }, { status: "cancelled" }]);
+
+    const failed = createChatWorkflow({ chatStep: vi.fn().mockRejectedValue(new Error("服务未启动")) }, store, {
+      onMessagesOnly: async (items) => { recorded.push(items); },
+    });
+    await expect(failed.send("失败请求")).rejects.toThrow("服务未启动");
+    expect(recorded[2]).toMatchObject([{ role: "user" }, { status: "failed" }]);
+  });
+
+  it("候选无法进入 Store 时不得伪装 pending；结算和切图恢复会重置旧状态", async () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis());
+    store.setRenderState({ status: "error", error: "渲染失败" });
+    const current = createChatWorkflow({ chatStep: vi.fn().mockResolvedValue(response(1)) }, store);
+    await expect(current.send("提亮")).rejects.toThrow("候选预览");
+    expect(current.getSnapshot().phase).toBe("error");
+    expect(store.getSnapshot().pendingPreview).toBeNull();
+
+    store.setRenderState({ status: "ready", error: null });
+    await current.send("重试");
+    current.settlePending();
+    expect(current.getSnapshot().phase).toBe("idle");
+    current.restoreMessages([{ role: "assistant", content: "另一张照片" }]);
+    expect(current.getSnapshot()).toMatchObject({ phase: "idle", lastResponse: null, error: null });
   });
 });

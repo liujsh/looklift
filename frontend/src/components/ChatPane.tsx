@@ -8,6 +8,7 @@ type ChatPaneProps = {
   enabled: boolean;
   workflow?: ChatWorkflow | null;
   coordinator?: SessionCoordinator | null;
+  providerLabel?: string;
 };
 
 export async function submitChatInput(value: string, workflow: ChatWorkflow) {
@@ -22,11 +23,12 @@ const EMPTY = Object.freeze({
 });
 const emptySubscribe = () => () => {};
 
-export function ChatPane({ enabled, workflow, coordinator }: ChatPaneProps) {
+export function ChatPane({ enabled, workflow, coordinator, providerLabel = "当前配置" }: ChatPaneProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [input, setInput] = useState("");
   const [includeMetadata, setIncludeMetadata] = useState(true);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
   const state = useSyncExternalStore(
     workflow?.subscribe ?? emptySubscribe,
     workflow?.getSnapshot ?? (() => EMPTY),
@@ -35,9 +37,10 @@ export function ChatPane({ enabled, workflow, coordinator }: ChatPaneProps) {
   const response = state.lastResponse;
   const act = async (action: () => Promise<unknown>) => {
     setActionError(null);
+    setActionBusy(true);
     try { await action(); } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : String(reason));
-    }
+    } finally { setActionBusy(false); }
   };
 
   return (
@@ -57,7 +60,7 @@ export function ChatPane({ enabled, workflow, coordinator }: ChatPaneProps) {
       </header>
       {!collapsed && <>
         <section className="chat-privacy" aria-label="调用隐私摘要">
-          <span>供应商：{response?.provider ?? "当前配置"}</span>
+          <span>供应商：{response?.provider ?? providerLabel}</span>
           <span>{response?.proxy_count ?? 1} 张安全代理图</span>
           <label><input type="checkbox" checked={includeMetadata} onChange={(event) => {
             setIncludeMetadata(event.currentTarget.checked);
@@ -83,15 +86,24 @@ export function ChatPane({ enabled, workflow, coordinator }: ChatPaneProps) {
         </div>
 
         {state.phase === "pending" && <div className="chat-decisions" aria-label="候选版本操作">
-          <button type="button" className="primary" onClick={() => void act(() => coordinator?.acceptPending() ?? Promise.reject(new Error("会话尚未就绪")))}>保留此版本</button>
-          <button type="button" onClick={() => void act(() => coordinator?.discardPending() ?? Promise.reject(new Error("会话尚未就绪")))}>撤销</button>
-          <button type="button" onClick={() => void act(() => workflow?.refine() ?? Promise.reject(new Error("AI 尚未就绪")))}>AI 精修</button>
-          <button type="button" onClick={() => void act(() => coordinator?.continueManual() ?? Promise.reject(new Error("会话尚未就绪")))}>继续手调</button>
+          <button type="button" disabled={actionBusy} className="primary" onClick={() => void act(async () => {
+            await (coordinator?.acceptPending() ?? Promise.reject(new Error("会话尚未就绪")));
+            workflow?.settlePending();
+          })}>保留此版本</button>
+          <button type="button" disabled={actionBusy} onClick={() => void act(async () => {
+            await (coordinator?.discardPending() ?? Promise.reject(new Error("会话尚未就绪")));
+            workflow?.settlePending();
+          })}>撤销</button>
+          <button type="button" disabled={actionBusy} onClick={() => void act(() => workflow?.refine() ?? Promise.reject(new Error("AI 尚未就绪")))}>AI 精修</button>
+          <button type="button" disabled={actionBusy} onClick={() => void act(async () => {
+            await (coordinator?.continueManual() ?? Promise.reject(new Error("会话尚未就绪")));
+            workflow?.settlePending();
+          })}>继续手调</button>
         </div>}
 
         {state.phase === "requesting" && <div className="chat-progress" aria-live="polite">
           <span>第 {Math.max(1, state.round)}/2 轮 · 正在分析</span>
-          <button type="button" onClick={() => workflow?.cancel()}>取消</button>
+          <button type="button" onClick={() => workflow?.cancel()}>取消等待</button>
         </div>}
 
         <form className="chat-composer" onSubmit={(event) => {
@@ -101,9 +113,7 @@ export function ChatPane({ enabled, workflow, coordinator }: ChatPaneProps) {
           setInput("");
           void act(async () => {
             const result = await submitChatInput(value, workflow);
-            if (result && result.changes.length === 0 && coordinator) {
-              await coordinator.recordMessages(workflow.getSnapshot().messages.slice(-2));
-            }
+            void result;
           });
         }}>
           <button type="button" aria-label="添加附件或模板" title="添加照片、模板或自动化技能">+</button>

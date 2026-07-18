@@ -630,6 +630,8 @@ def _session_error(exc: Exception) -> tuple[int, dict]:
         return 404, {"error": "未找到指定会话"}
     if isinstance(exc, DatabaseRecoveryRequired):
         return 503, {"error": "会话数据库需要恢复，请先检查备份。"}
+    if isinstance(exc, OSError):
+        return 500, {"error": "会话数据库读写失败，请重试或检查存储位置。"}
     return 400, {"error": str(exc)}
 
 
@@ -672,8 +674,8 @@ def _commit_session(ctx: dict) -> tuple[int, dict]:
     if analysis_error:
         return 400, {"error": f"analysis 无效：{analysis_error}"}
     source = payload.get("source", "chat")
-    if source not in {"chat", "manual", "library"}:
-        return 400, {"error": "source 必须是 chat、manual 或 library"}
+    if source not in {"chat", "manual", "library", "analysis"}:
+        return 400, {"error": "source 必须是 chat、manual、library 或 analysis"}
     try:
         snapshot = SessionStore().commit_exchange(
             ctx["params"]["id"], payload.get("exchange"), analysis, source

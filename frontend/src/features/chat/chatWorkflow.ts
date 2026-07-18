@@ -23,6 +23,11 @@ export type ChatWorkflow = {
   cancel(): void;
   setIncludeMetadata(include: boolean): void;
   restoreMessages(messages: readonly ChatMessage[]): void;
+  settlePending(): void;
+};
+
+type ChatWorkflowHooks = {
+  onMessagesOnly?(exchange: readonly ChatMessage[]): Promise<void> | void;
 };
 
 const INITIAL: ChatWorkflowState = Object.freeze({
@@ -30,7 +35,11 @@ const INITIAL: ChatWorkflowState = Object.freeze({
   error: null, round: 0, stopReason: null,
 });
 
-export function createChatWorkflow(client: ChatClient, store: EditorStore): ChatWorkflow {
+export function createChatWorkflow(
+  client: ChatClient,
+  store: EditorStore,
+  hooks: ChatWorkflowHooks = {},
+): ChatWorkflow {
   let state = INITIAL;
   let controller: AbortController | null = null;
   let requestId = store.getSnapshot().pendingPreview?.requestId ?? 0;
@@ -50,44 +59,77 @@ export function createChatWorkflow(client: ChatClient, store: EditorStore): Chat
     controller = active;
     const user: ChatMessage = { role: "user", content: message };
     publish({ phase: "requesting", error: null, round, stopReason: null });
+    let response: ChatStepResponse;
     try {
-      const response = await client.chatStep({
+      response = await client.chatStep({
         path: editor.imagePath,
         current_analysis: editor.displayAnalysis,
         message,
         history: [...state.messages],
         include_metadata: includeMetadata,
       }, active.signal);
-      if (active.signal.aborted) return null;
-      const assistant: ChatMessage = {
-        role: "assistant", content: response.explanation, provider: response.provider, status: "done",
-      };
-      const exchange = [user, assistant];
-      const messages = Object.freeze([...state.messages, ...exchange]);
-      if (response.changes.length > 0) {
-        const prior = store.getSnapshot().pendingPreview?.exchange ?? [];
-        store.beginPendingPreview(
-          response.analysis, response.changes, [...prior, ...exchange], ++requestId,
-        );
-      }
-      publish({
-        phase: response.changes.length > 0 ? "pending" : "idle",
-        messages,
-        lastResponse: response,
-        stopReason: response.done ? "done" : response.changes.length === 0 ? "no_changes" : null,
-      });
-      return response;
     } catch (reason) {
       if (active.signal.aborted || (reason instanceof DOMException && reason.name === "AbortError")) {
-        publish({ phase: "cancelled", stopReason: "cancelled", error: null });
+        const exchange: ChatMessage[] = [
+          user, { role: "assistant", content: "已停止等待；供应商端已发出的请求可能仍会完成，正式版本未改变。", status: "cancelled" },
+        ];
+        publish({
+          phase: "cancelled", stopReason: "cancelled", error: null,
+          messages: Object.freeze([...state.messages, ...exchange]),
+        });
+        await hooks.onMessagesOnly?.(exchange);
         return null;
       }
       const message = reason instanceof Error ? reason.message : String(reason);
-      publish({ phase: "error", error: message });
+      const exchange: ChatMessage[] = [
+        user, { role: "assistant", content: message, status: "failed" },
+      ];
+      publish({
+        phase: "error", error: message,
+        messages: Object.freeze([...state.messages, ...exchange]),
+      });
+      try { await hooks.onMessagesOnly?.(exchange); } catch { /* 保留原始服务错误。 */ }
       throw reason;
     } finally {
       if (controller === active) controller = null;
     }
+
+    if (active.signal.aborted) return null;
+    const assistant: ChatMessage = {
+      role: "assistant", content: response.explanation, provider: response.provider, status: "done",
+    };
+    const exchange = [user, assistant];
+    const messages = Object.freeze([...state.messages, ...exchange]);
+    const existingPending = store.getSnapshot().pendingPreview;
+    if (response.changes.length > 0) {
+      const prior = existingPending?.exchange ?? [];
+      const accepted = store.beginPendingPreview(
+        response.analysis, response.changes, [...prior, ...exchange], ++requestId,
+      );
+      if (!accepted) {
+        const reason = new Error("候选预览无法安全显示，请先解决渲染错误后重试");
+        const failed = [user, { role: "assistant" as const, content: reason.message, status: "failed" as const }];
+        publish({ phase: "error", error: reason.message, messages: Object.freeze([...state.messages, ...failed]) });
+        await hooks.onMessagesOnly?.(failed);
+        throw reason;
+      }
+    } else if (existingPending) {
+      const accepted = store.beginPendingPreview(
+        existingPending.candidate,
+        existingPending.changes,
+        [...existingPending.exchange, ...exchange],
+        ++requestId,
+      );
+      if (!accepted) throw new Error("候选预览状态已过期，请重试");
+    }
+    publish({
+      phase: response.changes.length > 0 || existingPending ? "pending" : "idle",
+      messages,
+      lastResponse: response,
+      stopReason: response.done ? "done" : response.changes.length === 0 ? "no_changes" : null,
+    });
+    if (response.changes.length === 0 && !existingPending) await hooks.onMessagesOnly?.(exchange);
+    return response;
   };
 
   return {
@@ -115,7 +157,13 @@ export function createChatWorkflow(client: ChatClient, store: EditorStore): Chat
       includeMetadata = include;
     },
     restoreMessages(messages) {
-      publish({ messages: Object.freeze([...messages]) });
+      publish({
+        phase: "idle", messages: Object.freeze([...messages]), lastResponse: null,
+        error: null, round: 0, stopReason: null,
+      });
+    },
+    settlePending() {
+      publish({ phase: "idle", error: null, round: 0, stopReason: null });
     },
   };
 }

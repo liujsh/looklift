@@ -124,7 +124,8 @@ describe("editorStore", () => {
     expect(store.getSnapshot().analysis?.basic.exposure).toBe(1.25);
     expect(store.getSnapshot().versions).toEqual([]);
 
-    store.finalizePreview("manual");
+    expect(store.finalizePreview("manual")).toBe(true);
+    expect(store.finalizePreview("manual")).toBe(false);
     expect(store.getSnapshot().versions).toHaveLength(1);
     expect(store.getSnapshot().versions[0].analysis).toBe(original);
     expect(store.getSnapshot().analysis?.basic.exposure).toBe(1.25);

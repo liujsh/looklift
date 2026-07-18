@@ -70,3 +70,20 @@ def test_creating_same_photo_resumes_session(tmp_path, sample_analysis):
     _, first = _call("POST", "/api/sessions", payload)
     _, second = _call("POST", "/api/sessions", payload)
     assert second["id"] == first["id"]
+
+
+def test_session_io_error_does_not_leak_local_path(monkeypatch, tmp_path, sample_analysis):
+    photo = tmp_path / "photo.jpg"
+    photo.write_bytes(b"jpeg")
+
+    class BrokenStore:
+        def __init__(self):
+            raise OSError(r"C:\Users\someone\secret\looklift.db")
+
+    monkeypatch.setattr(api, "SessionStore", BrokenStore)
+    status, body = _call(
+        "POST", "/api/sessions", {"path": str(photo), "initial_analysis": sample_analysis}
+    )
+    assert status == 500
+    assert "secret" not in body["error"]
+    assert "数据库" in body["error"]

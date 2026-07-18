@@ -37,7 +37,7 @@ export type EditorStore = {
   commitAnalysis(analysis: Analysis, source: ChangeSource): void;
   updateFragment<K extends EditableSection>(section: K, value: Analysis[K], source: ChangeSource): void;
   previewFragment<K extends EditableSection>(section: K, value: Analysis[K]): void;
-  finalizePreview(source: ChangeSource): void;
+  finalizePreview(source: ChangeSource): boolean;
   applyDelta(transform: (analysis: Analysis) => Analysis, source: ChangeSource): void;
   setImagePath(path: string | null): void;
   setFactor(factor: number): void;
@@ -153,7 +153,7 @@ export function createEditorStore(): EditorStore {
       publish({ ...state, analysis: immutableCopy({ ...state.analysis, [section]: value }) });
     },
     finalizePreview(source) {
-      if (!previewBase || !state.analysis) return;
+      if (!previewBase || !state.analysis) return false;
       const previous = previewBase;
       previewBase = null;
       publish({
@@ -163,6 +163,7 @@ export function createEditorStore(): EditorStore {
           Object.freeze({ analysis: previous, source }),
         ]),
       });
+      return true;
     },
     applyDelta(transform, source) {
       if (!state.analysis) throw new Error("尚未载入 analysis，不能应用参数 delta");
@@ -185,6 +186,7 @@ export function createEditorStore(): EditorStore {
         render: Object.freeze({ ...render }),
         pendingPreview: render.status === "error" ? null : state.pendingPreview,
       });
+      return true;
     },
     beginPendingPreview(candidate, changes, exchange, requestId, createdAt = new Date().toISOString()) {
       if (!state.analysis || state.render.status === "error" || requestId < latestPendingRequestId) {
