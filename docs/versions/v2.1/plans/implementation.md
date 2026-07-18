@@ -243,10 +243,10 @@ type PendingPreview = Readonly<{
 
 Store 对外提供 `displayAnalysis`（候选存在时为 candidate，否则为正式 analysis）、`beginPendingPreview`、`acceptPendingPreview`、`discardPendingPreview`、`beginManualFromPending`、`undo`、`redo` 和 `restoreSession`。
 
-- [ ] 先写状态转移红灯测试：AI 候选不进 versions、保留只进一次、撤销还原、切图丢弃、重启只恢复正式状态。
-- [ ] 写继续手调测试：第一次手调以候选为基线，不回跳旧正式参数；返回待持久化 exchange，供协调层提交。
-- [ ] 写 undo/redo、正式新提交清空 redo、旧异步 requestId 被拒绝、渲染失败不展示候选测试。
-- [ ] 实现不可变状态；既有 `previewFragment/finalizePreview` 连续拖动只压一份历史的语义保持不变。
+- [x] 先写状态转移红灯测试：AI 候选不进 versions、保留只进一次、撤销还原、切图丢弃、重启只恢复正式状态。
+- [x] 写继续手调测试：第一次手调以候选为基线，不回跳旧正式参数；返回待持久化 exchange，供协调层提交。
+- [x] 写 undo/redo、正式新提交清空 redo、旧异步 requestId 被拒绝、渲染失败不展示候选测试。
+- [x] 实现不可变状态；既有 `previewFragment/finalizePreview` 连续拖动只压一份历史的语义保持不变。
 
 Run: `pnpm vitest run src/store/editorStore.test.ts`
 

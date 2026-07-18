@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { Analysis } from "../api/types";
+import type { Analysis, ChatChange, ChatMessage } from "../api/types";
 
 export type ChangeSource = "ai" | "manual" | "chat" | "library";
 export type EditableSection = "basic" | "hsl" | "tone_curve" | "color_grading" | "effects";
@@ -10,12 +10,24 @@ export type AnalysisVersion = Readonly<{
   source: ChangeSource;
 }>;
 
+export type PendingPreview = Readonly<{
+  baseAnalysis: Analysis;
+  candidate: Analysis;
+  changes: readonly ChatChange[];
+  exchange: readonly ChatMessage[];
+  requestId: number;
+  createdAt: string;
+}>;
+
 export type EditorState = Readonly<{
   imagePath: string | null;
   analysis: Analysis | null;
+  displayAnalysis: Analysis | null;
+  pendingPreview: PendingPreview | null;
   factor: number;
   render: Readonly<{ status: RenderStatus; error: string | null }>;
   versions: readonly AnalysisVersion[];
+  redoVersions: readonly AnalysisVersion[];
 }>;
 
 export type EditorStore = {
@@ -30,14 +42,30 @@ export type EditorStore = {
   setImagePath(path: string | null): void;
   setFactor(factor: number): void;
   setRenderState(render: EditorState["render"]): void;
+  beginPendingPreview(
+    candidate: Analysis,
+    changes: readonly ChatChange[],
+    exchange: readonly ChatMessage[],
+    requestId: number,
+    createdAt?: string,
+  ): boolean;
+  acceptPendingPreview(): readonly ChatMessage[] | null;
+  discardPendingPreview(): void;
+  beginManualFromPending(): readonly ChatMessage[] | null;
+  undo(): boolean;
+  redo(): boolean;
+  restoreSession(imagePath: string, analysis: Analysis): void;
 };
 
 const INITIAL_STATE: EditorState = Object.freeze({
   imagePath: null,
   analysis: null,
+  displayAnalysis: null,
+  pendingPreview: null,
   factor: 1,
   render: Object.freeze({ status: "idle", error: null }),
   versions: Object.freeze([]),
+  redoVersions: Object.freeze([]),
 });
 
 function immutableCopy<T>(value: T): T {
@@ -54,10 +82,14 @@ function immutableCopy<T>(value: T): T {
 export function createEditorStore(): EditorStore {
   let state = INITIAL_STATE;
   let previewBase: Analysis | null = null;
+  let latestPendingRequestId = 0;
   const listeners = new Set<() => void>();
 
   const publish = (next: EditorState) => {
-    state = Object.freeze(next);
+    state = Object.freeze({
+      ...next,
+      displayAnalysis: next.pendingPreview?.candidate ?? next.analysis,
+    });
     for (const listener of listeners) listener();
   };
 
@@ -68,7 +100,31 @@ export function createEditorStore(): EditorStore {
       ? Object.freeze([...state.versions, Object.freeze({ analysis: previous, source })])
       : state.versions;
     previewBase = null;
-    publish({ ...state, analysis: next, versions });
+    publish({
+      ...state,
+      analysis: next,
+      pendingPreview: null,
+      versions,
+      redoVersions: Object.freeze([]),
+    });
+  };
+
+  const promotePending = (): readonly ChatMessage[] | null => {
+    const pending = state.pendingPreview;
+    if (!pending) return null;
+    const exchange = pending.exchange;
+    previewBase = null;
+    publish({
+      ...state,
+      analysis: pending.candidate,
+      pendingPreview: null,
+      versions: Object.freeze([
+        ...state.versions,
+        Object.freeze({ analysis: pending.baseAnalysis, source: "chat" as const }),
+      ]),
+      redoVersions: Object.freeze([]),
+    });
+    return exchange;
   };
 
   return {
@@ -79,6 +135,7 @@ export function createEditorStore(): EditorStore {
     },
     openImage(imagePath, analysis) {
       previewBase = null;
+      latestPendingRequestId = 0;
       publish({
         ...INITIAL_STATE,
         imagePath,
@@ -112,14 +169,83 @@ export function createEditorStore(): EditorStore {
       commitAnalysis(transform(state.analysis), source);
     },
     setImagePath(imagePath) {
-      publish({ ...state, imagePath });
+      if (imagePath !== state.imagePath) {
+        previewBase = null;
+        latestPendingRequestId = 0;
+      }
+      publish({ ...state, imagePath, pendingPreview: null });
     },
     setFactor(factor) {
       if (!Number.isFinite(factor)) throw new TypeError("factor 必须是有限数值");
       publish({ ...state, factor: Math.min(1, Math.max(0, factor)) });
     },
     setRenderState(render) {
-      publish({ ...state, render: Object.freeze({ ...render }) });
+      publish({
+        ...state,
+        render: Object.freeze({ ...render }),
+        pendingPreview: render.status === "error" ? null : state.pendingPreview,
+      });
+    },
+    beginPendingPreview(candidate, changes, exchange, requestId, createdAt = new Date().toISOString()) {
+      if (!state.analysis || state.render.status === "error" || requestId < latestPendingRequestId) {
+        return false;
+      }
+      latestPendingRequestId = requestId;
+      const pending = immutableCopy({
+        baseAnalysis: state.analysis,
+        candidate,
+        changes: [...changes],
+        exchange: [...exchange],
+        requestId,
+        createdAt,
+      });
+      previewBase = null;
+      publish({ ...state, pendingPreview: pending });
+      return true;
+    },
+    acceptPendingPreview: promotePending,
+    discardPendingPreview() {
+      if (state.pendingPreview) publish({ ...state, pendingPreview: null });
+    },
+    beginManualFromPending: promotePending,
+    undo() {
+      if (state.pendingPreview) {
+        publish({ ...state, pendingPreview: null });
+        return true;
+      }
+      const previous = state.versions[state.versions.length - 1];
+      if (!previous || !state.analysis) return false;
+      previewBase = null;
+      publish({
+        ...state,
+        analysis: previous.analysis,
+        versions: Object.freeze(state.versions.slice(0, -1)),
+        redoVersions: Object.freeze([
+          ...state.redoVersions,
+          Object.freeze({ analysis: state.analysis, source: previous.source }),
+        ]),
+      });
+      return true;
+    },
+    redo() {
+      const next = state.redoVersions[state.redoVersions.length - 1];
+      if (!next || !state.analysis) return false;
+      previewBase = null;
+      publish({
+        ...state,
+        analysis: next.analysis,
+        versions: Object.freeze([
+          ...state.versions,
+          Object.freeze({ analysis: state.analysis, source: next.source }),
+        ]),
+        redoVersions: Object.freeze(state.redoVersions.slice(0, -1)),
+      });
+      return true;
+    },
+    restoreSession(imagePath, analysis) {
+      previewBase = null;
+      latestPendingRequestId = 0;
+      publish({ ...INITIAL_STATE, imagePath, analysis: immutableCopy(analysis) });
     },
   };
 }
