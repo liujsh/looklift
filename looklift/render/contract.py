@@ -8,10 +8,40 @@ from __future__ import annotations
 
 from ..analyzer import ANALYSIS_SCHEMA, _COLOR_KEYS
 
+_TONE_CURVE_MIN_ITEMS = 2
+_TONE_CURVE_MAX_ITEMS = 16
+
 
 def param_paths() -> list[str]:
     """枚举所有可调数值参数的点路径,不含整点数组 tone_curve。"""
     return list(_path_nodes())
+
+
+def ai_scalar_paths() -> tuple[str, ...]:
+    """返回 AI 首版允许写入的标量路径。
+
+    独立命名这个入口，是为了让聊天层不需要知道 schema 的遍历细节；首版与
+    右面板的全部标量参数一致，后续若能力边界收窄也只在本契约内调整。
+    """
+    return tuple(_path_nodes())
+
+
+def tone_curve_contract() -> dict[str, int | float]:
+    """从分析 schema 导出主明度曲线的数量与坐标范围。"""
+    node = ANALYSIS_SCHEMA["properties"]["tone_curve"]
+    point_props = node["items"]["properties"]
+    input_node = point_props["input"]
+    output_node = point_props["output"]
+    return {
+        # ANALYSIS_SCHEMA 允许空数组表达“未启用曲线”；AI 整组替换则必须至少
+        # 有两个端点。这个差异属于编辑契约，因此由本模块而非聊天层持有。
+        "min_items": _TONE_CURVE_MIN_ITEMS,
+        "max_items": _TONE_CURVE_MAX_ITEMS,
+        "input_min": input_node["minimum"],
+        "input_max": input_node["maximum"],
+        "output_min": output_node["minimum"],
+        "output_max": output_node["maximum"],
+    }
 
 
 def param_bounds(path: str) -> tuple[float, float]:

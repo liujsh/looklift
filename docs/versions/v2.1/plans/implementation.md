@@ -80,10 +80,10 @@ class ChatApplyResult:
 
 标量操作格式为 `{"type":"scalar","path":"basic.exposure","mode":"delta|set","value":0.3,"reason":"..."}`；曲线格式为 `{"type":"tone_curve","points":[...],"reason":"..."}`。
 
-- [ ] 先写失败测试：合法 delta/set、clamp、未知路径、非法 mode、布尔冒充数字、空变更及输入对象不被修改。
-- [ ] 写曲线失败测试：端点、范围、输入严格递增、重复 input、非数值、整组原子拒绝和其余 analysis 字段不变。
-- [ ] 在参数契约中导出 AI 可写标量路径；在 `chat_contract.py` 深拷贝后按统一范围落点。
-- [ ] 标量非法项可逐项拒绝；一条曲线只允许整组接受或整组拒绝；最终无合法变化时不制造版本。
+- [x] 先写失败测试：合法 delta/set、clamp、未知路径、非法 mode、布尔冒充数字、空变更及输入对象不被修改。
+- [x] 写曲线失败测试：端点、范围、输入严格递增、重复 input、非数值、整组原子拒绝和其余 analysis 字段不变。
+- [x] 在参数契约中导出 AI 可写标量路径；在 `chat_contract.py` 深拷贝后按统一范围落点。
+- [x] 标量非法项可逐项拒绝；一条曲线只允许整组接受或整组拒绝；最终无合法变化时不制造版本。
 
 Run: `.venv\Scripts\python.exe -m pytest tests/test_chat_contract.py -q`
 
