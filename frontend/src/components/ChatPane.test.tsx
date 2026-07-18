@@ -68,6 +68,16 @@ describe("ChatPane", () => {
     expect(html).toMatch(/<button(?![^>]*disabled)[^>]*>撤销<\/button>/);
   });
 
+  it("两轮精修完成后禁用精修按钮", () => {
+    const html = renderToStaticMarkup(<ChatPane
+      enabled
+      workflow={workflow({ phase: "pending", round: 2, stopReason: "round_limit" })}
+      coordinator={coordinator}
+      renderStatus="ready"
+    />);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>AI 精修<\/button>/);
+  });
+
   it("发送中区分初次请求与精修轮次，错误提供稳定出口", () => {
     const initial = renderToStaticMarkup(<ChatPane enabled workflow={workflow({ phase: "requesting", round: 0 })} coordinator={coordinator} />);
     expect(initial).toContain("正在分析修图要求");

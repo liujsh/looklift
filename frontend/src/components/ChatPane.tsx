@@ -106,7 +106,7 @@ export function ChatPane({
             await (coordinator?.discardPending() ?? Promise.reject(new Error("会话尚未就绪")));
             workflow?.settlePending();
           })}>撤销</button>
-          <button type="button" disabled={actionBusy || !candidateReady} onClick={() => void act(() => workflow?.refine() ?? Promise.reject(new Error("AI 尚未就绪")))}>AI 精修</button>
+          <button type="button" disabled={actionBusy || !candidateReady || state.round >= 2} onClick={() => void act(() => workflow?.refine() ?? Promise.reject(new Error("AI 尚未就绪")))}>AI 精修</button>
           <button type="button" disabled={actionBusy || !candidateReady} onClick={() => void act(async () => {
             await (coordinator?.continueManual() ?? Promise.reject(new Error("会话尚未就绪")));
             workflow?.settlePending();
