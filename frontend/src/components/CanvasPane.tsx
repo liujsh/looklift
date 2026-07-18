@@ -54,6 +54,7 @@ export function CanvasPane({
   const schedulerRef = useRef<PreviewScheduler<LivePreviewRequest> | null>(null);
   const analysisControllerRef = useRef<AbortController | null>(null);
   const lastRenderedSignatureRef = useRef<string | null>(null);
+  const loadPathRef = useRef<(path: string) => Promise<void>>(async () => undefined);
   const [phase, setPhase] = useState<CanvasPhase>("idle");
   const [loadedPath, setLoadedPath] = useState<string | null>(null);
   const [urls, setUrls] = useState<PreviewUrls | null>(null);
@@ -148,6 +149,7 @@ export function CanvasPane({
       onRenderStateChange?.({ status: "error", error: canvasErrorMessage(reason) });
     }
   }, [analysis, client, factor, onImagePathChange, onRenderStateChange, replaceUrls]);
+  loadPathRef.current = loadPath;
 
   const runAnalysis = async () => {
     if (!client || !loadedPath || analyzing) return;
@@ -201,7 +203,10 @@ export function CanvasPane({
     if (!element || !client) return;
     let cancelled = false;
     let unlisten: (() => void) | undefined;
-    void listenForTauriDrops(element, { onActive: setDragActive, onPath: loadPath })
+    void listenForTauriDrops(element, {
+      onActive: setDragActive,
+      onPath: (path) => { void loadPathRef.current(path); },
+    })
       .then((stop) => {
         if (cancelled) stop();
         else unlisten = stop;
@@ -213,7 +218,7 @@ export function CanvasPane({
       cancelled = true;
       unlisten?.();
     };
-  }, [client, loadPath]);
+  }, [client]);
 
   useEffect(() => () => {
     requestRef.current += 1;
