@@ -11,6 +11,8 @@
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+完整的产品路线、架构、版本规格与实施记录见 [文档中心](docs/README.md)。
+
 ## 三条路径
 
 | 场景 | 命令 | 准确度 |
@@ -87,7 +89,7 @@ pnpm tauri build
 ```
 
 产物位于
-`frontend/src-tauri/target/release/bundle/nsis/looklift_0.5.0_x64-setup.exe`。
+`frontend/src-tauri/target/release/bundle/nsis/looklift_2.0.0_x64-setup.exe`。
 冻结引擎可在仓库根目录执行以下离线发布冒烟：
 
 ```powershell
