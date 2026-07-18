@@ -92,7 +92,8 @@ def test_tone_curve_matte_black_extrapolates_by_slope_one():
 def test_saturation_negative_desaturates(sample_analysis):
     a = _zero_analysis(sample_analysis)
     a["basic"]["saturation"] = -100
-    arr = np.zeros((4, 4, 3), dtype=np.float32); arr[..., 0] = 0.8  # 纯红
+    arr = np.zeros((4, 4, 3), dtype=np.float32)
+    arr[..., 0] = 0.8  # 纯红
     out = render._apply_color_ops(arr, a)
     assert out.std(axis=-1).mean() < 0.05  # 通道间差异消失=去饱和
 
@@ -176,7 +177,8 @@ def test_score_monotonic_under_known_perturbation(sample_analysis):
     def perturbed(ev):
         a = copy.deepcopy(sample_analysis)
         a["basic"] = {k: 0 for k in a["basic"]}
-        a["tone_curve"] = []; a["hsl"] = []
+        a["tone_curve"] = []
+        a["hsl"] = []
         for z in ("shadows", "midtones", "highlights", "global_"):
             a["color_grading"][z] = {"hue": 0, "saturation": 0, "luminance": 0}
         a["effects"] = {"vignette_amount": 0, "grain_amount": 0}

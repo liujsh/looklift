@@ -323,10 +323,10 @@ Expected: 测试与 production build 成功。
 - Modify: `frontend/src-tauri/Cargo.lock`
 - Modify: `frontend/src-tauri/tauri.conf.json`
 
-- [ ] 用 mock provider + 临时 SQLite 写离线集成测试：消息→候选→预览→保留/撤销→重启恢复。
-- [ ] 增加失败矩阵：鉴权、超时、服务未启动、取消、非法响应、渲染失败、数据库回滚；每项都断言正式版本不变且有重试/撤销/手调出口。
-- [ ] 跑 Python、前端、Rust 全量回归，确认现有手调、模板、渲染、导出与 provider 不回退。
-- [ ] 回填架构实况、迁移版本、人工验收清单和已知限制；实现完成后才把版本字段从 2.0.0 对齐到 `2.1.0`。
+- [x] 用 mock provider + 临时 SQLite 写离线集成测试：消息→候选→预览→保留/撤销→重启恢复。
+- [x] 增加失败矩阵：鉴权、超时、服务未启动、取消、非法响应、渲染失败、数据库回滚；每项都断言正式版本不变且有重试/撤销/手调出口。
+- [x] 跑 Python、前端、Rust 全量回归，确认现有手调、模板、渲染、导出与 provider 不回退。
+- [x] 回填架构实况、迁移版本、人工验收清单和已知限制；实现完成后才把版本字段从 2.0.0 对齐到 `2.1.0`。
 
 Run: `.venv\Scripts\python.exe -m pytest -q`
 

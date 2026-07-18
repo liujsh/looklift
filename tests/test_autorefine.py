@@ -6,7 +6,8 @@ from looklift import autorefine
 
 
 def test_auto_refine_keeps_best_and_stops_on_convergence(tmp_path, sample_analysis, monkeypatch):
-    src = tmp_path / "src.jpg"; tgt = tmp_path / "tgt.jpg"
+    src = tmp_path / "src.jpg"
+    tgt = tmp_path / "tgt.jpg"
     Image.new("RGB", (32, 32), (90, 90, 90)).save(src)
     Image.new("RGB", (32, 32), (140, 140, 140)).save(tgt)
 
@@ -29,8 +30,10 @@ def test_auto_refine_keeps_best_and_stops_on_convergence(tmp_path, sample_analys
 
 
 def test_auto_refine_respects_rounds_limit(tmp_path, sample_analysis, monkeypatch):
-    src = tmp_path / "s.jpg"; tgt = tmp_path / "t.jpg"
-    Image.new("RGB", (16, 16)).save(src); Image.new("RGB", (16, 16)).save(tgt)
+    src = tmp_path / "s.jpg"
+    tgt = tmp_path / "t.jpg"
+    Image.new("RGB", (16, 16)).save(src)
+    Image.new("RGB", (16, 16)).save(tgt)
     it = iter([10.0, 20.0, 30.0, 40.0, 50.0, 60.0])
     monkeypatch.setattr(autorefine.render, "score", lambda r, t: next(it))
     monkeypatch.setattr(autorefine.analyzer, "refine",
@@ -41,8 +44,10 @@ def test_auto_refine_respects_rounds_limit(tmp_path, sample_analysis, monkeypatc
 
 def test_auto_refine_fires_on_round_for_every_round(tmp_path, sample_analysis, monkeypatch):
     """on_round(i, score) 应在第 0 轮(初始评分)和之后每一轮都触发一次。"""
-    src = tmp_path / "s.jpg"; tgt = tmp_path / "t.jpg"
-    Image.new("RGB", (16, 16)).save(src); Image.new("RGB", (16, 16)).save(tgt)
+    src = tmp_path / "s.jpg"
+    tgt = tmp_path / "t.jpg"
+    Image.new("RGB", (16, 16)).save(src)
+    Image.new("RGB", (16, 16)).save(tgt)
     scores = iter([10.0, 20.0, 30.0])
     monkeypatch.setattr(autorefine.render, "score", lambda r, t: next(scores))
     monkeypatch.setattr(autorefine.analyzer, "refine",

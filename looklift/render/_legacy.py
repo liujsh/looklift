@@ -216,7 +216,8 @@ def _ab_stats(arr):
 def score(rendered: Image.Image, target: Image.Image) -> float:
     """还原度 0-100。只用于同一目标的迭代趋势判断,不做跨风格比较。"""
     def prep(im):
-        im = im.convert("RGB"); im.thumbnail((256, 256))
+        im = im.convert("RGB")
+        im.thumbnail((256, 256))
         return np.asarray(im, dtype=np.float32) / 255.0
     r, t = prep(rendered), prep(target)
 
