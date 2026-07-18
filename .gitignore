@@ -17,6 +17,8 @@ TestLook.xmp
 
 # 个人风格库
 looks/
+!looklift/data/looks/
+!looklift/data/looks/*.json
 
 # 构建产物
 *.egg-info/

@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from looklift import config, intensity, report, xmp_reader, xmp_writer
+from looklift import intensity, report, xmp_reader, xmp_writer
 from looklift.gui import server as gui_server
 
 
@@ -112,6 +112,15 @@ def test_post_looks_duplicate_name_returns_409(running_server, sample_analysis):
     status2, data2 = _request(running_server, "POST", "/api/looks", {"name": "dup", "analysis": sample_analysis})
     assert status2 == 409
     assert "error" in data2
+
+
+def test_post_looks_rejects_builtin_reserved_name(running_server, sample_analysis):
+    status, data = _request(
+        running_server, "POST", "/api/looks",
+        {"name": "青橙经典", "analysis": sample_analysis},
+    )
+    assert status == 409
+    assert "同名" in data["error"]
 
 
 @pytest.mark.parametrize("bad_name", ["../x", "a/b", "a:b", "", " "])
@@ -220,11 +229,13 @@ def test_get_looks_lists_valid_entries_and_skips_corrupt(running_server, tmp_pat
     assert status == 200
     entries = data["looks"]
     names = {e["name"] for e in entries}
-    assert names == {"good1", "good2"}
+    assert names == {"good1", "good2", "青橙经典", "柔和胶片", "清透日系"}
 
     good1 = next(e for e in entries if e["name"] == "good1")
     assert good1["has_preset"] is True
     assert good1["summary"] == sample_analysis["summary"]
+    assert good1["source"] == "user"
+    assert good1["readonly"] is False
 
     good2 = next(e for e in entries if e["name"] == "good2")
     assert good2["has_preset"] is False
@@ -235,7 +246,8 @@ def test_get_looks_lists_valid_entries_and_skips_corrupt(running_server, tmp_pat
 def test_get_looks_empty_when_no_looks_dir_content(running_server):
     status, data = _request(running_server, "GET", "/api/looks")
     assert status == 200
-    assert data["looks"] == []
+    assert {entry["name"] for entry in data["looks"]} == {"青橙经典", "柔和胶片", "清透日系"}
+    assert all(entry["source"] == "built_in" for entry in data["looks"])
 
 
 # ─── GET /api/looks/<name>：详情 ────────────────────────────────────────

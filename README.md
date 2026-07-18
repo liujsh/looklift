@@ -67,7 +67,37 @@ Ollama 300 秒。命令行也可用 `--backend openai_compat` 或 `--backend oll
 
 ## GUI 使用
 
-不想敲命令行也可以,GUI 复用和 CLI 完全相同的分析/渲染/风格库逻辑:
+### Tauri 桌面版（v2.0-B）
+
+Windows 桌面版提供拖图、before/after、契约驱动的完整调色面板、内置模板、收藏、
+报告和 XMP/RAW sidecar 导出。应用启动时自动拉起本地 Python 引擎，关闭窗口时一并
+回收；业务逻辑仍与 CLI 共用同一套 Python 实现。
+
+从源码构建最终安装包（需要 Node/pnpm、Rust 和 Python 3.11+）：
+
+```powershell
+python -m venv .venv
+.venv\Scripts\pip install -e ".[render]" pyinstaller
+.venv\Scripts\python -m PyInstaller --noconfirm --clean `
+  --distpath build\pyinstaller\dist --workpath build\pyinstaller\work `
+  packaging\looklift-engine.spec
+cd frontend
+pnpm install
+pnpm tauri build
+```
+
+产物位于
+`frontend/src-tauri/target/release/bundle/nsis/looklift_0.5.0_x64-setup.exe`。
+冻结引擎可在仓库根目录执行以下离线发布冒烟：
+
+```powershell
+.venv\Scripts\python packaging\smoke_release.py `
+  frontend\src-tauri\target\release\looklift-engine.exe
+```
+
+### 旧版 pywebview GUI
+
+旧版 GUI 仍可用于开发和浏览器回退，复用和 CLI 完全相同的分析/渲染/风格库逻辑：
 
 ```
 pip install -e ".[gui]"

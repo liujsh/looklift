@@ -24,6 +24,7 @@ from typing import Any, Callable
 from PIL import Image
 
 from .. import analyzer, config, intensity, render, report, xmp_writer
+from ..render import contract as render_contract
 from . import lookstore
 from . import tasks
 from . import upload
@@ -141,6 +142,25 @@ def _validate_factor(value: Any) -> "tuple[float, None] | tuple[None, tuple[int,
 def _ping(ctx: dict) -> tuple[int, dict]:
     """`GET /api/ping`：连通性探活。"""
     return 200, {"ok": True}
+
+
+def _param_contract(ctx: dict) -> tuple[int, dict]:
+    """把引擎参数契约机械投影给前端，不在 GUI 层维护范围或默认值副本。"""
+    return 200, {
+        path: {
+            "min": render_contract.param_bounds(path)[0],
+            "max": render_contract.param_bounds(path)[1],
+            "default": render_contract.param_default(path),
+        }
+        for path in render_contract.param_paths()
+    }
+
+
+def _engine_probe(ctx: dict) -> tuple[int, dict]:
+    """T1 打包门禁：经 HTTP 真实调用 pyvips 与 numba 融合渲染。"""
+    from .sidecar import warm_engine
+
+    return 200, warm_engine()
 
 
 def _analyze_would_work(cfg: dict[str, Any]) -> bool:
@@ -539,6 +559,8 @@ def _preview(ctx: dict) -> "tuple[int, dict] | tuple[int, bytes, str]":
 
 ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/ping"): _ping,
+    ("GET", "/api/param-contract"): _param_contract,
+    ("GET", "/api/engine-probe"): _engine_probe,
     ("GET", "/api/config"): _get_config,
     ("POST", "/api/config"): _post_config,
     ("GET", "/api/tasks/<id>"): _get_task,

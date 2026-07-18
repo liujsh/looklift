@@ -1,6 +1,6 @@
 # v2.0-B Spec:三栏 GUI 壳(Tauri)—— 需求
 
-> 状态:草拟,待作者 review。
+> 状态:已确认(2026-07-18,作者授权开工)。
 > 上游文档:[产品宪法 requirements.md](../../requirements.md)(定位/用户故事/路线图)、
 > [方案 plan](../../plans/)(一站式升级调研与技术栈定案,见根 plan 文件的"技术栈定案"表)、
 > [specs 规范](../README.md)。

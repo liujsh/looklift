@@ -1,0 +1,18 @@
+{
+  "summary": "抬起黑场、收拢高光并加入细颗粒的柔和通用胶片风格。",
+  "steps": ["降低数码感强烈的局部反差", "抬起黑场并柔化高光", "加入适量颗粒和轻微暗角"],
+  "basic": {"temperature_shift": 4, "tint_shift": 3, "exposure": 0, "contrast": -8, "highlights": -25, "shadows": 18, "whites": -8, "blacks": 12, "texture": -8, "clarity": -5, "dehaze": -2, "vibrance": -6, "saturation": -8},
+  "tone_curve": [{"input": 0, "output": 12}, {"input": 48, "output": 50}, {"input": 128, "output": 132}, {"input": 210, "output": 206}, {"input": 255, "output": 245}],
+  "hsl": [
+    {"color": "red", "hue": 0, "saturation": -5, "luminance": 4},
+    {"color": "orange", "hue": -2, "saturation": -6, "luminance": 8},
+    {"color": "yellow", "hue": -8, "saturation": -18, "luminance": 6},
+    {"color": "green", "hue": 10, "saturation": -25, "luminance": 4},
+    {"color": "aqua", "hue": 4, "saturation": -18, "luminance": 3},
+    {"color": "blue", "hue": -4, "saturation": -15, "luminance": 2},
+    {"color": "purple", "hue": 0, "saturation": -12, "luminance": 2},
+    {"color": "magenta", "hue": 0, "saturation": -12, "luminance": 2}
+  ],
+  "color_grading": {"shadows": {"hue": 195, "saturation": 5, "luminance": 3}, "midtones": {"hue": 32, "saturation": 4, "luminance": 1}, "highlights": {"hue": 46, "saturation": 6, "luminance": 4}, "global_": {"hue": 0, "saturation": 0, "luminance": 0}, "blending": 65, "balance": 5},
+  "effects": {"vignette_amount": -10, "grain_amount": 22}
+}

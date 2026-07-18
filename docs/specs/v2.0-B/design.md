@@ -1,6 +1,6 @@
 # v2.0-B Spec:三栏 GUI 壳(Tauri)—— 设计
 
-> 状态:草拟,待作者 review。
+> 状态:已确认(2026-07-18,作者授权开工)。
 > 上游:[requirements.md](requirements.md)(本迭代做什么);技术栈定案见根 [plan](../../plans/)。
 > 约定:本文件定"怎么做、为什么";选项均给推荐 + 理由。YAGNI:不写引擎内部/聊天/RAW。
 

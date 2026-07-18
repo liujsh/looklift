@@ -17,6 +17,82 @@
   首次配置向导两条路径、WebView2 缺失兜底、长任务体验、U1/U4/U8 全流程复核、
   视觉 token 合规抽查——清单见 [specs/v0.4/tasks.md](specs/v0.4/tasks.md)
   「人工验收」一节,逐项过一遍后勾选。
+- [x] **v2.0-B T1 最后人工门禁**:作者于 2026-07-18 确认手测通过。在一台未安装 Python/Rust 的干净 Windows 上
+  双击 `looklift_0.5.0_x64-setup.exe`，确认安装、启动、页面显示「T1 真实引擎往返已通过」，
+  关闭后任务管理器无 `looklift-engine.exe`。本机 Defender 自定义扫描已无威胁，
+  但干净机 SmartScreen/Defender 仍需此步验收。
+- [ ] **v2.0-B T11 集中人工验收（M1–M8）**：用本次最终安装包重新执行干净机启动/退出、
+  拖图→分析→调参→diff→收藏→导出、三栏视觉与手感、真实路径拖拽、连续预览、三份
+  内置模板观感和 40MP 稳定性。逐项判据见 [specs/v2.0-B/tasks.md](specs/v2.0-B/tasks.md)。
+
+## v2.0-B T1 打包 gate 实证(2026-07-18)
+
+| 项目 | 结果 |
+|---|---|
+| 构建链 | Node 22.19.0 / pnpm 11.5.3 / rustc 1.97.1 / VS 2022 Build Tools 17.14.36 |
+| 真实引擎 | numba 0.66.0 + pyvips 3.1.1 + libvips 8.18.4，冻结后真实渲染通过 |
+| onedir | 约 222 MB；冷 probe 19.7s，cache 命中后 1.63s；可写 cache 落盘 2 文件 |
+| Tauri 往返 | release 应用自动拉起 sidecar；带启动 token 的 ping/engine-probe 均通过 |
+| 生命周期 | 正常关闭主窗口后主进程与 sidecar 同时退出，无孤儿进程 |
+| 安装器 | NSIS `looklift_0.5.0_x64-setup.exe`，65.1 MB；本机 Defender 扫描无威胁 |
+| 自动测试 | Python `394 passed, 1 skipped`；TypeScript/Vite build、Vitest `21 passed` 和 Rust `cargo check` 通过 |
+
+门禁判定为 **GO（2026-07-18 作者确认）**：技术链路与干净 Windows
+安装/SmartScreen 人工验收均已通过，可以进入 T2。
+
+## v2.0-B T6 参数控件实证(2026-07-18)
+
+- 参数路径、范围、默认值和复位值均从 `/api/param-contract` 获取；前端只保留路径与中文标签映射。
+- `ColorCurve` 仓库虽附 MIT LICENSE，但 README 明确声明 JavaScript 基于 GIMP curves code，按项目“不碰 GPL”红线弃用，未引用其代码；曲线采用独立实现的极简单调 Hermite 编辑器。
+- 四区颜色分级采用 MIT 许可的 `react-colorful 5.8.0`，已核对安装包 LICENSE 和 ACKNOWLEDGMENTS；业务范围与组件标准坐标通过参数契约双向映射。
+- 自动验证：前端 `38 passed`、TypeScript/Vite production build 通过；Python `394 passed, 1 skipped`。
+
+## v2.0-B T7 实时预览与版本栈(2026-07-18)
+
+- 参数在本地即时乐观更新，静止 160ms 后发预览；新变化同时清定时器、abort 在途请求，并以请求序号拒绝旧慢响应。
+- 图片切换使用可复用 `cancel()`，取消旧图请求但不销毁调度器；首帧同步使用新图的中性 analysis，避免短暂套用上一张图参数。
+- `editorStore` 在连续拖动期间不堆历史，防抖定格时只 push 一份拖动前快照；`applyDelta` 与分片提交共用同一版本 owner，未添加 undo UI。
+
+## v2.0-B T8 内置模板与图库(2026-07-18)
+
+- 首批内置模板采用三个通用原创参数组合：青橙经典、柔和胶片、清透日系；不复制商业预设，也不引用外部实现。
+- 内置名称保留且源目录只读；历史用户同名条目优先显示和载入，避免升级后遮蔽已有数据，同时合并列表不产生重复卡片。
+- API 列表增加 `source`/`readonly`，前端按内置/用户 tab 展示；卡片载入完整 analysis 到同一 `editorStore`，复用 T7 自动预览。
+
+## v2.0-B T9 统一视觉收口(2026-07-18)
+
+- 视觉模型统一为桌面暗房工作台：暖纸色应用框架、近黑灯箱画布、氧化陶土色高信号操作；全程使用系统离线字体。
+- tokens 独立为颜色/字体/间距/阴影单一入口；组件样式不再散落十六进制色值，并补键盘 focus 与 reduced-motion。
+- 图库接触印样带是唯一视觉签名；其余区域保持克制。1100px/820px 两级窗口边界已有结构回归，真机截图与比例手感留 M3/M4 集中验收。
+
+## v2.0-B T10 收藏、报告与导出闭环(2026-07-18)
+
+- 当前 `analysis` 与全局强度一起收藏；后端 409 重名中文错误原样展示，成功后只重拉图库并切到“我的风格”。
+- 报告通过本地编码 URL 在新窗口打开；预设与 RAW sidecar 均复用既有导出 API，并展示后端返回的实际文件路径。
+- 顶栏导出只对刚收藏或载入、且此后未继续修改的风格开放，避免把当前画面与库内导出对象混为一谈。
+- 离线流程测试锁定手调、before/after、收藏与导出共用同一份 `analysis` 和 `factor`。
+
+## v2.0-B T11 最终打包与自动验收(2026-07-18)
+
+- 用 Python 3.12.13 / PyInstaller 6.21.0 重建 onedir sidecar；最终 Tauri release 已包含
+  T8 的三份内置模板、T9 最终 UI 与 T10 收藏/报告/导出闭环。
+- release sidecar 连续两次真实预热均成功：numba 0.66.0、pyvips 3.1.1、libvips 8.18.4；
+  随机 localhost API 返回 3 份只读内置模板，临时用户库收藏和 XMP 导出成功，进程已回收。
+- Tauri 2.11.5 release + NSIS 构建成功；安装包
+  `frontend/src-tauri/target/release/bundle/nsis/looklift_0.5.0_x64-setup.exe`，65,128,699 字节。
+- 自动化基线：Python `398 passed, 1 skipped`；前端 Vitest `55 passed`；TypeScript/Vite
+  production build 与 Tauri release build 通过。最终 M1–M8 仍由作者在真机集中验收。
+
+## v2.0-B PR 前审查修正(2026-07-18)
+
+- 修复 WebView 原生 `fetch` 被作为对象方法调用时丢失 `Window` 接收者、导致
+  `Illegal invocation` 的启动错误；默认请求函数现在始终经 `globalThis.fetch` 调用。
+- 补齐此前只有 API client、没有界面入口的 AI 分析闭环：画布可提交当前图片、轮询任务、
+  取消旧图任务，并把完整 `analysis`、`summary`、`steps` 回填面板和预览。
+- 修复风格强度一致性：载入图库、AI 新结果和重置均回到 100%；已激活风格同时绑定
+  `analysis` 与 `factor`，任一变化都会禁用旧风格导出，避免预览与导出强度不一致。
+- PR 前自动验证：Python `398 passed, 1 skipped`；前端 Vitest `62 passed`；TypeScript/Vite
+  production build、Rust `cargo test`、本分支改动 Python 文件的 Ruff 检查均通过。
 
 ## v0.4 开发中踩的坑(已解决)
 

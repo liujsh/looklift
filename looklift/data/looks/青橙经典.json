@@ -1,0 +1,18 @@
+{
+  "summary": "以冷青阴影和温暖肤色形成清晰冷暖对比的通用青橙风格。",
+  "steps": ["压低高光并增加适度对比", "阴影偏青、亮部偏暖", "控制整体饱和度避免肤色过艳"],
+  "basic": {"temperature_shift": 8, "tint_shift": 0, "exposure": 0, "contrast": 18, "highlights": -20, "shadows": 12, "whites": 8, "blacks": -12, "texture": 5, "clarity": 8, "dehaze": 6, "vibrance": 12, "saturation": -4},
+  "tone_curve": [{"input": 0, "output": 0}, {"input": 48, "output": 40}, {"input": 128, "output": 132}, {"input": 205, "output": 218}, {"input": 255, "output": 255}],
+  "hsl": [
+    {"color": "red", "hue": 2, "saturation": 2, "luminance": 2},
+    {"color": "orange", "hue": -4, "saturation": 15, "luminance": 6},
+    {"color": "yellow", "hue": -10, "saturation": -12, "luminance": 0},
+    {"color": "green", "hue": 18, "saturation": -20, "luminance": -4},
+    {"color": "aqua", "hue": -8, "saturation": 12, "luminance": -4},
+    {"color": "blue", "hue": -12, "saturation": 18, "luminance": -8},
+    {"color": "purple", "hue": 0, "saturation": -8, "luminance": 0},
+    {"color": "magenta", "hue": 0, "saturation": -8, "luminance": 0}
+  ],
+  "color_grading": {"shadows": {"hue": 210, "saturation": 12, "luminance": -4}, "midtones": {"hue": 28, "saturation": 5, "luminance": 0}, "highlights": {"hue": 38, "saturation": 10, "luminance": 3}, "global_": {"hue": 0, "saturation": 0, "luminance": 0}, "blending": 50, "balance": 0},
+  "effects": {"vignette_amount": -12, "grain_amount": 4}
+}

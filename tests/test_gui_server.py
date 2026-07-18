@@ -35,10 +35,10 @@ def running_server():
         thread.join(timeout=5)
 
 
-def _get(srv, path):
+def _get(srv, path, *, headers=None):
     conn = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=5)
     try:
-        conn.request("GET", path)
+        conn.request("GET", path, headers=headers or {})
         resp = conn.getresponse()
         body = resp.read()
         return resp.status, resp.getheader("Content-Type"), body
@@ -121,6 +121,101 @@ def test_api_ping(running_server):
     assert status == 200
     assert "application/json" in content_type
     assert json.loads(body) == {"ok": True}
+
+
+def test_param_contract_api_projects_render_contract(running_server):
+    """右面板只消费引擎契约投影，不在 API 层维护第二份路径或范围表。"""
+    from looklift.render import contract
+
+    status, content_type, body = _get(running_server, "/api/param-contract")
+
+    assert status == 200
+    assert "application/json" in content_type
+    payload = json.loads(body)
+    assert set(payload) == set(contract.param_paths())
+    for path, item in payload.items():
+        minimum, maximum = contract.param_bounds(path)
+        assert item == {
+            "min": minimum,
+            "max": maximum,
+            "default": contract.param_default(path),
+        }
+
+
+def test_api_token_enabled_rejects_missing_or_wrong_header():
+    """Tauri sidecar 启用令牌后，未授权的本机请求不得进入 API。"""
+    srv = gui_server.create_server(port=0, token="test-secret")
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        for token in (None, "wrong"):
+            conn = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=5)
+            headers = {} if token is None else {"X-Looklift-Token": token}
+            conn.request("GET", "/api/ping", headers=headers)
+            response = conn.getresponse()
+            assert response.status == 401
+            assert "启动令牌" in json.loads(response.read())["error"]
+            conn.close()
+
+        conn = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=5)
+        conn.request("GET", "/api/ping", headers={"X-Looklift-Token": "test-secret"})
+        response = conn.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read()) == {"ok": True}
+        conn.close()
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        thread.join(timeout=5)
+
+
+def test_api_cors_allows_tauri_and_dev_origins_but_not_unknown(running_server):
+    for origin in ("http://tauri.localhost", "http://localhost:1420"):
+        status, _, _ = _get(running_server, "/api/ping", headers={"Origin": origin})
+        assert status == 200
+        conn = http.client.HTTPConnection("127.0.0.1", running_server.server_port, timeout=5)
+        conn.request(
+            "OPTIONS",
+            "/api/ping",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Headers": "x-looklift-token",
+            },
+        )
+        response = conn.getresponse()
+        response.read()
+        assert response.status == 204
+        assert response.getheader("Access-Control-Allow-Origin") == origin
+        assert "X-Looklift-Token" in response.getheader("Access-Control-Allow-Headers")
+        conn.close()
+
+    status, _, _ = _get(
+        running_server,
+        "/api/ping",
+        headers={"Origin": "https://evil.example"},
+    )
+    assert status == 200
+    conn = http.client.HTTPConnection("127.0.0.1", running_server.server_port, timeout=5)
+    conn.request("GET", "/api/ping", headers={"Origin": "https://evil.example"})
+    response = conn.getresponse()
+    response.read()
+    assert response.getheader("Access-Control-Allow-Origin") is None
+    conn.close()
+
+
+def test_engine_probe_route_executes_real_probe_boundary(running_server, monkeypatch):
+    from looklift.gui import sidecar
+
+    monkeypatch.setattr(
+        sidecar,
+        "warm_engine",
+        lambda: {"numba": "test", "pyvips": "test", "libvips": "test", "rendered": True},
+    )
+
+    status, _, body = _get(running_server, "/api/engine-probe")
+
+    assert status == 200
+    assert json.loads(body)["rendered"] is True
 
 
 def test_report_route_unknown_name_returns_404(running_server):

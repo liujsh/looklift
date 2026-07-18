@@ -1,0 +1,18 @@
+{
+  "summary": "低反差、高明度、轻微冷调的清透日系通用风格。",
+  "steps": ["提高曝光并保留高光层次", "降低对比、抬起暗部", "压低绿色饱和度并保持肤色明亮"],
+  "basic": {"temperature_shift": -4, "tint_shift": 2, "exposure": 0.35, "contrast": -12, "highlights": -18, "shadows": 22, "whites": 10, "blacks": 8, "texture": -4, "clarity": -6, "dehaze": 0, "vibrance": 6, "saturation": -5},
+  "tone_curve": [{"input": 0, "output": 8}, {"input": 56, "output": 64}, {"input": 128, "output": 140}, {"input": 210, "output": 220}, {"input": 255, "output": 255}],
+  "hsl": [
+    {"color": "red", "hue": 0, "saturation": -4, "luminance": 8},
+    {"color": "orange", "hue": -2, "saturation": -6, "luminance": 12},
+    {"color": "yellow", "hue": -6, "saturation": -15, "luminance": 10},
+    {"color": "green", "hue": 12, "saturation": -28, "luminance": 14},
+    {"color": "aqua", "hue": -4, "saturation": -10, "luminance": 10},
+    {"color": "blue", "hue": -6, "saturation": -8, "luminance": 12},
+    {"color": "purple", "hue": 0, "saturation": -10, "luminance": 8},
+    {"color": "magenta", "hue": 0, "saturation": -8, "luminance": 8}
+  ],
+  "color_grading": {"shadows": {"hue": 195, "saturation": 5, "luminance": 5}, "midtones": {"hue": 35, "saturation": 3, "luminance": 4}, "highlights": {"hue": 45, "saturation": 6, "luminance": 8}, "global_": {"hue": 205, "saturation": 2, "luminance": 2}, "blending": 70, "balance": 12},
+  "effects": {"vignette_amount": 0, "grain_amount": 6}
+}
