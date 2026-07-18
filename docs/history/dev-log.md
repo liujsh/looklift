@@ -39,6 +39,20 @@
 - 新增离线全链路测试，覆盖消息→候选→真实渲染→确认/撤销→重启恢复，以及超时、鉴权、
   回滚、取消和渲染错误不污染正式版本。版本字段统一为 `2.1.0`。
 
+## v2.1 人工验收预览回归修复（2026-07-18）
+
+- 人工验收发现模板、右侧手调和 AI 候选只更新参数、画布不更新；WebView Network 实证
+  `/api/preview` 排队 3.5 分钟，同时产生约 90 个 `plugin:event` listen/unlisten 请求。
+- 根因是 Canvas 原生拖图 effect 依赖随 analysis/factor 重建的 `loadPath`。改为每个
+  Canvas/client 只注册一次监听，通过 ref 调用最新回调，消除事件请求风暴。
+- 所有改变显示 analysis 的入口立即使旧预览失效；AI 候选只有在对应预览 ready 后才能保留、
+  继续手调或精修，渲染失败仍保留候选以便撤销或重试。
+- AI 精修从“一次点击自动连跑两轮”改为“一次点击一轮、累计最多两轮”，并在 workflow 层拦截
+  未渲染候选、并发重复点击和第三轮调用。
+- 自动验证：前端 `89 passed`、TypeScript 与 Vite production build 通过；Python
+  `452 passed, 1 skipped`、Ruff 与 Rust `cargo check` 通过。人工复验项目保留在
+  [v2.1/tasks.md](../versions/v2.1/tasks.md)，未提前勾选。
+
 ## v2.0-B T1 打包 gate 实证(2026-07-18)
 
 | 项目 | 结果 |
