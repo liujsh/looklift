@@ -35,7 +35,7 @@ describe("chatWorkflow", () => {
     expect(store.getSnapshot().versions).toEqual([]);
   });
 
-  it("AI 精修最多追加两轮，每轮使用最新 candidate，done 提前停止", async () => {
+  it("每次点击只精修一轮，累计两轮且每轮使用最新 candidate", async () => {
     const store = createEditorStore();
     store.openImage("C:/photo.jpg", analysis());
     const chatStep = vi.fn()
@@ -44,24 +44,64 @@ describe("chatWorkflow", () => {
       .mockResolvedValueOnce(response(3));
     const workflow = createChatWorkflow({ chatStep }, store);
     await workflow.send("先调整");
+    store.setRenderState({ status: "ready", error: null });
     await workflow.refine();
 
-    expect(chatStep).toHaveBeenCalledTimes(3);
+    expect(chatStep).toHaveBeenCalledTimes(2);
     expect(chatStep.mock.calls[1][0].current_analysis.basic.exposure).toBe(1);
+    expect(workflow.getSnapshot().round).toBe(1);
+
+    store.setRenderState({ status: "ready", error: null });
+    await workflow.refine();
+    expect(chatStep).toHaveBeenCalledTimes(3);
     expect(chatStep.mock.calls[2][0].current_analysis.basic.exposure).toBe(2);
     expect(workflow.getSnapshot().stopReason).toBe("round_limit");
 
+    await workflow.refine();
+    expect(chatStep).toHaveBeenCalledTimes(3);
+
     const early = vi.fn().mockResolvedValueOnce(response(4, true));
     const earlyWorkflow = createChatWorkflow({ chatStep: early }, store);
+    store.setRenderState({ status: "ready", error: null });
     await earlyWorkflow.refine();
     expect(early).toHaveBeenCalledTimes(1);
     expect(earlyWorkflow.getSnapshot().stopReason).toBe("done");
+  });
+
+  it("候选未渲染完成时不会追加精修请求", async () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis());
+    store.beginPendingPreview(analysis(1), [], [], 1);
+    const chatStep = vi.fn().mockResolvedValue(response(2));
+    const workflow = createChatWorkflow({ chatStep }, store);
+
+    await expect(workflow.refine()).rejects.toThrow("候选预览尚未渲染成功");
+    expect(chatStep).not.toHaveBeenCalled();
+  });
+
+  it("并发重复点击不会追加第二个精修请求", async () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis());
+    store.beginPendingPreview(analysis(1), [], [], 1);
+    store.setRenderState({ status: "ready", error: null });
+    let finish!: (value: ChatStepResponse) => void;
+    const chatStep = vi.fn(() => new Promise<ChatStepResponse>((resolve) => { finish = resolve; }));
+    const workflow = createChatWorkflow({ chatStep }, store);
+
+    const first = workflow.refine();
+    const second = workflow.refine();
+    await Promise.resolve();
+    expect(chatStep).toHaveBeenCalledTimes(1);
+    finish(response(2));
+    await first;
+    await expect(second).rejects.toThrow("正在处理");
   });
 
   it("无变化停止且不替换候选，取消终止后续轮次", async () => {
     const store = createEditorStore();
     store.openImage("C:/photo.jpg", analysis());
     store.beginPendingPreview(analysis(1), [], [], 1);
+    store.setRenderState({ status: "ready", error: null });
     const noChange = vi.fn().mockResolvedValue({ ...response(1), changes: [], explanation: "无需再调" });
     const workflow = createChatWorkflow({ chatStep: noChange }, store);
     await workflow.refine();
@@ -74,6 +114,7 @@ describe("chatWorkflow", () => {
     const aborting = vi.fn((_request, signal?: AbortSignal) => new Promise<ChatStepResponse>((_resolve, reject) => {
       signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
     }));
+    store.setRenderState({ status: "ready", error: null });
     const cancelled = createChatWorkflow({ chatStep: aborting }, store);
     const running = cancelled.refine();
     cancelled.cancel();

@@ -68,10 +68,12 @@ describe("ChatPane", () => {
     expect(html).toMatch(/<button(?![^>]*disabled)[^>]*>撤销<\/button>/);
   });
 
-  it("发送中显示轮次和取消，错误提供稳定出口", () => {
-    const running = renderToStaticMarkup(<ChatPane enabled workflow={workflow({ phase: "requesting", round: 1 })} coordinator={coordinator} />);
-    expect(running).toContain("第 1/2 轮");
-    expect(running).toContain("取消");
+  it("发送中区分初次请求与精修轮次，错误提供稳定出口", () => {
+    const initial = renderToStaticMarkup(<ChatPane enabled workflow={workflow({ phase: "requesting", round: 0 })} coordinator={coordinator} />);
+    expect(initial).toContain("正在分析修图要求");
+    expect(initial).toContain("取消");
+    const refining = renderToStaticMarkup(<ChatPane enabled workflow={workflow({ phase: "requesting", round: 1 })} coordinator={coordinator} />);
+    expect(refining).toContain("AI 精修第 1/2 轮");
     const failed = renderToStaticMarkup(<ChatPane enabled workflow={workflow({ phase: "error", error: "服务未启动" })} coordinator={coordinator} />);
     expect(failed).toContain("服务未启动");
     expect(failed).toContain("重试或继续手调");

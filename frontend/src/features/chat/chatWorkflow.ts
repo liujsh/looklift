@@ -140,15 +140,22 @@ export function createChatWorkflow(
     },
     send(message) {
       if (!message.trim()) return Promise.reject(new Error("请输入修图要求"));
-      return runStep(message.trim(), 1);
+      return runStep(message.trim(), 0);
     },
     async refine() {
+      if (state.phase === "requesting") throw new Error("AI 正在处理，请稍候");
       if (!store.getSnapshot().pendingPreview) throw new Error("当前没有可精修的 AI 候选");
-      for (let round = 1; round <= 2; round += 1) {
-        const response = await runStep("继续精修当前效果", round);
-        if (!response || response.done || response.changes.length === 0) return;
+      if (state.round >= 2) {
+        publish({ phase: "pending", stopReason: "round_limit", round: 2 });
+        return;
       }
-      publish({ phase: "pending", stopReason: "round_limit", round: 2 });
+      if (store.getSnapshot().render.status !== "ready") {
+        throw new Error("候选预览尚未渲染成功");
+      }
+      const nextRound = state.round + 1;
+      const response = await runStep("继续精修当前效果", nextRound);
+      if (!response || response.done || response.changes.length === 0) return;
+      if (nextRound >= 2) publish({ phase: "pending", stopReason: "round_limit", round: 2 });
     },
     cancel() {
       controller?.abort();

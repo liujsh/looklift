@@ -114,7 +114,7 @@ export function ChatPane({
         </div>}
 
         {state.phase === "requesting" && <div className="chat-progress" aria-live="polite">
-          <span>第 {Math.max(1, state.round)}/2 轮 · 正在分析</span>
+          <span>{state.round === 0 ? "正在分析修图要求" : `AI 精修第 ${state.round}/2 轮`}</span>
           <button type="button" onClick={() => workflow?.cancel()}>取消等待</button>
         </div>}
 
