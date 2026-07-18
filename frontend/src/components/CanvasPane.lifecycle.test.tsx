@@ -76,9 +76,9 @@ describe("CanvasPane lifecycle", () => {
 
     await act(async () => {
       drop.callbacks!.onPath("C:/photo.jpg");
-      await Promise.resolve();
-      await Promise.resolve();
+      for (let index = 0; index < 5; index += 1) await Promise.resolve();
     });
+    expect(container.querySelector(".canvas-pane")?.getAttribute("data-phase")).toBe("ready");
     expect(preview).toHaveBeenCalledTimes(2);
 
     await act(async () => {
@@ -97,5 +97,45 @@ describe("CanvasPane lifecycle", () => {
       { path: "C:/photo.jpg", analysis: analysis(2), factor: 0.7 },
       expect.any(AbortSignal),
     );
+  });
+
+  it("父层回调身份变化不会取消已经发出的实时预览", async () => {
+    let liveSignal: AbortSignal | undefined;
+    const preview = vi.fn((_payload, signal?: AbortSignal) => {
+      if (preview.mock.calls.length <= 2) {
+        return Promise.resolve(new Blob(["jpeg"], { type: "image/jpeg" }));
+      }
+      liveSignal = signal;
+      return new Promise<Blob>(() => undefined);
+    });
+    const client = { preview, upload: vi.fn() } as unknown as LookliftClient;
+    const changedAnalysis = analysis(1);
+
+    await act(async () => {
+      root.render(<CanvasPane client={client} analysis={analysis(0)} onPreviewRendered={vi.fn()} />);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      drop.callbacks!.onPath("C:/photo.jpg");
+      for (let index = 0; index < 5; index += 1) await Promise.resolve();
+    });
+    expect(container.querySelector(".canvas-pane")?.getAttribute("data-phase")).toBe("ready");
+
+    await act(async () => {
+      root.render(<CanvasPane client={client} analysis={changedAnalysis} onPreviewRendered={vi.fn()} />);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(160);
+    });
+    expect(preview).toHaveBeenCalledTimes(3);
+    expect(liveSignal).toBeDefined();
+    expect(liveSignal!.aborted).toBe(false);
+
+    await act(async () => {
+      root.render(<CanvasPane client={client} analysis={changedAnalysis} onPreviewRendered={vi.fn()} />);
+      await Promise.resolve();
+    });
+
+    expect(liveSignal!.aborted).toBe(false);
   });
 });

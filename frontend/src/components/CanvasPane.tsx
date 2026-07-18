@@ -52,6 +52,7 @@ export function CanvasPane({
   const urlsRef = useRef<PreviewUrls | null>(null);
   const requestRef = useRef(0);
   const schedulerRef = useRef<PreviewScheduler<LivePreviewRequest> | null>(null);
+  const previewCallbacksRef = useRef({ onPreviewSettled, onRenderStateChange, onPreviewRendered });
   const analysisControllerRef = useRef<AbortController | null>(null);
   const lastRenderedSignatureRef = useRef<string | null>(null);
   const loadPathRef = useRef<(path: string) => Promise<void>>(async () => undefined);
@@ -62,6 +63,7 @@ export function CanvasPane({
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  previewCallbacksRef.current = { onPreviewSettled, onRenderStateChange, onPreviewRendered };
 
   const replaceUrls = useCallback((next: PreviewUrls | null) => {
     if (urlsRef.current) {
@@ -91,20 +93,20 @@ export function CanvasPane({
         factor: request.factor,
       }, signal),
       onDispatch: () => {
-        onPreviewSettled?.();
-        onRenderStateChange?.({ status: "rendering", error: null });
+        previewCallbacksRef.current.onPreviewSettled?.();
+        previewCallbacksRef.current.onRenderStateChange?.({ status: "rendering", error: null });
       },
       onResult: (blob, request) => {
         replaceAfter(blob);
         lastRenderedSignatureRef.current = request.signature;
         setError(null);
-        onRenderStateChange?.({ status: "ready", error: null });
-        onPreviewRendered?.(request.analysis);
+        previewCallbacksRef.current.onRenderStateChange?.({ status: "ready", error: null });
+        previewCallbacksRef.current.onPreviewRendered?.(request.analysis);
       },
       onError: (reason) => {
         const message = canvasErrorMessage(reason);
         setError(message);
-        onRenderStateChange?.({ status: "error", error: message });
+        previewCallbacksRef.current.onRenderStateChange?.({ status: "error", error: message });
       },
     });
     schedulerRef.current = scheduler;
@@ -112,7 +114,7 @@ export function CanvasPane({
       scheduler.dispose();
       if (schedulerRef.current === scheduler) schedulerRef.current = null;
     };
-  }, [client, onPreviewRendered, onPreviewSettled, onRenderStateChange, replaceAfter]);
+  }, [client, replaceAfter]);
 
   const loadPath = useCallback(async (path: string) => {
     if (!client) return;
