@@ -1,0 +1,98 @@
+# looklift v0.4「GUI alpha」实施计划
+
+> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development.
+> 本计划有意比 v0.3 计划更精简:版本三文档(`docs/versions/v0.4/`)已含完整技术细节
+> (API 路由表、强度缩放字段表、五个设计决策、逐任务验收),实现者**必须先读**
+> 任务简报指定的 spec 章节,那里的表格与决策文本是 binding 需求,本计划只定
+> 任务切分、接口契约与测试期望。
+
+**Goal:** `looklift gui` 本地界面:拖照片→AI 分析→强度滑杆+对比条→收藏→报告→导出;pywebview 窗口默认、`--browser` 兜底(spec: `docs/versions/v0.4/`)。
+
+**Architecture:** `looklift/gui/` 包(app/server/api/tasks + static SPA);stdlib ThreadingHTTPServer(127.0.0.1:0);轮询式长任务;新核心模块 `intensity.py`;`config.save_config`。GUI 只是壳,业务全在核心模块。
+
+**Tech Stack:** stdlib http.server、pywebview>=5,<6(可选依赖 `[gui]`)、原生 HTML/CSS/JS(零前端框架)、vendored claude tokens。
+
+## Global Constraints
+
+- 测试不触网、不调 AI、不开真实浏览器/窗口(webbrowser/webview 一律 mock);autouse `_isolate_env` 已隔离 home
+- 视觉只用 `vendor/claude/tokens.css` 变量,token 块之外禁止裸 hex(有自动扫描测试把关)
+- GUI 零外部网络请求;server 显式绑定 127.0.0.1
+- api.py 只做「HTTP 参数→核心函数→JSON」粘合,禁止业务逻辑
+- 中文界面文案;错误响应统一 JSON 格式 `{"error": "..."}`
+- 作者 binding:层次清晰、单文件职责单一、不堆代码山(static/js/app.js 若超 ~400 行需按面板拆文件)
+- 每任务 `pytest -q` 全绿再提交;pywebview 不作为测试依赖(测试环境不装也全绿)
+
+---
+
+### GUI-T1 打包骨架 + vendor CSS(spec tasks.md T1)
+
+**Files:** pyproject.toml(optional-dependencies gui、package-data);looklift/gui/{__init__,app,server,api,tasks}.py 占位;looklift/gui/static/{index.html,css/app.css,js/app.js,vendor/claude/{tokens.css,components.css}}
+**Interfaces:** 包可 import;tokens.css 逐字复制自 assets/design-system/claude/tokens.css;components.css 从 components.html `<style>` 摘出按钮/卡片/表单/徽标配方(注明来源注释)
+**Tests:** `import looklift.gui` 冒烟;package-data 声明存在性(读 pyproject 断言)
+**验收:** `pip install -e ".[gui]"` 成功(报告中给出输出);全量 pytest 绿
+
+### GUI-T2 config.save_config + intensity.scale_analysis(spec T2+T3)
+
+**Files:** looklift/config.py(追加 save_config);looklift/intensity.py(新);tests/test_config.py(追加)、tests/test_intensity.py(新)
+**Interfaces:** `save_config(data: dict) -> None` 手写 TOML 序列化(仅字符串/数值,写前建父目录);`scale_analysis(analysis: dict, factor: float) -> dict` 纯函数深拷贝,**逐字遵循 spec design.md「强度缩放语义」字段表**(hue/blending 不缩放、曲线向恒等线插值)
+**Tests:** save→load 往返;scale factor=0/1/0.5 三档:0 全归零+曲线对角线、1 数值全等、0.5 介于两者且 hue/blending/summary/steps 不变;入参未被修改
+
+### GUI-T3 server.py + tasks.py(spec T4+T5)
+
+**Files:** looklift/gui/server.py、looklift/gui/tasks.py、looklift/gui/api.py(路由表骨架);tests/test_gui_server.py
+**Interfaces:** `server.create_server(port=0) -> ThreadingHTTPServer`(绑定 127.0.0.1,`.server_address[1]` 取实际端口);路由:`/` 静态、`/static/*`、`/api/*` 分发到 api.py 函数表、`/report/<name>`;404/500 → JSON `{"error"}`;`tasks.submit(fn, *args) -> str(task_id)`、`tasks.get(task_id) -> dict(status running|done|error, result, error)`,线程安全(Lock)
+**Tests:** 起真实 server(端口 0)requests 走 http.client/urllib:GET / →200 html;GET /nonexistent →404 JSON;tasks:mock 慢函数 running→done 迁移、异常函数 →error 带信息(轮询等待,勿 sleep 长)
+
+### GUI-T4 app.py 入口 + cli gui 子命令(spec T6+T7+T8)
+
+**Files:** looklift/gui/app.py、looklift/cli.py(gui 子命令);tests/test_gui_app.py、tests/test_cli.py(追加 --help 断言)
+**Interfaces:** `app.main(browser: bool = False, port: int = 0) -> int`;窗口分支 `import webview` 失败/异常 → 打印中文提示(含 `pip install "looklift[gui]"`)→ 自动降级 browser 分支;browser 分支 `webbrowser.open(url)` 后阻塞 serve_forever(测试注入 stop 事件/线程)
+**Tests:** monkeypatch sys.modules 使 import webview 抛 ImportError → 断言降级路径调用了 webbrowser.open;--browser 直接分支同样 mock;`looklift gui --help` 文案
+
+### GUI-T5 SPA 壳 + token 合规扫描(spec T15 前置 + index.html/app.css/app.js 骨架)
+
+**Files:** static/index.html(顶栏+三面板容器:分析/风格库/设置,导航切换)、css/app.css、js/app.js(面板路由、fetch 封装、轮询函数);tests/test_gui_assets.py(裸 hex 扫描,排除 vendor/claude/tokens.css)
+**Interfaces:** 前端全局 `App` 对象:`App.show(panel)`、`App.api(path, opts)`、`App.poll(taskId, onDone, onError)`;视觉遵循 vendor tokens + components 配方,**开工前读 assets/design-system/claude/DESIGN.md 的排版规范**(衬线标题/羊皮纸底/ring 阴影)
+**Tests:** hex 扫描对 static/**/*.css+*.html+*.js 生效(inline style 也抓);index.html 引用的每个静态资源文件存在
+
+### GUI-T6 上传与拖拽桥(spec T9)
+
+**Files:** api.py(POST /api/upload)、app.py(window 模式 drop 监听注册,`pywebviewFullPath` → evaluate_js 回推)、js/app.js(dropzone:优先等待 window 桥推送,否则 fallback 上传)
+**Tests:** multipart POST /api/upload → 临时文件落地、返回 `{"path"}` 可读;drop 注册函数单测(mock window 对象,断言 events.drop += 与 evaluate_js 调用);上传大小上限(>50MB 拒绝 413)
+
+### GUI-T7 配置向导(spec T10)
+
+**Files:** api.py(GET/POST /api/config)、index.html+app.js(向导全屏面板:选 provider cli/api、填 key,「稍后配置」跳过)
+**Interfaces:** GET → `{"configured": bool, "provider": str}`(**绝不回传 api_key 明文**,只回 `has_key: bool`);POST 写 config.save_config
+**Tests:** 未配置时 GET 返回 configured=false;POST 后 load_config 读回;api_key 不出现在 GET 响应
+
+### GUI-T8 分析面板(spec T11,U1)
+
+**Files:** api.py(POST /api/analyze → tasks.submit(analyzer.analyze,...))、js/app.js+index.html(分析面板:拖/选图→提交→轮询→渲染 summary/steps/basic 卡片)
+**Tests:** POST /api/analyze(monkeypatch analyzer.analyze 返回 sample_analysis)→ task_id → 轮询到 done 且 result 含 summary;缺 path 参数 →400 JSON;analyze 抛错 → task error 状态中文透传
+
+### GUI-T9 强度滑杆 + before/after + /api/preview(spec T12,U20)
+
+**Files:** api.py(POST /api/preview:path+analysis+factor → intensity.scale_analysis → 长边≤2048 缩图 → render.render → 返回 base64 jpeg 或临时文件 URL)、前端滑杆+clip-path 对比条(原生 input[type=range],accent-color token)
+**Tests:** factor=0 时返回图与输入缩略图逐像素近似(atol 宽松);factor 参数越界 →400;缩图上限生效(输入 3000px 宽→输出≤2048)
+
+### GUI-T10 收藏/导出 + 库面板 + 报告页(spec T13+T14,U4/U8)
+
+**Files:** api.py(POST /api/looks、GET /api/looks、GET /api/looks/<name>、POST /api/looks/<name>/export、GET /report/<name>)、前端库面板(卡片列表:名字+summary 截断+打开报告/导出按钮)
+**Tests:** 收藏→looks_dir 出现 json+xmp;export 带 factor 的产物 == 直接用 scale_analysis 后参数走 xmp_writer 的产物(字节等价);GET /report/<name> 与 report.render_report 输出一致;名字含路径分隔符/`..` → 400(防目录穿越,库名单独校验)
+**注意:** 库名校验函数放 api.py 顶部统一使用
+
+### GUI-T11 文档收尾(spec T16)
+
+README「GUI 使用」节;`docs/history/legacy-tasks.md` v0.4 记录(保留人工验收清单为未勾选);pyproject version 0.4.0 + `looklift/__init__.py` 同步(v0.3 教训);`docs/product/architecture.md` 回填 GUI 架构要点(§8 v0.4 行改指实况章节);`docs/history/legacy-spec-process.md` 待决清单中 v0.4 已定项划掉并注明结论;CI 不需改动(pywebview 非测试依赖)。全量 pytest 绿。
+
+---
+
+## 人工验收(全部后置,见 spec tasks.md 末节)
+
+窗口视觉核对、两模式拖拽体验、滑杆手感、向导两条路径、WebView2 缺失兜底、长任务不冻结、U1/U4/U8 全流程、DevTools 抽查——记录在 docs/dev-log.md 待作者区。
+
+## Self-Review 记录
+
+- spec T1-T16 全部映射:T1→GUI-T1,T2/T3→GUI-T2,T4/T5→GUI-T3,T6/T7/T8→GUI-T4,T15→GUI-T5(提前,让扫描测试守住后续所有样式),T9→GUI-T6,T10→GUI-T7,T11→GUI-T8,T12→GUI-T9,T13/T14→GUI-T10,T16→GUI-T11
+- 计划新增了 spec 未写明的安全细节:api_key 不回传前端、上传大小上限、库名防目录穿越——均为 GUI 暴露 HTTP 面后的必要防御,记为计划补充而非扩权
