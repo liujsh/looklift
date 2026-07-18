@@ -99,6 +99,30 @@ describe("editorStore", () => {
     expect(store.getSnapshot().versions).toEqual([]);
   });
 
+  it("画面参数变化立即使旧预览失效，渲染失败仍保留待确认候选", () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis(0));
+    store.setRenderState({ status: "ready", error: null });
+
+    store.setFactor(0.7);
+    expect(store.getSnapshot().render.status).toBe("rendering");
+    store.setRenderState({ status: "ready", error: null });
+
+    store.previewFragment("basic", { ...store.getSnapshot().analysis!.basic, exposure: 0.5 });
+    expect(store.getSnapshot().render.status).toBe("rendering");
+    store.setRenderState({ status: "ready", error: null });
+
+    store.commitAnalysis(analysis(1), "library");
+    expect(store.getSnapshot().render.status).toBe("rendering");
+    store.setRenderState({ status: "ready", error: null });
+
+    expect(store.beginPendingPreview(analysis(2), [], exchange, 1)).toBe(true);
+    expect(store.getSnapshot().render.status).toBe("rendering");
+    store.setRenderState({ status: "error", error: "渲染失败" });
+    expect(store.getSnapshot().pendingPreview).not.toBeNull();
+    expect(store.getSnapshot().analysis?.basic.exposure).toBe(1);
+  });
+
   it("打开新图片同时装入中性 analysis，并清空上一张图的版本栈", () => {
     const store = createEditorStore();
     store.openImage("C:/first.jpg", analysis(0));

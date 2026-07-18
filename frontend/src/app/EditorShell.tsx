@@ -144,7 +144,13 @@ export function EditorShell({
       </header>
 
       <section className="workbench" aria-label="照片编辑工作区">
-        <ChatPane enabled={chatEnabled} workflow={chatWorkflow} coordinator={sessionCoordinator} providerLabel={providerLabel} />
+        <ChatPane
+          enabled={chatEnabled}
+          workflow={chatWorkflow}
+          coordinator={sessionCoordinator}
+          providerLabel={providerLabel}
+          renderStatus={editor.render.status}
+        />
         <CanvasPane
           client={client}
           analysis={editor.displayAnalysis ?? neutral}

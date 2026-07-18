@@ -24,6 +24,7 @@ describe("sessionCoordinator", () => {
     store.openImage("C:/photo.jpg", analysis());
     store.setRenderState({ status: "ready", error: null });
     store.beginPendingPreview(analysis(1), [], [{ role: "user", content: "提亮" }], 1);
+    store.setRenderState({ status: "ready", error: null });
     const client = {
       createSession: vi.fn(),
       commitSession: vi.fn().mockRejectedValueOnce(new Error("保存失败")).mockResolvedValue(snapshot(analysis(1))),
@@ -53,11 +54,32 @@ describe("sessionCoordinator", () => {
 
     store.setRenderState({ status: "ready", error: null });
     store.beginPendingPreview(analysis(2), [], exchange, 2);
+    store.setRenderState({ status: "ready", error: null });
     await coordinator.continueManual();
     expect(store.getSnapshot().analysis?.basic.exposure).toBe(2);
     expect(client.commitSession).toHaveBeenCalledTimes(1);
     await coordinator.recordMessages(exchange);
     expect(client.recordSessionMessages).toHaveBeenCalledTimes(2);
+  });
+
+  it("候选渲染失败后仍可撤销且不提交版本", async () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis());
+    store.setRenderState({ status: "ready", error: null });
+    store.beginPendingPreview(analysis(1), [], [{ role: "user", content: "提亮" }], 1);
+    store.setRenderState({ status: "error", error: "渲染失败" });
+    const client = {
+      createSession: vi.fn(),
+      commitSession: vi.fn(),
+      recordSessionMessages: vi.fn().mockResolvedValue(snapshot(analysis())),
+    };
+    const coordinator = createSessionCoordinator(client, store, "s1");
+
+    await coordinator.discardPending();
+
+    expect(store.getSnapshot().pendingPreview).toBeNull();
+    expect(client.commitSession).not.toHaveBeenCalled();
+    expect(client.recordSessionMessages).toHaveBeenCalledTimes(1);
   });
 
   it("手调、模板和初始 AI 分析以无消息正式版本提交", async () => {

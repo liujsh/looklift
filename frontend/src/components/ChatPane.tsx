@@ -1,6 +1,7 @@
 import { useSyncExternalStore, useState } from "react";
 import type { ChatWorkflow } from "../features/chat/chatWorkflow";
 import type { SessionCoordinator } from "../features/sessions/sessionCoordinator";
+import type { RenderStatus } from "../store/editorStore";
 import { ChatChangeCard } from "./ChatChangeCard";
 import { ChatMessageList } from "./ChatMessageList";
 
@@ -9,6 +10,7 @@ type ChatPaneProps = {
   workflow?: ChatWorkflow | null;
   coordinator?: SessionCoordinator | null;
   providerLabel?: string;
+  renderStatus?: RenderStatus;
 };
 
 export async function submitChatInput(value: string, workflow: ChatWorkflow) {
@@ -23,7 +25,13 @@ const EMPTY = Object.freeze({
 });
 const emptySubscribe = () => () => {};
 
-export function ChatPane({ enabled, workflow, coordinator, providerLabel = "当前配置" }: ChatPaneProps) {
+export function ChatPane({
+  enabled,
+  workflow,
+  coordinator,
+  providerLabel = "当前配置",
+  renderStatus = "ready",
+}: ChatPaneProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [input, setInput] = useState("");
   const [includeMetadata, setIncludeMetadata] = useState(true);
@@ -35,6 +43,7 @@ export function ChatPane({ enabled, workflow, coordinator, providerLabel = "当�
     workflow?.getSnapshot ?? (() => EMPTY),
   );
   const response = state.lastResponse;
+  const candidateReady = renderStatus === "ready";
   const act = async (action: () => Promise<unknown>) => {
     setActionError(null);
     setActionBusy(true);
@@ -86,7 +95,10 @@ export function ChatPane({ enabled, workflow, coordinator, providerLabel = "当�
         </div>
 
         {state.phase === "pending" && <div className="chat-decisions" aria-label="候选版本操作">
-          <button type="button" disabled={actionBusy} className="primary" onClick={() => void act(async () => {
+          {!candidateReady && <p className="chat-render-status" role="status">
+            {renderStatus === "error" ? "候选预览渲染失败，可撤销或重试" : "正在渲染候选预览…"}
+          </p>}
+          <button type="button" disabled={actionBusy || !candidateReady} className="primary" onClick={() => void act(async () => {
             await (coordinator?.acceptPending() ?? Promise.reject(new Error("会话尚未就绪")));
             workflow?.settlePending();
           })}>保留此版本</button>
@@ -94,8 +106,8 @@ export function ChatPane({ enabled, workflow, coordinator, providerLabel = "当�
             await (coordinator?.discardPending() ?? Promise.reject(new Error("会话尚未就绪")));
             workflow?.settlePending();
           })}>撤销</button>
-          <button type="button" disabled={actionBusy} onClick={() => void act(() => workflow?.refine() ?? Promise.reject(new Error("AI 尚未就绪")))}>AI 精修</button>
-          <button type="button" disabled={actionBusy} onClick={() => void act(async () => {
+          <button type="button" disabled={actionBusy || !candidateReady} onClick={() => void act(() => workflow?.refine() ?? Promise.reject(new Error("AI 尚未就绪")))}>AI 精修</button>
+          <button type="button" disabled={actionBusy || !candidateReady} onClick={() => void act(async () => {
             await (coordinator?.continueManual() ?? Promise.reject(new Error("会话尚未就绪")));
             workflow?.settlePending();
           })}>继续手调</button>

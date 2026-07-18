@@ -93,6 +93,10 @@ export function createEditorStore(): EditorStore {
     for (const listener of listeners) listener();
   };
 
+  const invalidatedRender = (): EditorState["render"] => state.imagePath
+    ? Object.freeze({ status: "rendering", error: null })
+    : state.render;
+
   const commitAnalysis = (nextAnalysis: Analysis, source: ChangeSource) => {
     const next = immutableCopy(nextAnalysis);
     const previous = previewBase ?? state.analysis;
@@ -104,6 +108,7 @@ export function createEditorStore(): EditorStore {
       ...state,
       analysis: next,
       pendingPreview: null,
+      render: invalidatedRender(),
       versions,
       redoVersions: Object.freeze([]),
     });
@@ -140,6 +145,7 @@ export function createEditorStore(): EditorStore {
         ...INITIAL_STATE,
         imagePath,
         analysis: immutableCopy(analysis),
+        render: Object.freeze({ status: "rendering", error: null }),
       });
     },
     commitAnalysis,
@@ -150,7 +156,11 @@ export function createEditorStore(): EditorStore {
     previewFragment(section, value) {
       if (!state.analysis) throw new Error("尚未载入 analysis，不能预览参数分片");
       previewBase ??= state.analysis;
-      publish({ ...state, analysis: immutableCopy({ ...state.analysis, [section]: value }) });
+      publish({
+        ...state,
+        analysis: immutableCopy({ ...state.analysis, [section]: value }),
+        render: invalidatedRender(),
+      });
     },
     finalizePreview(source) {
       if (!previewBase || !state.analysis) return false;
@@ -174,17 +184,25 @@ export function createEditorStore(): EditorStore {
         previewBase = null;
         latestPendingRequestId = 0;
       }
-      publish({ ...state, imagePath, pendingPreview: null });
+      publish({
+        ...state,
+        imagePath,
+        pendingPreview: null,
+        render: imagePath
+          ? Object.freeze({ status: "rendering", error: null })
+          : Object.freeze({ status: "idle", error: null }),
+      });
     },
     setFactor(factor) {
       if (!Number.isFinite(factor)) throw new TypeError("factor 必须是有限数值");
-      publish({ ...state, factor: Math.min(1, Math.max(0, factor)) });
+      const nextFactor = Math.min(1, Math.max(0, factor));
+      if (nextFactor === state.factor) return;
+      publish({ ...state, factor: nextFactor, render: invalidatedRender() });
     },
     setRenderState(render) {
       publish({
         ...state,
         render: Object.freeze({ ...render }),
-        pendingPreview: render.status === "error" ? null : state.pendingPreview,
       });
       return true;
     },
@@ -202,17 +220,19 @@ export function createEditorStore(): EditorStore {
         createdAt,
       });
       previewBase = null;
-      publish({ ...state, pendingPreview: pending });
+      publish({ ...state, pendingPreview: pending, render: invalidatedRender() });
       return true;
     },
     acceptPendingPreview: promotePending,
     discardPendingPreview() {
-      if (state.pendingPreview) publish({ ...state, pendingPreview: null });
+      if (state.pendingPreview) {
+        publish({ ...state, pendingPreview: null, render: invalidatedRender() });
+      }
     },
     beginManualFromPending: promotePending,
     undo() {
       if (state.pendingPreview) {
-        publish({ ...state, pendingPreview: null });
+        publish({ ...state, pendingPreview: null, render: invalidatedRender() });
         return true;
       }
       const previous = state.versions[state.versions.length - 1];
@@ -221,6 +241,7 @@ export function createEditorStore(): EditorStore {
       publish({
         ...state,
         analysis: previous.analysis,
+        render: invalidatedRender(),
         versions: Object.freeze(state.versions.slice(0, -1)),
         redoVersions: Object.freeze([
           ...state.redoVersions,
@@ -236,6 +257,7 @@ export function createEditorStore(): EditorStore {
       publish({
         ...state,
         analysis: next.analysis,
+        render: invalidatedRender(),
         versions: Object.freeze([
           ...state.versions,
           Object.freeze({ analysis: state.analysis, source: next.source }),
@@ -247,7 +269,12 @@ export function createEditorStore(): EditorStore {
     restoreSession(imagePath, analysis) {
       previewBase = null;
       latestPendingRequestId = 0;
-      publish({ ...INITIAL_STATE, imagePath, analysis: immutableCopy(analysis) });
+      publish({
+        ...INITIAL_STATE,
+        imagePath,
+        analysis: immutableCopy(analysis),
+        render: Object.freeze({ status: "rendering", error: null }),
+      });
     },
   };
 }

@@ -54,6 +54,20 @@ describe("ChatPane", () => {
     expect(html).toContain("继续手调");
   });
 
+  it("候选预览完成前只允许撤销并显示渲染提示", () => {
+    const html = renderToStaticMarkup(<ChatPane
+      enabled
+      workflow={workflow({ phase: "pending" })}
+      coordinator={coordinator}
+      renderStatus="rendering"
+    />);
+    expect(html).toContain("正在渲染候选预览");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>保留此版本<\/button>/);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>AI 精修<\/button>/);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>继续手调<\/button>/);
+    expect(html).toMatch(/<button(?![^>]*disabled)[^>]*>撤销<\/button>/);
+  });
+
   it("发送中显示轮次和取消，错误提供稳定出口", () => {
     const running = renderToStaticMarkup(<ChatPane enabled workflow={workflow({ phase: "requesting", round: 1 })} coordinator={coordinator} />);
     expect(running).toContain("第 1/2 轮");
