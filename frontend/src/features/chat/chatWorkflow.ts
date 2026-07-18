@@ -21,6 +21,8 @@ export type ChatWorkflow = {
   send(message: string): Promise<ChatStepResponse | null>;
   refine(): Promise<void>;
   cancel(): void;
+  setIncludeMetadata(include: boolean): void;
+  restoreMessages(messages: readonly ChatMessage[]): void;
 };
 
 const INITIAL: ChatWorkflowState = Object.freeze({
@@ -32,6 +34,7 @@ export function createChatWorkflow(client: ChatClient, store: EditorStore): Chat
   let state = INITIAL;
   let controller: AbortController | null = null;
   let requestId = store.getSnapshot().pendingPreview?.requestId ?? 0;
+  let includeMetadata = true;
   const listeners = new Set<() => void>();
 
   const publish = (patch: Partial<ChatWorkflowState>) => {
@@ -53,7 +56,7 @@ export function createChatWorkflow(client: ChatClient, store: EditorStore): Chat
         current_analysis: editor.displayAnalysis,
         message,
         history: [...state.messages],
-        include_metadata: true,
+        include_metadata: includeMetadata,
       }, active.signal);
       if (active.signal.aborted) return null;
       const assistant: ChatMessage = {
@@ -107,6 +110,12 @@ export function createChatWorkflow(client: ChatClient, store: EditorStore): Chat
     },
     cancel() {
       controller?.abort();
+    },
+    setIncludeMetadata(include) {
+      includeMetadata = include;
+    },
+    restoreMessages(messages) {
+      publish({ messages: Object.freeze([...messages]) });
     },
   };
 }

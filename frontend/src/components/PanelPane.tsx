@@ -15,6 +15,7 @@ type PanelPaneProps = { contract?: ParamContract };
 export function PanelPane({ contract }: PanelPaneProps) {
   const editor = useEditorState();
   const analysis = editor.displayAnalysis;
+  const pending = editor.pendingPreview !== null;
   const [openGroup, setOpenGroup] = useState<string>(PANEL_GROUPS[0].id);
 
   const renderGroup = (groupId: string) => {
@@ -27,7 +28,8 @@ export function PanelPane({ contract }: PanelPaneProps) {
           label={label}
           rule={requireRule(contract, path)}
           value={analysis.basic[field]}
-          onChange={(value) => editorStore.previewFragment(
+          disabled={pending}
+          onChange={(value) => !pending && editorStore.previewFragment(
             "basic", { ...analysis.basic, [field]: value },
           )}
         />;
@@ -36,16 +38,16 @@ export function PanelPane({ contract }: PanelPaneProps) {
     if (groupId === "hsl") return <HslMixer
       contract={contract}
       value={analysis.hsl}
-      onChange={(value) => editorStore.previewFragment("hsl", value)}
+      onChange={(value) => !pending && editorStore.previewFragment("hsl", value)}
     />;
     if (groupId === "tone-curve") return <ToneCurve
       value={analysis.tone_curve}
-      onChange={(value) => editorStore.previewFragment("tone_curve", value)}
+      onChange={(value) => !pending && editorStore.previewFragment("tone_curve", value)}
     />;
     if (groupId === "color-grading") return <ColorGradingWheels
       contract={contract}
       value={analysis.color_grading}
-      onChange={(value) => editorStore.previewFragment("color_grading", value)}
+      onChange={(value) => !pending && editorStore.previewFragment("color_grading", value)}
     />;
     return EFFECT_CONTROLS.map(({ path, label }) => {
       const field = path.slice("effects.".length) as keyof EffectsAnalysis;
@@ -54,7 +56,8 @@ export function PanelPane({ contract }: PanelPaneProps) {
         label={label}
         rule={requireRule(contract, path)}
         value={analysis.effects[field]}
-        onChange={(value) => editorStore.previewFragment(
+        disabled={pending}
+        onChange={(value) => !pending && editorStore.previewFragment(
           "effects", { ...analysis.effects, [field]: value },
         )}
       />;
@@ -70,7 +73,7 @@ export function PanelPane({ contract }: PanelPaneProps) {
         </div>
         <button
           type="button"
-          disabled={!editor.analysis || !contract}
+          disabled={!editor.analysis || !contract || pending}
           onClick={() => {
             if (!contract) return;
             editorStore.setFactor(1);
@@ -81,11 +84,12 @@ export function PanelPane({ contract }: PanelPaneProps) {
 
       <StrengthSlider
         factor={editor.factor}
-        disabled={!editor.analysis}
+        disabled={!editor.analysis || pending}
         onChange={editorStore.setFactor}
       />
 
       {analysis && <AnalysisBrief analysis={analysis} />}
+      {pending && <p className="panel-pending-note">当前显示 AI 候选；要修改参数，请先在左侧选择“继续手调”。</p>}
 
       <nav className="panel-groups" aria-label="调整分组">
         {PANEL_GROUPS.map((group) => {

@@ -1,5 +1,6 @@
 @import "./theme/tokens.css";
 @import "./theme/layout.css";
+@import "./theme/components.css";
 
 :root {
   color: var(--color-ink);

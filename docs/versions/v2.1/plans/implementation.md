@@ -292,13 +292,13 @@ Expected: PASS。
 - Modify: `frontend/src/theme/layout.css`
 - Modify: `frontend/src/theme/components.css`
 
-- [ ] 先写 UI 红灯测试：空态、消息流、输入提交、附件加号 seam、发送中/取消、变化卡片、错误与操作按钮。
-- [ ] 实现聊天栏常驻可折叠；折叠后画布扩展但右侧调参和底部照片带不跳位，窄窗口仍可操作。
-- [ ] 显示调用前隐私摘要：供应商、代理图数量、元数据开关；关闭开关后后续请求立即生效。
-- [ ] pending 状态显示“保留此版本”“撤销”“AI 精修”；精修中显示 `第 1/2 轮`、取消和停止原因。
-- [ ] limitations 卡片明确显示“当前不能自动完成”“可用近似方案”“右侧面板手动步骤”，局部调整/RGB 曲线不得伪装成功。
-- [ ] 启用 `FEATURES.chatPane`，删除 v2.1 占位文案但保留 feature seam，便于故障回退。
-- [ ] 样式复用现有 token，不引入在线字体、外链图标或新视觉体系。
+- [x] 先写 UI 红灯测试：空态、消息流、输入提交、附件加号 seam、发送中/取消、变化卡片、错误与操作按钮。
+- [x] 实现聊天栏常驻可折叠；折叠后画布扩展但右侧调参和底部照片带不跳位，窄窗口仍可操作。
+- [x] 显示调用前隐私摘要：供应商、代理图数量、元数据开关；关闭开关后后续请求立即生效。
+- [x] pending 状态显示“保留此版本”“撤销”“AI 精修”；精修中显示 `第 1/2 轮`、取消和停止原因。
+- [x] limitations 卡片明确显示“当前不能自动完成”“可用近似方案”“右侧面板手动步骤”，局部调整/RGB 曲线不得伪装成功。
+- [x] 启用 `FEATURES.chatPane`，删除 v2.1 占位文案但保留 feature seam，便于故障回退。
+- [x] 样式复用现有 token，不引入在线字体、外链图标或新视觉体系。
 
 Run: `pnpm vitest run src/components/ChatPane.test.tsx src/app/EditorShell.test.tsx`
 

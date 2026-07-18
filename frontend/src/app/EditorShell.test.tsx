@@ -15,9 +15,9 @@ describe("EditorShell", () => {
     expect(html).toContain('data-pane="gallery"');
   });
 
-  it("聊天功能默认关闭但 seam 仍保留在 DOM", () => {
-    const disabled = renderToStaticMarkup(<EditorShell />);
-    const enabled = renderToStaticMarkup(<EditorShell chatEnabled />);
+  it("聊天功能默认开启且仍可通过 seam 故障回退", () => {
+    const disabled = renderToStaticMarkup(<EditorShell chatEnabled={false} />);
+    const enabled = renderToStaticMarkup(<EditorShell />);
 
     expect(disabled).toContain('data-chat-enabled="false"');
     expect(disabled).toMatch(/data-pane="chat"[^>]*hidden=""/);
@@ -34,7 +34,7 @@ describe("EditorShell", () => {
     expect(css).toMatch(/\.contact-sheet\s*\{[^}]*overflow-x:\s*auto/s);
   });
 
-  it("聊天隐藏时画布与控制面板仍固定在主列和右列", () => {
+  it("聊天折叠和窄窗口时画布与控制面板保持稳定轨道", () => {
     const cssPath = fileURLToPath(new URL("../theme/layout.css", import.meta.url));
     const css = readFileSync(cssPath, "utf8");
 
@@ -42,6 +42,7 @@ describe("EditorShell", () => {
     expect(css).toMatch(/\.chat-pane\s*\{[^}]*grid-area:\s*chat/s);
     expect(css).toMatch(/\.canvas-pane\s*\{[^}]*grid-area:\s*canvas/s);
     expect(css).toMatch(/\.panel-pane\s*\{[^}]*grid-area:\s*controls/s);
-    expect(css).toMatch(/@media\s*\(max-width:\s*820px\)[\s\S]*?\.workbench\s*\{[^}]*grid-template-areas:\s*"canvas controls"/s);
+    expect(css).toMatch(/:has\(\.chat-pane\[data-collapsed="true"\]\)\s*\{[^}]*--chat-track:\s*46px/s);
+    expect(css).toMatch(/@media\s*\(max-width:\s*820px\)[\s\S]*?\.workbench\s*\{[^}]*grid-template-areas:\s*"chat canvas controls"/s);
   });
 });

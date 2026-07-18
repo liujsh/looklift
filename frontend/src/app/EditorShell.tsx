@@ -46,14 +46,16 @@ export function EditorShell({
     }
     const next = createNeutralAnalysis(contract);
     editorStore.openImage(path, next);
-    void sessionCoordinator?.open(path, next).catch((reason) => {
-      editorStore.setRenderState({
-        status: "error",
-        error: reason instanceof Error ? reason.message : String(reason),
+    void sessionCoordinator?.open(path, next)
+      .then((snapshot) => chatWorkflow?.restoreMessages(snapshot.messages))
+      .catch((reason) => {
+        editorStore.setRenderState({
+          status: "error",
+          error: reason instanceof Error ? reason.message : String(reason),
+        });
       });
-    });
     return next;
-  }, [contract, sessionCoordinator]);
+  }, [chatWorkflow, contract, sessionCoordinator]);
   const settleManualPreview = useCallback(() => editorStore.finalizePreview("manual"), []);
   const applyAnalysis = useCallback((analysis: Parameters<typeof editorStore.commitAnalysis>[0]) => {
     editorStore.setFactor(1);
