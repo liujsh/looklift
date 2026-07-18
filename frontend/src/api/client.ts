@@ -16,6 +16,8 @@ import type {
 type FetchLike = typeof fetch;
 type InvokeLike = <T>(command: string) => Promise<T>;
 
+const defaultFetch: FetchLike = (...args) => globalThis.fetch(...args);
+
 export class ApiError extends Error {
   constructor(message: string, readonly status: number | null = null) {
     super(message);
@@ -27,7 +29,7 @@ export async function readSidecarStatus(invokeFn: InvokeLike = invoke): Promise<
   return invokeFn<SidecarStatus>("sidecar_status");
 }
 
-export function clientFromStatus(status: SidecarStatus, fetchFn: FetchLike = fetch): LookliftClient {
+export function clientFromStatus(status: SidecarStatus, fetchFn: FetchLike = defaultFetch): LookliftClient {
   if (status.state !== "ready" || !status.port || !status.token) {
     throw new ApiError(status.error ?? "本地引擎尚未就绪");
   }
@@ -38,7 +40,7 @@ export class LookliftClient {
   constructor(
     private readonly baseUrl: string,
     private readonly token: string,
-    private readonly fetchFn: FetchLike = fetch,
+    private readonly fetchFn: FetchLike = defaultFetch,
   ) {}
 
   ping(): Promise<{ ok: boolean }> {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { LookliftClient, clientFromStatus, readSidecarStatus } from "./client";
 import type { Analysis, SidecarStatus } from "./types";
 
@@ -26,6 +26,22 @@ function readyStatus(): SidecarStatus {
 }
 
 describe("LookliftClient", () => {
+  it("用 Window 接收者调用 WebView 原生 fetch", async () => {
+    const nativeFetch = vi.fn(function (this: unknown) {
+      if (this !== globalThis) throw new TypeError("Illegal invocation");
+      return Promise.resolve(Response.json({ ok: true }));
+    });
+    vi.stubGlobal("fetch", nativeFetch);
+    try {
+      const client = clientFromStatus(readyStatus());
+
+      await expect(client.ping()).resolves.toEqual({ ok: true });
+      expect(nativeFetch.mock.contexts[0]).toBe(globalThis);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("从 Tauri 状态命令取得连接信息", async () => {
     const commands: string[] = [];
     const status = await readSidecarStatus(async <T>(command: string) => {
