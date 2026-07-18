@@ -2,14 +2,20 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   Analysis,
   AnalyzeRequest,
+  ChatStepRequest,
+  ChatStepResponse,
+  CommitSessionRequest,
+  CreateSessionRequest,
   EngineProbe,
   ExportLookRequest,
   JsonObject,
   LookSummary,
   ParamContract,
   PreviewRequest,
+  RecordSessionMessagesRequest,
   SaveLookRequest,
   SidecarStatus,
+  SessionSnapshot,
   TaskResult,
 } from "./types";
 
@@ -68,6 +74,39 @@ export class LookliftClient {
       method: "POST",
       body: JSON.stringify(payload),
       signal,
+    });
+  }
+
+  chatStep(payload: ChatStepRequest, signal?: AbortSignal): Promise<ChatStepResponse> {
+    return this.json("/api/chat/step", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      signal,
+    });
+  }
+
+  createSession(payload: CreateSessionRequest): Promise<SessionSnapshot> {
+    return this.json("/api/sessions", { method: "POST", body: JSON.stringify(payload) });
+  }
+
+  getSession(id: string): Promise<SessionSnapshot> {
+    return this.json(`/api/sessions/${encodeURIComponent(id)}`);
+  }
+
+  commitSession(id: string, payload: CommitSessionRequest): Promise<SessionSnapshot> {
+    return this.json(`/api/sessions/${encodeURIComponent(id)}/commit`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  recordSessionMessages(
+    id: string,
+    payload: RecordSessionMessagesRequest,
+  ): Promise<SessionSnapshot> {
+    return this.json(`/api/sessions/${encodeURIComponent(id)}/messages`, {
+      method: "POST",
+      body: JSON.stringify(payload),
     });
   }
 

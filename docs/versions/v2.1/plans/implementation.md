@@ -208,11 +208,11 @@ Expected: PASS。
 - `POST /api/sessions/<id>/commit`：事务提交本轮消息与候选版本。
 - `POST /api/sessions/<id>/messages`：仅记录无参数结果、失败或取消状态，不移动版本指针。
 
-- [ ] 先写 handler 级红灯测试：请求体类型、路径/analysis/message/history 校验、元数据布尔值、稳定状态码与中文错误。
-- [ ] 注入 mock `chat_step`/临时数据库，证明 chat 路由不写版本，commit 才移动指针。
-- [ ] 写真实 HTTP token/CORS 回归，确保新路由不绕过本机启动令牌。
-- [ ] 在前端定义 `ChatStepRequest/Response`、`SessionSnapshot`、`CommitSessionRequest`，实现对应 client 方法和 AbortSignal。
-- [ ] 测试 fetch URL、body、令牌、取消与后端中文错误透传。
+- [x] 先写 handler 级红灯测试：请求体类型、路径/analysis/message/history 校验、元数据布尔值、稳定状态码与中文错误。
+- [x] 注入 mock `chat_step`/临时数据库，证明 chat 路由不写版本，commit 才移动指针。
+- [x] 写真实 HTTP token/CORS 回归，确保新路由不绕过本机启动令牌。
+- [x] 在前端定义 `ChatStepRequest/Response`、`SessionSnapshot`、`CommitSessionRequest`，实现对应 client 方法和 AbortSignal。
+- [x] 测试 fetch URL、body、令牌、取消与后端中文错误透传。
 
 Run: `.venv\Scripts\python.exe -m pytest tests/test_gui_chat_api.py tests/test_gui_sessions_api.py -q`
 

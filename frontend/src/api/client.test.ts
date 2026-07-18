@@ -133,6 +133,54 @@ describe("LookliftClient", () => {
     expect(new Headers(queue.requests[1].init.headers).has("X-Looklift-Token")).toBe(false);
   });
 
+  it("覆盖对话候选与正式会话端点，并透传取消信号", async () => {
+    const snapshot = { id: "session-1", current_version_id: "version-1" };
+    const queue = responseQueue([
+      Response.json({ analysis: {}, changes: [] }),
+      Response.json(snapshot),
+      Response.json(snapshot),
+      Response.json(snapshot),
+      Response.json(snapshot),
+    ]);
+    const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
+    const controller = new AbortController();
+    const analysis = {} as Analysis;
+
+    await client.chatStep(
+      {
+        path: "C:/照片/a.jpg",
+        current_analysis: analysis,
+        message: "提亮",
+        history: [],
+        include_metadata: true,
+      },
+      controller.signal,
+    );
+    await client.createSession({ path: "C:/照片/a.jpg", initial_analysis: analysis });
+    await client.getSession("session-1");
+    await client.commitSession("session-1", {
+      exchange: [{ role: "user", content: "提亮" }],
+      analysis,
+      source: "chat",
+    });
+    await client.recordSessionMessages("session-1", {
+      exchange: [{ role: "assistant", content: "失败", status: "failed" }],
+    });
+
+    expect(queue.requests.map((item) => item.url)).toEqual([
+      "http://127.0.0.1:9/api/chat/step",
+      "http://127.0.0.1:9/api/sessions",
+      "http://127.0.0.1:9/api/sessions/session-1",
+      "http://127.0.0.1:9/api/sessions/session-1/commit",
+      "http://127.0.0.1:9/api/sessions/session-1/messages",
+    ]);
+    expect(queue.requests[0].init.signal).toBe(controller.signal);
+    expect(JSON.parse(String(queue.requests[3].init.body)).source).toBe("chat");
+    for (const request of queue.requests) {
+      expect(new Headers(request.init.headers).get("X-Looklift-Token")).toBe("token");
+    }
+  });
+
   it("优先透传后端中文错误，并为非 JSON 和网络错误提供稳定文案", async () => {
     const queue = responseQueue([
       Response.json({ error: "缺少 analysis 字段" }, { status: 400 }),
