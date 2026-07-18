@@ -1,6 +1,8 @@
 # v0.7 需求:分发
 
-> 状态:草拟,待作者 review。
+> 状态:已终止（2026-07-18）。本文件仅保留历史方案，不再作为待执行 spec。
+> 迁移说明：旧 pywebview/PyInstaller 分发方案已被 v2.0-B 的 Tauri + Python sidecar + Windows 安装包取代；
+> 已完成的 v2.0-B T1/T11 是现行分发基线。
 > 上游文档:[产品需求](../../requirements.md)(定位/路线图、Mac 策略)、[当前架构](../../design.md) §8(v0.4 GUI 架构方向)。
 > 同迭代:[设计](./design.md) · [任务](./tasks.md)。
 

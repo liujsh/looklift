@@ -1,6 +1,7 @@
 # v0.6 设计:懂——教学深化
 
-> 状态:草拟,待作者 review。同迭代:[需求](./requirements.md) · [任务](./tasks.md)。
+> 状态:已终止（2026-07-18）。历史设计仅供追溯，不再实施；模板与教学能力改由 v2.4 重新立项。
+> 同迭代:[需求](./requirements.md) · [任务](./tasks.md)。
 > 基线:[当前架构](../../design.md) §2(ANALYSIS_SCHEMA)、§6(report.py)。
 
 ## 关键设计决策
