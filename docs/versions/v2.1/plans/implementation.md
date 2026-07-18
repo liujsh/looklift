@@ -178,11 +178,11 @@ class SessionStore:
     def load(self, session_id: str) -> SessionSnapshot: ...
 ```
 
-- [ ] 先写 schema 建立、创建/恢复、父版本链、当前指针、消息顺序和 JSON 往返测试。
-- [ ] 用故障注入写事务中途失败测试，断言消息、版本和当前指针全部回滚。
-- [ ] 写重启测试，断言只恢复最后确认版本，任何未提交候选都不存在。
-- [ ] 写迁移前 `.bak.1`～`.bak.3` 轮换与损坏库只读诊断测试；不得自动覆盖损坏原库。
-- [ ] 数据库默认放在 `CONFIG_PATH.parent / "looklift.db"`，测试必须注入临时路径，不写真实用户目录。
+- [x] 先写 schema 建立、创建/恢复、父版本链、当前指针、消息顺序和 JSON 往返测试。
+- [x] 用故障注入写事务中途失败测试，断言消息、版本和当前指针全部回滚。
+- [x] 写重启测试，断言只恢复最后确认版本，任何未提交候选都不存在。
+- [x] 写迁移前 `.bak.1`～`.bak.3` 轮换与损坏库只读诊断测试；不得自动覆盖损坏原库。
+- [x] 数据库默认放在 `CONFIG_PATH.parent / "looklift.db"`，测试必须注入临时路径，不写真实用户目录。
 
 Run: `.venv\Scripts\python.exe -m pytest tests/test_session_store.py -q`
 
