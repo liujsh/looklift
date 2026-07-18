@@ -1,6 +1,7 @@
 # v0.7 设计:分发
 
-> 状态:草拟,待作者 review。同迭代:[需求](./requirements.md) · [任务](./tasks.md)。
+> 状态:已终止（2026-07-18）。历史设计仅供追溯；不得回退到 pywebview/PyInstaller 路线。
+> 同迭代:[需求](./requirements.md) · [任务](./tasks.md)。
 > 基线:[当前架构](../../design.md) §8(v0.4 GUI 架构:pywebview 独立窗口,`--browser` 兜底,零外部网络请求)、
 > [v0.6 design.md](../v0.6/design.md) 决策 4(`importlib.resources` 资源定位)。
 
