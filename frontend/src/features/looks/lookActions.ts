@@ -5,6 +5,16 @@ type SaveClient = Pick<LookliftClient, "saveLook" | "listLooks">;
 type ExportClient = Pick<LookliftClient, "exportLook">;
 type ReportClient = Pick<LookliftClient, "reportUrl">;
 
+export type ActiveLookSnapshot = Readonly<{ analysis: Analysis | null; factor: number }>;
+
+export function isCurrentLookSnapshot(
+  snapshot: ActiveLookSnapshot,
+  analysis: Analysis | null,
+  factor: number,
+): boolean {
+  return snapshot.analysis === analysis && snapshot.factor === factor;
+}
+
 export async function saveCurrentLook(
   client: SaveClient,
   rawName: string,

@@ -13,9 +13,9 @@ export function looksForSource(
 export async function loadLookIntoEditor(
   client: Pick<LookliftClient, "getLook">,
   name: string,
-  commit: (analysis: Analysis) => void,
+  commit: (analysis: Analysis, factor: number) => void,
 ): Promise<Analysis> {
   const analysis = await client.getLook(name);
-  commit(analysis);
+  commit(analysis, 1);
   return analysis;
 }

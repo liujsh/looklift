@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { BasicAnalysis, EffectsAnalysis, ParamContract } from "../api/types";
+import { AnalysisBrief } from "./AnalysisBrief";
 import { BASIC_CONTROLS, EFFECT_CONTROLS, createNeutralAnalysis, requireRule } from "../panel/contractModel";
 import { ColorGradingWheels } from "../panel/ColorGradingWheels";
 import { PANEL_GROUPS } from "../panel/groups";
@@ -69,7 +70,11 @@ export function PanelPane({ contract }: PanelPaneProps) {
         <button
           type="button"
           disabled={!editor.analysis || !contract}
-          onClick={() => contract && editorStore.commitAnalysis(createNeutralAnalysis(contract), "manual")}
+          onClick={() => {
+            if (!contract) return;
+            editorStore.setFactor(1);
+            editorStore.commitAnalysis(createNeutralAnalysis(contract), "manual");
+          }}
         >重置</button>
       </header>
 
@@ -78,6 +83,8 @@ export function PanelPane({ contract }: PanelPaneProps) {
         disabled={!editor.analysis}
         onChange={editorStore.setFactor}
       />
+
+      {editor.analysis && <AnalysisBrief analysis={editor.analysis} />}
 
       <nav className="panel-groups" aria-label="调整分组">
         {PANEL_GROUPS.map((group) => {

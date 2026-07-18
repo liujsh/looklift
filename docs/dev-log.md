@@ -83,6 +83,17 @@
 - 自动化基线：Python `398 passed, 1 skipped`；前端 Vitest `55 passed`；TypeScript/Vite
   production build 与 Tauri release build 通过。最终 M1–M8 仍由作者在真机集中验收。
 
+## v2.0-B PR 前审查修正(2026-07-18)
+
+- 修复 WebView 原生 `fetch` 被作为对象方法调用时丢失 `Window` 接收者、导致
+  `Illegal invocation` 的启动错误；默认请求函数现在始终经 `globalThis.fetch` 调用。
+- 补齐此前只有 API client、没有界面入口的 AI 分析闭环：画布可提交当前图片、轮询任务、
+  取消旧图任务，并把完整 `analysis`、`summary`、`steps` 回填面板和预览。
+- 修复风格强度一致性：载入图库、AI 新结果和重置均回到 100%；已激活风格同时绑定
+  `analysis` 与 `factor`，任一变化都会禁用旧风格导出，避免预览与导出强度不一致。
+- PR 前自动验证：Python `398 passed, 1 skipped`；前端 Vitest `62 passed`；TypeScript/Vite
+  production build、Rust `cargo test`、本分支改动 Python 文件的 Ruff 检查均通过。
+
 ## v0.4 开发中踩的坑(已解决)
 
 | # | 坑 | 解决 |

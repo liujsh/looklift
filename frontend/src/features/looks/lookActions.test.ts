@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Analysis, LookSummary } from "../../api/types";
-import { exportLookFile, openLookReport, saveCurrentLook } from "./lookActions";
+import { exportLookFile, isCurrentLookSnapshot, openLookReport, saveCurrentLook } from "./lookActions";
 
 const analysis = { summary: "当前调色" } as Analysis;
 const userLook: LookSummary = {
@@ -8,6 +8,14 @@ const userLook: LookSummary = {
 };
 
 describe("lookActions", () => {
+  it("analysis 或 factor 变化都会让已激活风格失效", () => {
+    const snapshot = { analysis, factor: 0.7 };
+
+    expect(isCurrentLookSnapshot(snapshot, analysis, 0.7)).toBe(true);
+    expect(isCurrentLookSnapshot(snapshot, { ...analysis }, 0.7)).toBe(false);
+    expect(isCurrentLookSnapshot(snapshot, analysis, 0.8)).toBe(false);
+  });
+
   it("收藏完整 analysis 与 factor，成功后重拉图库", async () => {
     const client = {
       saveLook: vi.fn(async () => ({ name: "我的风格" })),

@@ -7,7 +7,7 @@ import { FEATURES } from "./featureFlags";
 import type { LookliftClient } from "../api/client";
 import type { ParamContract } from "../api/types";
 import { createNeutralAnalysis } from "../panel/contractModel";
-import { exportLookFile } from "../features/looks/lookActions";
+import { exportLookFile, isCurrentLookSnapshot } from "../features/looks/lookActions";
 import { editorStore, useEditorState } from "../store/editorStore";
 
 type EditorShellProps = {
@@ -27,7 +27,7 @@ export function EditorShell({
   const [activeLookName, setActiveLookName] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
-  const activeLookAnalysis = useRef(editor.analysis);
+  const activeLookSnapshot = useRef({ analysis: editor.analysis, factor: editor.factor });
   const neutral = !editor.analysis && contract ? createNeutralAnalysis(contract) : undefined;
   const openImage = useCallback((path: string) => {
     if (!contract) {
@@ -39,19 +39,28 @@ export function EditorShell({
     return next;
   }, [contract]);
   const settleManualPreview = useCallback(() => editorStore.finalizePreview("manual"), []);
+  const applyAnalysis = useCallback((analysis: Parameters<typeof editorStore.commitAnalysis>[0]) => {
+    editorStore.setFactor(1);
+    editorStore.commitAnalysis(analysis, "ai");
+  }, []);
   const setRenderState = useCallback(editorStore.setRenderState, []);
   const activateLook = useCallback((name: string) => {
-    activeLookAnalysis.current = editorStore.getSnapshot().analysis;
+    const current = editorStore.getSnapshot();
+    activeLookSnapshot.current = { analysis: current.analysis, factor: current.factor };
     setActiveLookName(name);
     setExportStatus(null);
   }, []);
 
   useEffect(() => {
-    if (activeLookName && activeLookAnalysis.current !== editor.analysis) {
+    if (activeLookName && !isCurrentLookSnapshot(
+      activeLookSnapshot.current,
+      editor.analysis,
+      editor.factor,
+    )) {
       setActiveLookName(null);
       setExportStatus(null);
     }
-  }, [activeLookName, editor.analysis]);
+  }, [activeLookName, editor.analysis, editor.factor]);
 
   const exportActiveLook = async () => {
     if (!client || !activeLookName) return;
@@ -96,6 +105,7 @@ export function EditorShell({
           factor={editor.factor}
           onImagePathChange={openImage}
           onPreviewSettled={settleManualPreview}
+          onAnalysisComplete={applyAnalysis}
           onRenderStateChange={setRenderState}
         />
         <PanelPane contract={contract} />

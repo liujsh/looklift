@@ -77,6 +77,9 @@
 .canvas-pane::before { content: ""; position: absolute; inset: 10px; border: 1px solid var(--color-stage-line); pointer-events: none; }
 .canvas-pane[data-drag-active="true"] { background: var(--color-stage-raised); }
 .canvas-toolbar { position: absolute; z-index: 2; inset: 17px 20px auto; display: flex; justify-content: space-between; color: var(--color-stage-muted); font: var(--text-utility)/1 var(--font-data); letter-spacing: .06em; }
+.canvas-toolbar button { padding: 5px 9px; border: 1px solid var(--color-stage-line); border-radius: var(--radius-pill); color: var(--color-stage-ink); background: var(--color-stage-raised); cursor: pointer; }
+.canvas-toolbar button:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-paper-raised); background: var(--color-accent); }
+.canvas-toolbar button:disabled { cursor: wait; opacity: .7; }
 .canvas-empty { width: min(390px, calc(100% - 64px)); text-align: center; }
 .drop-outline { display: grid; place-items: center; width: 64px; height: 64px; margin: 0 auto var(--space-5); border: 1px solid var(--color-stage-line); border-radius: 50%; color: var(--color-stage-muted); font-size: 25px; transition: border-color var(--motion-base), transform var(--motion-base); }
 .canvas-pane[data-drag-active="true"] .drop-outline { border-color: var(--color-accent); transform: scale(1.06); }
@@ -107,6 +110,9 @@
 .strength-control > div { display: flex; justify-content: space-between; margin-bottom: 7px; }
 .strength-control strong { color: var(--color-accent); font: 600 var(--text-caption)/1 var(--font-data); }
 .strength-control input, .slider-range { width: 100%; }
+.analysis-brief { max-height: 132px; margin-bottom: var(--space-3); padding: 10px 11px; overflow: auto; border: 1px solid var(--color-line-soft); border-radius: var(--radius-sm); color: var(--color-muted); background: var(--color-paper-raised); font-size: var(--text-utility); }
+.analysis-brief p { margin: 0 0 7px; color: var(--color-ink); line-height: 1.5; }
+.analysis-brief ol { margin: 0; padding-left: 18px; line-height: 1.5; }
 .panel-groups { display: grid; border-top: 1px solid var(--color-line); }
 .panel-group { border-bottom: 1px solid var(--color-line); }
 .panel-group > button { display: flex; width: 100%; justify-content: space-between; padding: 13px 2px; border: 0; color: var(--color-ink-soft); background: transparent; text-align: left; cursor: pointer; font-size: var(--text-ui); font-weight: 650; }

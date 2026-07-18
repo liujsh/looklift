@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
 import type { LookliftClient } from "../api/client";
-import type { JsonObject } from "../api/types";
+import type { Analysis, JsonObject } from "../api/types";
 import type { EditorState } from "../store/editorStore";
 import { ComparisonView } from "../features/canvas/ComparisonView";
 import {
@@ -12,6 +12,7 @@ import {
   type CanvasApi,
 } from "../features/canvas/canvasModel";
 import { listenForTauriDrops } from "../features/canvas/tauriDrop";
+import { analyzeImage } from "../features/analysis/analyzeWorkflow";
 import { createPreviewScheduler, type PreviewScheduler } from "../features/preview/previewScheduler";
 
 type CanvasPhase = "idle" | "loading" | "ready" | "error";
@@ -29,6 +30,7 @@ type CanvasPaneProps = {
   factor?: number;
   onImagePathChange?(path: string): JsonObject | void;
   onPreviewSettled?(): void;
+  onAnalysisComplete?(analysis: Analysis): void;
   onRenderStateChange?(render: EditorState["render"]): void;
 };
 
@@ -38,6 +40,7 @@ export function CanvasPane({
   factor = 1,
   onImagePathChange,
   onPreviewSettled,
+  onAnalysisComplete,
   onRenderStateChange,
 }: CanvasPaneProps) {
   const paneRef = useRef<HTMLElement>(null);
@@ -45,6 +48,7 @@ export function CanvasPane({
   const urlsRef = useRef<PreviewUrls | null>(null);
   const requestRef = useRef(0);
   const schedulerRef = useRef<PreviewScheduler<LivePreviewRequest> | null>(null);
+  const analysisControllerRef = useRef<AbortController | null>(null);
   const lastRenderedSignatureRef = useRef<string | null>(null);
   const [phase, setPhase] = useState<CanvasPhase>("idle");
   const [loadedPath, setLoadedPath] = useState<string | null>(null);
@@ -52,6 +56,7 @@ export function CanvasPane({
   const [position, setPosition] = useState(50);
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
 
   const replaceUrls = useCallback((next: PreviewUrls | null) => {
     if (urlsRef.current) {
@@ -105,6 +110,9 @@ export function CanvasPane({
 
   const loadPath = useCallback(async (path: string) => {
     if (!client) return;
+    analysisControllerRef.current?.abort();
+    analysisControllerRef.current = null;
+    setAnalyzing(false);
     schedulerRef.current?.cancel();
     const nextAnalysis = onImagePathChange?.(path) ?? analysis;
     const requestId = ++requestRef.current;
@@ -135,6 +143,28 @@ export function CanvasPane({
       onRenderStateChange?.({ status: "error", error: canvasErrorMessage(reason) });
     }
   }, [analysis, client, factor, onImagePathChange, onRenderStateChange, replaceUrls]);
+
+  const runAnalysis = async () => {
+    if (!client || !loadedPath || analyzing) return;
+    const controller = new AbortController();
+    analysisControllerRef.current?.abort();
+    analysisControllerRef.current = controller;
+    setAnalyzing(true);
+    setError(null);
+    try {
+      const result = await analyzeImage(client, loadedPath, { signal: controller.signal });
+      if (!controller.signal.aborted) onAnalysisComplete?.(result);
+    } catch (reason) {
+      if (!(reason instanceof DOMException && reason.name === "AbortError")) {
+        setError(canvasErrorMessage(reason));
+      }
+    } finally {
+      if (analysisControllerRef.current === controller) {
+        analysisControllerRef.current = null;
+        setAnalyzing(false);
+      }
+    }
+  };
 
   useEffect(() => {
     if (!client || !loadedPath || phase !== "ready") return;
@@ -182,6 +212,7 @@ export function CanvasPane({
 
   useEffect(() => () => {
     requestRef.current += 1;
+    analysisControllerRef.current?.abort();
     if (urlsRef.current) {
       URL.revokeObjectURL(urlsRef.current.before);
       URL.revokeObjectURL(urlsRef.current.after);
@@ -216,7 +247,11 @@ export function CanvasPane({
     >
       <div className="canvas-toolbar" aria-label="画布工具">
         <span>适合窗口</span>
-        <span>{phase === "ready" ? "对比预览" : "100%"}</span>
+        {phase === "ready" ? (
+          <button type="button" disabled={analyzing} onClick={() => void runAnalysis()}>
+            {analyzing ? "AI 分析中…" : "AI 分析"}
+          </button>
+        ) : <span>100%</span>}
       </div>
 
       {phase === "ready" && urls ? (

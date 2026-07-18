@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from looklift import config, intensity, report, xmp_reader, xmp_writer
+from looklift import intensity, report, xmp_reader, xmp_writer
 from looklift.gui import server as gui_server
 
 

@@ -20,6 +20,6 @@ describe("galleryStore", () => {
 
     await expect(loadLookIntoEditor(client, "青橙经典", commit)).resolves.toBe(analysis);
     expect(client.getLook).toHaveBeenCalledWith("青橙经典");
-    expect(commit).toHaveBeenCalledWith(analysis);
+    expect(commit).toHaveBeenCalledWith(analysis, 1);
   });
 });

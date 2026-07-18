@@ -43,7 +43,8 @@ export function GalleryPane({ client, initialLooks, onActiveLookChange }: Galler
     setLoadingName(look.name);
     setError(null);
     try {
-      await loadLookIntoEditor(client, look.name, (analysis) => {
+      await loadLookIntoEditor(client, look.name, (analysis, factor) => {
+        editorStore.setFactor(factor);
         editorStore.commitAnalysis(analysis, "library");
       });
       onActiveLookChange?.(look.name);
