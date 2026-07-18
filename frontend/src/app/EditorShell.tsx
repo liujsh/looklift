@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CanvasPane } from "../components/CanvasPane";
 import { ChatPane } from "../components/ChatPane";
 import { GalleryPane } from "../components/GalleryPane";
@@ -9,6 +9,8 @@ import type { ParamContract } from "../api/types";
 import { createNeutralAnalysis } from "../panel/contractModel";
 import { exportLookFile, isCurrentLookSnapshot } from "../features/looks/lookActions";
 import { editorStore, useEditorState } from "../store/editorStore";
+import { createChatWorkflow } from "../features/chat/chatWorkflow";
+import { createSessionCoordinator } from "../features/sessions/sessionCoordinator";
 
 type EditorShellProps = {
   chatEnabled?: boolean;
@@ -27,6 +29,14 @@ export function EditorShell({
   const [activeLookName, setActiveLookName] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const chatWorkflow = useMemo(
+    () => client ? createChatWorkflow(client, editorStore) : null,
+    [client],
+  );
+  const sessionCoordinator = useMemo(
+    () => client ? createSessionCoordinator(client, editorStore) : null,
+    [client],
+  );
   const activeLookSnapshot = useRef({ analysis: editor.analysis, factor: editor.factor });
   const neutral = !editor.analysis && contract ? createNeutralAnalysis(contract) : undefined;
   const openImage = useCallback((path: string) => {
@@ -36,8 +46,14 @@ export function EditorShell({
     }
     const next = createNeutralAnalysis(contract);
     editorStore.openImage(path, next);
+    void sessionCoordinator?.open(path, next).catch((reason) => {
+      editorStore.setRenderState({
+        status: "error",
+        error: reason instanceof Error ? reason.message : String(reason),
+      });
+    });
     return next;
-  }, [contract]);
+  }, [contract, sessionCoordinator]);
   const settleManualPreview = useCallback(() => editorStore.finalizePreview("manual"), []);
   const applyAnalysis = useCallback((analysis: Parameters<typeof editorStore.commitAnalysis>[0]) => {
     editorStore.setFactor(1);
@@ -98,10 +114,10 @@ export function EditorShell({
       </header>
 
       <section className="workbench" aria-label="照片编辑工作区">
-        <ChatPane enabled={chatEnabled} />
+        <ChatPane enabled={chatEnabled} workflow={chatWorkflow} coordinator={sessionCoordinator} />
         <CanvasPane
           client={client}
-          analysis={editor.analysis ?? neutral}
+          analysis={editor.displayAnalysis ?? neutral}
           factor={editor.factor}
           onImagePathChange={openImage}
           onPreviewSettled={settleManualPreview}

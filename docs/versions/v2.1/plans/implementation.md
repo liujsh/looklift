@@ -265,13 +265,13 @@ Expected: PASS。
 - Modify: `frontend/src/components/CanvasPane.tsx`
 - Modify: `frontend/src/components/PanelPane.tsx`
 
-- [ ] 先写普通消息测试，断言恰好一次 `chatStep`，成功后只建立 pending，不调用 commit。
-- [ ] 写“保留”测试：先确认候选渲染成功，再调用 session commit，成功后才清 pending；失败保留 pending 供重试。
-- [ ] 写“撤销”测试：不调用 commit，恢复正式 analysis；无变更解释通过 messages 路由保存但不造版本。
-- [ ] 写继续手调协调测试：候选作为基线，首个手调值不丢失；提交失败时明确错误并保留可重试状态。
-- [ ] 写 AI 精修测试：最多两次额外调用；每轮以最新 candidate 为 current_analysis；done、无变化、取消和第二轮后都停止。
-- [ ] `CanvasPane` 和 `PanelPane` 统一消费 `displayAnalysis`，继续复用现有 160ms 预览调度与旧响应拒绝机制。
-- [ ] 打开照片时创建/恢复 session；应用启动恢复最后正式 analysis 与消息，不恢复 pending。
+- [x] 先写普通消息测试，断言恰好一次 `chatStep`，成功后只建立 pending，不调用 commit。
+- [x] 写“保留”测试：先确认候选渲染成功，再调用 session commit，成功后才清 pending；失败保留 pending 供重试。
+- [x] 写“撤销”测试：不调用 commit，恢复正式 analysis；无变更解释通过 messages 路由保存但不造版本。
+- [x] 写继续手调协调测试：候选作为基线，首个手调值不丢失；提交失败时明确错误并保留可重试状态。
+- [x] 写 AI 精修测试：最多两次额外调用；每轮以最新 candidate 为 current_analysis；done、无变化、取消和第二轮后都停止。
+- [x] `CanvasPane` 和 `PanelPane` 统一消费 `displayAnalysis`，继续复用现有 160ms 预览调度与旧响应拒绝机制。
+- [x] 打开照片时创建/恢复 session；应用启动恢复最后正式 analysis 与消息，不恢复 pending。
 
 Run: `pnpm vitest run src/features/chat/chatWorkflow.test.ts src/features/sessions/sessionCoordinator.test.ts src/store/editorStore.test.ts`
 

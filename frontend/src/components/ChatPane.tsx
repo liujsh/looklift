@@ -1,4 +1,11 @@
-type ChatPaneProps = { enabled: boolean };
+import type { ChatWorkflow } from "../features/chat/chatWorkflow";
+import type { SessionCoordinator } from "../features/sessions/sessionCoordinator";
+
+type ChatPaneProps = {
+  enabled: boolean;
+  workflow?: ChatWorkflow | null;
+  coordinator?: SessionCoordinator | null;
+};
 
 export function ChatPane({ enabled }: ChatPaneProps) {
   return (

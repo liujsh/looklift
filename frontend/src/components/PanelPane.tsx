@@ -14,10 +14,11 @@ type PanelPaneProps = { contract?: ParamContract };
 
 export function PanelPane({ contract }: PanelPaneProps) {
   const editor = useEditorState();
+  const analysis = editor.displayAnalysis;
   const [openGroup, setOpenGroup] = useState<string>(PANEL_GROUPS[0].id);
 
   const renderGroup = (groupId: string) => {
-    if (!editor.analysis || !contract) return "载入分析结果后显示参数";
+    if (!analysis || !contract) return "载入分析结果后显示参数";
     if (groupId === "basic") {
       return BASIC_CONTROLS.map(({ path, label }) => {
         const field = path.slice("basic.".length) as keyof BasicAnalysis;
@@ -25,25 +26,25 @@ export function PanelPane({ contract }: PanelPaneProps) {
           key={path}
           label={label}
           rule={requireRule(contract, path)}
-          value={editor.analysis!.basic[field]}
+          value={analysis.basic[field]}
           onChange={(value) => editorStore.previewFragment(
-            "basic", { ...editor.analysis!.basic, [field]: value },
+            "basic", { ...analysis.basic, [field]: value },
           )}
         />;
       });
     }
     if (groupId === "hsl") return <HslMixer
       contract={contract}
-      value={editor.analysis.hsl}
+      value={analysis.hsl}
       onChange={(value) => editorStore.previewFragment("hsl", value)}
     />;
     if (groupId === "tone-curve") return <ToneCurve
-      value={editor.analysis.tone_curve}
+      value={analysis.tone_curve}
       onChange={(value) => editorStore.previewFragment("tone_curve", value)}
     />;
     if (groupId === "color-grading") return <ColorGradingWheels
       contract={contract}
-      value={editor.analysis.color_grading}
+      value={analysis.color_grading}
       onChange={(value) => editorStore.previewFragment("color_grading", value)}
     />;
     return EFFECT_CONTROLS.map(({ path, label }) => {
@@ -52,9 +53,9 @@ export function PanelPane({ contract }: PanelPaneProps) {
         key={path}
         label={label}
         rule={requireRule(contract, path)}
-        value={editor.analysis!.effects[field]}
+        value={analysis.effects[field]}
         onChange={(value) => editorStore.previewFragment(
-          "effects", { ...editor.analysis!.effects, [field]: value },
+          "effects", { ...analysis.effects, [field]: value },
         )}
       />;
     });
@@ -84,7 +85,7 @@ export function PanelPane({ contract }: PanelPaneProps) {
         onChange={editorStore.setFactor}
       />
 
-      {editor.analysis && <AnalysisBrief analysis={editor.analysis} />}
+      {analysis && <AnalysisBrief analysis={analysis} />}
 
       <nav className="panel-groups" aria-label="调整分组">
         {PANEL_GROUPS.map((group) => {
