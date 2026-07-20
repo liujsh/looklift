@@ -82,4 +82,23 @@ describe("HomePage", () => {
     expect(recentSessions).toHaveBeenCalledTimes(2);
     expect(container.textContent).toContain("还没有可继续的正式会话");
   });
+
+  it("文件选择运行中禁用快速修图入口", async () => {
+    await act(async () => {
+      root.render(
+        <HomePage
+          client={{ recentSessions: vi.fn().mockResolvedValue([]) }}
+          onResume={vi.fn()}
+          onQuickEdit={vi.fn()}
+          quickEditBusy
+          onFuture={vi.fn()}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const button = [...container.querySelectorAll("button")]
+      .find((candidate) => candidate.textContent?.includes("正在打开"));
+    expect(button?.disabled).toBe(true);
+  });
 });

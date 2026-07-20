@@ -11,10 +11,11 @@ type HomePageProps = {
   client: RecentSessionClient;
   onResume(sessionId: string): Promise<void> | void;
   onQuickEdit?(): Promise<void> | void;
+  quickEditBusy?: boolean;
   onFuture(entry: FutureEntry): void;
 };
 
-export function HomePage({ client, onResume, onQuickEdit, onFuture }: HomePageProps) {
+export function HomePage({ client, onResume, onQuickEdit, quickEditBusy = false, onFuture }: HomePageProps) {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,8 +60,8 @@ export function HomePage({ client, onResume, onQuickEdit, onFuture }: HomePagePr
           <button type="button" onClick={() => onFuture("device")}>
             <strong>从设备导入</strong><span>v2.3-B · 安全复制并校验</span>
           </button>
-          <button className="primary" type="button" disabled={!onQuickEdit} onClick={() => void onQuickEdit?.()}>
-            <strong>快速修图</strong><span>选择一张照片，不加入图库</span>
+          <button className="primary" type="button" disabled={!onQuickEdit || quickEditBusy} onClick={() => void onQuickEdit?.()}>
+            <strong>{quickEditBusy ? "正在打开…" : "快速修图"}</strong><span>选择一张照片，不加入图库</span>
           </button>
         </div>
       </section>

@@ -8,10 +8,11 @@ type WorkspaceTabsProps = {
   canClose?(tab: WorkspaceTab): boolean;
   onClose?(id: string): void;
   onQuickEdit?(): Promise<void> | void;
+  quickEditBusy?: boolean;
   onFuture(entry: FutureEntry): void;
 };
 
-export function WorkspaceTabs({ tabs, activeTabId, onActivate, canClose, onClose, onQuickEdit, onFuture }: WorkspaceTabsProps) {
+export function WorkspaceTabs({ tabs, activeTabId, onActivate, canClose, onClose, onQuickEdit, quickEditBusy = false, onFuture }: WorkspaceTabsProps) {
   return (
     <header className="workspace-tabs" data-tauri-drag-region>
       <strong className="platform-brand" data-tauri-drag-region>LookLift</strong>
@@ -31,7 +32,9 @@ export function WorkspaceTabs({ tabs, activeTabId, onActivate, canClose, onClose
         <div>
           <button type="button" onClick={() => onFuture("folder")}>添加文件夹 <small>v2.3-A</small></button>
           <button type="button" onClick={() => onFuture("device")}>从设备导入 <small>v2.3-B</small></button>
-          <button type="button" disabled={!onQuickEdit} onClick={() => void onQuickEdit?.()}>快速修图</button>
+          <button type="button" disabled={!onQuickEdit || quickEditBusy} onClick={() => void onQuickEdit?.()}>
+            {quickEditBusy ? "正在打开…" : "快速修图"}
+          </button>
         </div>
       </details>
     </header>

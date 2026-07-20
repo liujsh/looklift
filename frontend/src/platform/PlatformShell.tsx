@@ -1,6 +1,6 @@
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { LookliftClient } from "../api/client";
-import type { ParamContract } from "../api/types";
+import type { ParamContract, SessionSnapshot } from "../api/types";
 import { EditorShell } from "../app/EditorShell";
 import { createPlatformStore, type PlatformPage, type PlatformStore } from "./platformStore";
 import { createStudioRuntime } from "./studioRuntime";
@@ -8,6 +8,8 @@ import { HomePage, type FutureEntry } from "./HomePage";
 import { NavigationRail } from "./NavigationRail";
 import { WorkspaceTabs } from "./WorkspaceTabs";
 import { ComingSoonPage } from "./ComingSoonPage";
+import { createNeutralAnalysis } from "../panel/contractModel";
+import { chooseBrowserImageFile, nativeImageChooser, runQuickEdit } from "./quickEdit";
 
 type PlatformShellProps = {
   client: LookliftClient;
@@ -35,26 +37,51 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
   const store = providedStore ?? ownedStore;
   const platform = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const [shellError, setShellError] = useState<string | null>(null);
+  const [quickEditBusy, setQuickEditBusy] = useState(false);
+  const quickEditRunning = useRef(false);
   const activeTab = platform.tabs.find((tab) => tab.id === platform.activeTabId) ?? platform.tabs[0];
 
   const openPage = (page: PlatformPage) => store.openPlatform(page, PLATFORM_TITLES[page]);
   const openFuture = (entry: FutureEntry) => openPage(entry === "folder" ? "library" : "import");
+  const openSnapshot = (snapshot: SessionSnapshot) => {
+    const existing = store.findStudio(snapshot.id);
+    if (existing) store.activateTab(existing.id);
+    else store.openStudio(createStudioRuntime(client, snapshot));
+  };
   const resume = async (sessionId: string) => {
+    setShellError(null);
     const existing = store.findStudio(sessionId);
     if (existing) {
       store.activateTab(existing.id);
       return;
     }
+    openSnapshot(await client.getSession(sessionId));
+  };
+  const quickEdit = contract || onQuickEdit ? async () => {
+    if (quickEditRunning.current) return;
+    quickEditRunning.current = true;
+    setQuickEditBusy(true);
     setShellError(null);
     try {
-      const snapshot = await client.getSession(sessionId);
-      store.openStudio(createStudioRuntime(client, snapshot));
+      if (onQuickEdit) {
+        await onQuickEdit();
+      } else if (contract) {
+        await runQuickEdit({
+          initialAnalysis: createNeutralAnalysis(contract),
+          chooseNativePath: nativeImageChooser(),
+          chooseBrowserFile: chooseBrowserImageFile,
+          upload: (file) => client.upload(file),
+          createSession: (payload) => client.createSession(payload),
+          openSession: openSnapshot,
+        });
+      }
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : String(reason);
-      setShellError(message);
-      throw reason;
+      setShellError(`快速修图启动失败：${reason instanceof Error ? reason.message : String(reason)}`);
+    } finally {
+      quickEditRunning.current = false;
+      setQuickEditBusy(false);
     }
-  };
+  } : undefined;
 
   const activeTarget = activeTab.kind === "home"
     ? "home"
@@ -69,7 +96,8 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
         onActivate={store.activateTab}
         canClose={(tab) => tab.kind === "platform"}
         onClose={store.removeTab}
-        onQuickEdit={onQuickEdit}
+        onQuickEdit={quickEdit}
+        quickEditBusy={quickEditBusy}
         onFuture={openFuture}
       />
       <NavigationRail
@@ -80,7 +108,7 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
       />
       <section className="platform-content">
         {shellError && <div className="platform-error" role="alert">{shellError}</div>}
-        {activeTab.kind === "home" && <HomePage client={client} onResume={resume} onQuickEdit={onQuickEdit} onFuture={openFuture} />}
+        {activeTab.kind === "home" && <HomePage client={client} onResume={resume} onQuickEdit={quickEdit} quickEditBusy={quickEditBusy} onFuture={openFuture} />}
         {activeTab.kind === "platform" && <ComingSoonPage page={activeTab.page} />}
         {platform.tabs.filter((tab) => tab.kind === "studio").map((tab) => {
           const active = tab.id === platform.activeTabId;

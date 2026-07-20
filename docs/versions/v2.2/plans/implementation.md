@@ -269,25 +269,25 @@
 - 文件格式最终校验仍由现有后端负责，前端 accept/filter 只改善选择体验。
 - Tauri 只增加官方 dialog 插件默认读取选择权限，不增加目录扫描或任意文件写权限。
 
-- [ ] **Step 1：写控制器失败测试**
+- [x] **Step 1：写控制器失败测试**
 
   通过依赖注入覆盖原生选择成功、取消、原生 API 不可用时浏览器回退、上传失败和 create/resume 失败；断言失败不会创建标签。
 
-- [ ] **Step 2：运行聚焦测试并确认失败**
+- [x] **Step 2：运行聚焦测试并确认失败**
 
   在 `frontend/` 运行：`pnpm exec vitest run src/platform/quickEdit.test.ts src/platform/HomePage.test.tsx`
 
   预期：quick-edit 适配层或首页动作尚不存在而失败。
 
-- [ ] **Step 3：安装并注册官方插件**
+- [x] **Step 3：安装并注册官方插件**
 
   前端与 Rust 插件均锁定 Tauri 2 同一主版本；更新 capability，只授予主窗口打开文件对话框所需权限。
 
-- [ ] **Step 4：实现桌面选择与浏览器回退**
+- [x] **Step 4：实现桌面选择与浏览器回退**
 
   平台控制器负责动作编排，HomePage 只负责触发和显示进度/错误；不要把 session 或标签业务塞进文件选择适配层。
 
-- [ ] **Step 5：运行聚焦验证**
+- [x] **Step 5：运行聚焦验证**
 
   在 `frontend/` 运行：`pnpm exec vitest run src/platform/quickEdit.test.ts src/platform/HomePage.test.tsx src/api/client.test.ts`
 
@@ -297,7 +297,7 @@
 
   预期：全部通过。生产打包留到 Task 8，避免中途重复全量 build。
 
-- [ ] **Step 6：自审并提交**
+- [x] **Step 6：自审并提交**
 
   检查 capability 最小化、取消是否无副作用、正式路径是否未经过临时上传；提交：`feat(v2.2): 接入原生快速修图选择`。
 

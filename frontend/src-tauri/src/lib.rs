@@ -97,6 +97,7 @@ fn start_sidecar(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![sidecar_status])
         .setup(|app| start_sidecar(app).map_err(Into::into))
