@@ -200,6 +200,8 @@
 - 新建：`frontend/src/platform/WorkspaceTabs.tsx`
 - 新建：`frontend/src/platform/ComingSoonPage.tsx`
 - 修改：`frontend/src/App.tsx`
+- 修改：`frontend/src/components/CanvasPane.tsx`
+- 修改：`frontend/src/components/CanvasPane.lifecycle.test.tsx`
 - 修改：`frontend/src/App.css`
 - 修改：`frontend/src/theme/layout.css`
 - 修改：`frontend/src/theme/components.css`
@@ -212,26 +214,27 @@
 - 最近会话卡片不显示绝对路径；`source_available=false` 时不可恢复。
 - 导航包含最终六类入口，普通平台页记住展开偏好，Studio 默认使用窄图标轨。
 - 未实施页面使用一个统一说明组件，不请求图库、设备、自动化或插件数据。
+- 从正式 snapshot 恢复的 `imagePath` 由现有 Canvas 预览管线自动加载，不建立第二套恢复渲染。
 
-- [ ] **Step 1：写行为失败测试**
+- [x] **Step 1：写行为失败测试**
 
-  覆盖启动进入首页、首页不可关闭、标签栏 `＋` 三入口、导航项完整、未来入口只显示版本说明、最近会话错误可重试、缺失文件禁用和点击 session 打开/聚焦 runtime。
+  覆盖启动进入首页、首页不可关闭、标签栏 `＋` 三入口、导航项完整、未来入口只显示版本说明、最近会话错误可重试、缺失文件禁用、点击 session 打开/聚焦 runtime，以及 snapshot 路径自动生成当前效果预览。
 
-- [ ] **Step 2：运行聚焦测试并确认失败**
+- [x] **Step 2：运行聚焦测试并确认失败**
 
   在 `frontend/` 运行：`pnpm exec vitest run src/platform/PlatformShell.test.tsx src/platform/HomePage.test.tsx src/app/EditorShell.test.tsx`
 
   预期：平台 React 组件尚不存在而失败。
 
-- [ ] **Step 3：实现最小可用平台 UI**
+- [x] **Step 3：实现最小可用平台 UI**
 
   先完成语义结构、加载/空/错误状态和真实动作，再落基础布局。平台说明页只写已确认版本边界，不放原型假数据。
 
-- [ ] **Step 4：接入多个 EditorShell**
+- [x] **Step 4：接入多个 EditorShell**
 
   每个 studio 标签渲染所属 runtime 的 EditorShell；非活动项隐藏但保持挂载。标题使用文件显示名，AI 运行中提供非侵入状态提示。
 
-- [ ] **Step 5：运行聚焦验证**
+- [x] **Step 5：运行聚焦验证**
 
   在 `frontend/` 运行：`pnpm exec vitest run src/platform/PlatformShell.test.tsx src/platform/HomePage.test.tsx src/app/EditorShell.test.tsx`
 
@@ -239,7 +242,7 @@
 
   预期：全部通过。
 
-- [ ] **Step 6：自审并提交**
+- [x] **Step 6：自审并提交**
 
   检查是否出现假图库/设备数据、是否重复 session、隐藏 Studio 是否仍保持组件状态；提交：`feat(v2.2): 搭建平台首页与导航`。
 

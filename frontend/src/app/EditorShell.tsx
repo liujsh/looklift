@@ -181,6 +181,7 @@ export function EditorShell({
         />
         <CanvasPane
           active={active}
+          imagePath={editor.imagePath}
           client={client}
           analysis={editor.displayAnalysis ?? neutral}
           factor={editor.factor}

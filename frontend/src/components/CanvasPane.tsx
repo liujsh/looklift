@@ -26,6 +26,7 @@ type LivePreviewRequest = {
 
 type CanvasPaneProps = {
   active?: boolean;
+  imagePath?: string | null;
   client?: LookliftClient;
   analysis?: JsonObject;
   factor?: number;
@@ -40,6 +41,7 @@ type CanvasPaneProps = {
 
 export function CanvasPane({
   active = true,
+  imagePath,
   client,
   analysis = {},
   factor = 1,
@@ -121,13 +123,13 @@ export function CanvasPane({
     };
   }, [client, replaceAfter]);
 
-  const loadPath = useCallback(async (path: string) => {
+  const loadPath = useCallback(async (path: string, notify = true) => {
     if (!client) return;
     analysisControllerRef.current?.abort();
     analysisControllerRef.current = null;
     setAnalyzing(false);
     schedulerRef.current?.cancel();
-    const nextAnalysis = onImagePathChange?.(path) ?? analysis;
+    const nextAnalysis = notify ? onImagePathChange?.(path) ?? analysis : analysis;
     const requestId = ++requestRef.current;
     setLoadedPath(null);
     setPhase("loading");
@@ -159,6 +161,11 @@ export function CanvasPane({
     }
   }, [analysis, client, factor, onImagePathChange, onRenderStateChange, replaceUrls]);
   loadPathRef.current = loadPath;
+
+  useEffect(() => {
+    if (!imagePath || imagePath === loadedPath || phase === "loading") return;
+    void loadPath(imagePath, false);
+  }, [imagePath, loadPath, loadedPath, phase]);
 
   const runAnalysis = async () => {
     if (!client || !loadedPath || analyzing) return;

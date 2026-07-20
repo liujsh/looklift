@@ -1,12 +1,9 @@
-import { useMemo } from "react";
-import { EditorShell } from "./app/EditorShell";
 import { useEngineGate } from "./app/useEngineGate";
-import { createEditorStore } from "./store/editorStore";
+import { PlatformShell } from "./platform/PlatformShell";
 import "./App.css";
 
 function App() {
   const engine = useEngineGate();
-  const store = useMemo(() => createEditorStore(), []);
 
   if (engine.phase !== "ready") {
     return (
@@ -22,8 +19,7 @@ function App() {
   }
 
   return (
-    <EditorShell
-      store={store}
+    <PlatformShell
       client={engine.client}
       contract={engine.contract}
       engineLabel={`${engine.numba} · libvips ${engine.libvips}`}
