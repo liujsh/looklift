@@ -12,6 +12,7 @@ function workflow(state: Partial<ChatWorkflowState> = {}): ChatWorkflow {
   return {
     getSnapshot: () => snapshot, subscribe: () => () => {}, send: vi.fn(), refine: vi.fn(),
     cancel: vi.fn(), setIncludeMetadata: vi.fn(), restoreMessages: vi.fn(), settlePending: vi.fn(),
+    dispose: vi.fn(),
   };
 }
 

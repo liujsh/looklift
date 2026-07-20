@@ -158,25 +158,25 @@
 - 运行时从完整 `SessionSnapshot` 恢复正式 analysis 与消息，不构造 pendingPreview。
 - `dispose()` 幂等，取消 AI 并令后续异步结果失效；不删除正式 session。
 
-- [ ] **Step 1：写平台状态失败测试**
+- [x] **Step 1：写平台状态失败测试**
 
   覆盖固定首页、导航偏好恢复、同一平台页去重、同一 session 聚焦、多个 session 并存、活动标签切换和关闭后回到邻近标签。
 
-- [ ] **Step 2：写运行时失败测试**
+- [x] **Step 2：写运行时失败测试**
 
   覆盖两个 runtime 的 Store/工作流不共享、snapshot 只恢复正式状态、dispose 幂等和关闭后晚到 AI 结果被拒绝。
 
-- [ ] **Step 3：运行聚焦测试并确认失败**
+- [x] **Step 3：运行聚焦测试并确认失败**
 
   在 `frontend/` 运行：`pnpm exec vitest run src/platform/platformStore.test.ts src/platform/studioRuntime.test.ts`
 
   预期：平台 Store 与运行时模块尚不存在而失败。
 
-- [ ] **Step 4：实现纯平台状态和运行时工厂**
+- [x] **Step 4：实现纯平台状态和运行时工厂**
 
   保持平台 Store 与 React 无关，方便确定性测试。给聊天工作流补最小销毁/存活门禁；不要复制已有 request ID、照片身份和编辑锁判断。
 
-- [ ] **Step 5：运行聚焦验证**
+- [x] **Step 5：运行聚焦验证**
 
   在 `frontend/` 运行：`pnpm exec vitest run src/platform/platformStore.test.ts src/platform/studioRuntime.test.ts src/features/chat/chatWorkflow.test.ts src/features/sessions/sessionCoordinator.test.ts`
 
@@ -184,7 +184,7 @@
 
   预期：全部通过。
 
-- [ ] **Step 6：自审并提交**
+- [x] **Step 6：自审并提交**
 
   显式检查 runtime 是否独立、dispose 后是否仍有发布路径、平台 Store 是否误持 analysis；提交：`feat(v2.2): 添加平台标签运行时`。
 
