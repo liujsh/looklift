@@ -99,3 +99,8 @@ def looks_dir() -> Path:
     if configured:
         return Path(configured)
     return Path.home() / ".looklift" / "looks"
+
+
+def session_db_path() -> Path:
+    """v2.1 正式会话数据库与配置文件共享应用数据目录。"""
+    return CONFIG_PATH.parent / "looklift.db"

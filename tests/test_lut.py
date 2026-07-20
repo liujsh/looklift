@@ -9,7 +9,8 @@ def _parse_cube(path):
         if not line or line.startswith("#") or line.startswith("TITLE"):
             continue
         if line.startswith("LUT_3D_SIZE"):
-            size = int(line.split()[1]); continue
+            size = int(line.split()[1])
+            continue
         if line.startswith("DOMAIN_"):
             continue
         data.append([float(x) for x in line.split()])
@@ -28,7 +29,8 @@ def test_identity_analysis_gives_identity_lut(sample_analysis, tmp_path):
     import copy
     a = copy.deepcopy(sample_analysis)
     a["basic"] = {k: 0 for k in a["basic"]}
-    a["tone_curve"] = []; a["hsl"] = []
+    a["tone_curve"] = []
+    a["hsl"] = []
     for z in ("shadows", "midtones", "highlights", "global_"):
         a["color_grading"][z] = {"hue": 0, "saturation": 0, "luminance": 0}
     a["effects"] = {"vignette_amount": 0, "grain_amount": 0}

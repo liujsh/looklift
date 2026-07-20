@@ -13,18 +13,17 @@ handler 收到的不再只是段参数，而是一个请求上下文 dict：
 """
 from __future__ import annotations
 
-import io
 import json
 import os
 import re
 import shutil
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable
 
-from PIL import Image
-
-from .. import analyzer, config, intensity, render, report, xmp_writer
+from .. import ai_proxy, analyzer, chat, config, intensity, report, xmp_writer
 from ..render import contract as render_contract
+from ..session_store import DatabaseRecoveryRequired, SessionSnapshot, SessionStore
 from . import lookstore
 from . import tasks
 from . import upload
@@ -501,19 +500,15 @@ def _render_preview(image_path: Path, analysis: dict, factor: float) -> bytes:
     而不是散在 handler 里——这是这个路由唯一的"业务逻辑"，`_preview` 只做
     HTTP 参数校验和分发，图像管线细节集中在这一处，符合分层规范。
     """
-    with Image.open(image_path) as opened:
-        img = opened.convert("RGB")
-    img.thumbnail((_PREVIEW_MAX_EDGE, _PREVIEW_MAX_EDGE), Image.LANCZOS)
-    scaled = intensity.scale_analysis(analysis, factor)
-    rendered = render.render(img, scaled)
-    buf = io.BytesIO()
-    rendered.save(
-        buf,
-        format="JPEG",
+    from ..preview import render_preview_jpeg
+
+    return render_preview_jpeg(
+        image_path,
+        analysis,
+        factor,
+        max_edge=_PREVIEW_MAX_EDGE,
         quality=_PREVIEW_JPEG_QUALITY,
-        icc_profile=rendered.info["icc_profile"],
     )
-    return buf.getvalue()
 
 
 def _preview(ctx: dict) -> "tuple[int, dict] | tuple[int, bytes, str]":
@@ -557,6 +552,165 @@ def _preview(ctx: dict) -> "tuple[int, dict] | tuple[int, bytes, str]":
     return 200, jpeg_bytes, "image/jpeg"
 
 
+def _json_body(ctx: dict) -> "tuple[dict, None] | tuple[None, tuple[int, dict]]":
+    """读取 JSON 对象请求体，并统一输出稳定的中文 400。"""
+    try:
+        payload = json.loads(ctx.get("body") or b"{}")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None, (400, {"error": "请求体不是合法 JSON"})
+    if not isinstance(payload, dict):
+        return None, (400, {"error": "请求体必须是 JSON 对象"})
+    return payload, None
+
+
+def _validate_history(value: Any) -> str | None:
+    if not isinstance(value, list):
+        return "history 必须是消息数组"
+    for item in value:
+        if (
+            not isinstance(item, dict)
+            or item.get("role") not in {"user", "assistant"}
+            or not isinstance(item.get("content"), str)
+            or not item["content"].strip()
+        ):
+            return "history 中的消息必须包含有效 role 和 content"
+    return None
+
+
+def _chat_step(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    image_path, err = _validate_image_path(payload.get("path"))
+    if err is not None:
+        return err
+    analysis = payload.get("current_analysis")
+    if not isinstance(analysis, dict):
+        return 400, {"error": "current_analysis 必须是参数对象"}
+    analysis_error = _validate_analysis(analysis)
+    if analysis_error:
+        return 400, {"error": f"current_analysis 无效：{analysis_error}"}
+    message = payload.get("message")
+    if not isinstance(message, str) or not message.strip():
+        return 400, {"error": "message 不能为空"}
+    history = payload.get("history", [])
+    history_error = _validate_history(history)
+    if history_error:
+        return 400, {"error": history_error}
+    include_metadata = payload.get("include_metadata", False)
+    if not isinstance(include_metadata, bool):
+        return 400, {"error": "include_metadata 必须是布尔值"}
+    if "factor" not in payload:
+        return 400, {"error": "缺少 factor 字段"}
+    factor, factor_error = _validate_factor(payload["factor"])
+    if factor_error is not None:
+        return factor_error
+    try:
+        result = chat.chat_step(
+            image_path=image_path,
+            current_analysis=analysis,
+            factor=factor,
+            message=message.strip(),
+            history=history,
+            include_metadata=include_metadata,
+        )
+    except chat.ChatStepError as exc:
+        status = {"timeout": 504, "cancelled": 499, "image_error": 400}.get(exc.code, 502)
+        return status, {"error": str(exc), "code": exc.code}
+    return 200, asdict(result)
+
+
+def _image_info(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    image_path, err = _validate_image_path(payload.get("path"))
+    if err is not None:
+        return err
+    try:
+        return 200, ai_proxy.read_safe_image_info(image_path)
+    except OSError:
+        return 400, {"error": "无法读取拍摄信息"}
+
+
+def _snapshot_payload(snapshot: SessionSnapshot) -> dict:
+    return asdict(snapshot)
+
+
+def _session_error(exc: Exception) -> tuple[int, dict]:
+    if isinstance(exc, KeyError):
+        return 404, {"error": "未找到指定会话"}
+    if isinstance(exc, DatabaseRecoveryRequired):
+        return 503, {"error": "会话数据库需要恢复，请先检查备份。"}
+    if isinstance(exc, OSError):
+        return 500, {"error": "会话数据库读写失败，请重试或检查存储位置。"}
+    return 400, {"error": str(exc)}
+
+
+def _create_session(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    image_path, err = _validate_image_path(payload.get("path"))
+    if err is not None:
+        return err
+    analysis = payload.get("initial_analysis")
+    if not isinstance(analysis, dict):
+        return 400, {"error": "initial_analysis 必须是参数对象"}
+    analysis_error = _validate_analysis(analysis)
+    if analysis_error:
+        return 400, {"error": f"initial_analysis 无效：{analysis_error}"}
+    try:
+        snapshot = SessionStore().create_or_resume(str(image_path), analysis)
+    except (ValueError, TypeError, OSError, DatabaseRecoveryRequired) as exc:
+        return _session_error(exc)
+    return 200, _snapshot_payload(snapshot)
+
+
+def _get_session(ctx: dict) -> tuple[int, dict]:
+    try:
+        snapshot = SessionStore().load(ctx["params"]["id"])
+    except (KeyError, OSError, DatabaseRecoveryRequired) as exc:
+        return _session_error(exc)
+    return 200, _snapshot_payload(snapshot)
+
+
+def _commit_session(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    analysis = payload.get("analysis")
+    if not isinstance(analysis, dict):
+        return 400, {"error": "analysis 必须是参数对象"}
+    analysis_error = _validate_analysis(analysis)
+    if analysis_error:
+        return 400, {"error": f"analysis 无效：{analysis_error}"}
+    source = payload.get("source", "chat")
+    if source not in {"chat", "manual", "library", "analysis"}:
+        return 400, {"error": "source 必须是 chat、manual、library 或 analysis"}
+    try:
+        snapshot = SessionStore().commit_exchange(
+            ctx["params"]["id"], payload.get("exchange"), analysis, source
+        )
+    except (KeyError, ValueError, TypeError, OSError, DatabaseRecoveryRequired) as exc:
+        return _session_error(exc)
+    return 200, _snapshot_payload(snapshot)
+
+
+def _record_session_messages(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    try:
+        store = SessionStore()
+        session_id = ctx["params"]["id"]
+        store.record_failed_exchange(session_id, payload.get("exchange"))
+        snapshot = store.load(session_id)
+    except (KeyError, ValueError, TypeError, OSError, DatabaseRecoveryRequired) as exc:
+        return _session_error(exc)
+    return 200, _snapshot_payload(snapshot)
+
+
 ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/ping"): _ping,
     ("GET", "/api/param-contract"): _param_contract,
@@ -567,6 +721,12 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("POST", "/api/upload"): _upload,
     ("POST", "/api/analyze"): _analyze,
     ("POST", "/api/preview"): _preview,
+    ("POST", "/api/chat/step"): _chat_step,
+    ("POST", "/api/image-info"): _image_info,
+    ("POST", "/api/sessions"): _create_session,
+    ("GET", "/api/sessions/<id>"): _get_session,
+    ("POST", "/api/sessions/<id>/commit"): _commit_session,
+    ("POST", "/api/sessions/<id>/messages"): _record_session_messages,
     ("POST", "/api/looks"): _post_looks,
     ("GET", "/api/looks"): _get_looks,
     ("GET", "/api/looks/<name>"): _get_look,

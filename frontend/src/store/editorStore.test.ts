@@ -36,6 +36,11 @@ function analysis(exposure = 0): Analysis {
 }
 
 describe("editorStore", () => {
+  const exchange = [
+    { role: "user" as const, content: "提亮" },
+    { role: "assistant" as const, content: "已生成候选", status: "done" as const },
+  ];
+
   it("AI 整对象首次回填建立当前 analysis，不制造虚假的初始历史", () => {
     const store = createEditorStore();
     const incoming = analysis(0.5);
@@ -94,6 +99,30 @@ describe("editorStore", () => {
     expect(store.getSnapshot().versions).toEqual([]);
   });
 
+  it("画面参数变化立即使旧预览失效，渲染失败仍保留待确认候选", () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis(0));
+    store.setRenderState({ status: "ready", error: null });
+
+    store.setFactor(0.7);
+    expect(store.getSnapshot().render.status).toBe("rendering");
+    store.setRenderState({ status: "ready", error: null });
+
+    store.previewFragment("basic", { ...store.getSnapshot().analysis!.basic, exposure: 0.5 });
+    expect(store.getSnapshot().render.status).toBe("rendering");
+    store.setRenderState({ status: "ready", error: null });
+
+    store.commitAnalysis(analysis(1), "library");
+    expect(store.getSnapshot().render.status).toBe("rendering");
+    store.setRenderState({ status: "ready", error: null });
+
+    expect(store.beginPendingPreview(analysis(2), [], exchange, 1)).toBe(true);
+    expect(store.getSnapshot().render.status).toBe("rendering");
+    store.setRenderState({ status: "error", error: "渲染失败" });
+    expect(store.getSnapshot().pendingPreview).not.toBeNull();
+    expect(store.getSnapshot().analysis?.basic.exposure).toBe(1);
+  });
+
   it("打开新图片同时装入中性 analysis，并清空上一张图的版本栈", () => {
     const store = createEditorStore();
     store.openImage("C:/first.jpg", analysis(0));
@@ -119,7 +148,8 @@ describe("editorStore", () => {
     expect(store.getSnapshot().analysis?.basic.exposure).toBe(1.25);
     expect(store.getSnapshot().versions).toEqual([]);
 
-    store.finalizePreview("manual");
+    expect(store.finalizePreview("manual")).toBe(true);
+    expect(store.finalizePreview("manual")).toBe(false);
     expect(store.getSnapshot().versions).toHaveLength(1);
     expect(store.getSnapshot().versions[0].analysis).toBe(original);
     expect(store.getSnapshot().analysis?.basic.exposure).toBe(1.25);
@@ -139,5 +169,87 @@ describe("editorStore", () => {
     expect(store.getSnapshot().versions).toHaveLength(1);
     expect(store.getSnapshot().versions[0]).toMatchObject({ analysis: original, source: "chat" });
     expect(original.basic.exposure).toBe(0);
+  });
+
+  it("AI 候选只影响 displayAnalysis，保留后才进入正式版本", () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis(0));
+
+    expect(store.beginPendingPreview(analysis(1), [], exchange, 1, "now")).toBe(true);
+    expect(store.getSnapshot().analysis?.basic.exposure).toBe(0);
+    expect(store.getSnapshot().displayAnalysis?.basic.exposure).toBe(1);
+    expect(store.getSnapshot().versions).toEqual([]);
+
+    expect(store.acceptPendingPreview()).toEqual(exchange);
+    expect(store.getSnapshot().analysis?.basic.exposure).toBe(1);
+    expect(store.getSnapshot().pendingPreview).toBeNull();
+    expect(store.getSnapshot().versions).toHaveLength(1);
+  });
+
+  it("撤销候选、切图和恢复会话都不会恢复未确认预览", () => {
+    const store = createEditorStore();
+    store.openImage("C:/first.jpg", analysis(0));
+    store.beginPendingPreview(analysis(1), [], exchange, 1);
+    store.discardPendingPreview();
+    expect(store.getSnapshot().displayAnalysis?.basic.exposure).toBe(0);
+
+    store.beginPendingPreview(analysis(2), [], exchange, 2);
+    store.openImage("C:/second.jpg", analysis(0.5));
+    expect(store.getSnapshot().pendingPreview).toBeNull();
+
+    store.beginPendingPreview(analysis(3), [], exchange, 3);
+    store.restoreSession("C:/second.jpg", analysis(0.75));
+    expect(store.getSnapshot().displayAnalysis?.basic.exposure).toBe(0.75);
+  });
+
+  it("继续手调先以候选为正式基线，并交回待持久化消息", () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis(0));
+    store.beginPendingPreview(analysis(1), [], exchange, 1);
+
+    expect(store.beginManualFromPending()).toEqual(exchange);
+    store.updateFragment("basic", { ...store.getSnapshot().analysis!.basic, contrast: 12 }, "manual");
+
+    expect(store.getSnapshot().analysis?.basic.exposure).toBe(1);
+    expect(store.getSnapshot().analysis?.basic.contrast).toBe(12);
+  });
+
+  it("undo/redo 可逆，新提交清空 redo，旧响应和渲染错误不展示候选", () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis(0));
+    store.commitAnalysis(analysis(1), "manual");
+    expect(store.undo()).toBe(true);
+    expect(store.getSnapshot().analysis?.basic.exposure).toBe(0);
+    expect(store.redo()).toBe(true);
+    expect(store.getSnapshot().analysis?.basic.exposure).toBe(1);
+    store.undo();
+    expect(store.commitAnalysis(analysis(2), "manual")).toBe(true);
+    expect(store.redo()).toBe(false);
+
+    expect(store.beginPendingPreview(analysis(4), [], exchange, 4)).toBe(true);
+    expect(store.beginPendingPreview(analysis(3), [], exchange, 3)).toBe(false);
+    expect(store.getSnapshot().displayAnalysis?.basic.exposure).toBe(4);
+    store.discardPendingPreview();
+    store.setRenderState({ status: "error", error: "渲染失败" });
+    expect(store.beginPendingPreview(analysis(5), [], exchange, 5)).toBe(false);
+    expect(store.getSnapshot().pendingPreview).toBeNull();
+  });
+
+  it("AI 请求锁阻止编辑，切图会清锁并让旧请求失效", () => {
+    const store = createEditorStore();
+    store.openImage("C:/first.jpg", analysis(0));
+
+    expect(store.beginAiRequest(7)).toBe(true);
+    expect(store.getSnapshot().activeAiRequestId).toBe(7);
+    expect(store.commitAnalysis(analysis(3), "ai")).toBe(false);
+    store.setFactor(0.4);
+    store.updateFragment("basic", { ...store.getSnapshot().analysis!.basic, exposure: 2 }, "manual");
+    expect(store.undo()).toBe(false);
+    expect(store.getSnapshot().factor).toBe(1);
+    expect(store.getSnapshot().analysis?.basic.exposure).toBe(0);
+
+    store.openImage("C:/second.jpg", analysis(0));
+    expect(store.getSnapshot().activeAiRequestId).toBeNull();
+    expect(store.endAiRequest(7)).toBe(false);
   });
 });

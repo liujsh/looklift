@@ -32,6 +32,9 @@ type CanvasPaneProps = {
   onPreviewSettled?(): void;
   onAnalysisComplete?(analysis: Analysis): void;
   onRenderStateChange?(render: EditorState["render"]): void;
+  onPreviewRendered?(analysis: JsonObject): void;
+  onEffectPreview?(blob: Blob, signature: string): void;
+  analysisDisabled?: boolean;
 };
 
 export function CanvasPane({
@@ -42,14 +45,19 @@ export function CanvasPane({
   onPreviewSettled,
   onAnalysisComplete,
   onRenderStateChange,
+  onPreviewRendered,
+  onEffectPreview,
+  analysisDisabled = false,
 }: CanvasPaneProps) {
   const paneRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const urlsRef = useRef<PreviewUrls | null>(null);
   const requestRef = useRef(0);
   const schedulerRef = useRef<PreviewScheduler<LivePreviewRequest> | null>(null);
+  const previewCallbacksRef = useRef({ onPreviewSettled, onRenderStateChange, onPreviewRendered, onEffectPreview });
   const analysisControllerRef = useRef<AbortController | null>(null);
   const lastRenderedSignatureRef = useRef<string | null>(null);
+  const loadPathRef = useRef<(path: string) => Promise<void>>(async () => undefined);
   const [phase, setPhase] = useState<CanvasPhase>("idle");
   const [loadedPath, setLoadedPath] = useState<string | null>(null);
   const [urls, setUrls] = useState<PreviewUrls | null>(null);
@@ -57,6 +65,7 @@ export function CanvasPane({
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  previewCallbacksRef.current = { onPreviewSettled, onRenderStateChange, onPreviewRendered, onEffectPreview };
 
   const replaceUrls = useCallback((next: PreviewUrls | null) => {
     if (urlsRef.current) {
@@ -86,19 +95,21 @@ export function CanvasPane({
         factor: request.factor,
       }, signal),
       onDispatch: () => {
-        onPreviewSettled?.();
-        onRenderStateChange?.({ status: "rendering", error: null });
+        previewCallbacksRef.current.onPreviewSettled?.();
+        previewCallbacksRef.current.onRenderStateChange?.({ status: "rendering", error: null });
       },
       onResult: (blob, request) => {
         replaceAfter(blob);
         lastRenderedSignatureRef.current = request.signature;
         setError(null);
-        onRenderStateChange?.({ status: "ready", error: null });
+        previewCallbacksRef.current.onRenderStateChange?.({ status: "ready", error: null });
+        previewCallbacksRef.current.onPreviewRendered?.(request.analysis);
+        previewCallbacksRef.current.onEffectPreview?.(blob, request.signature);
       },
       onError: (reason) => {
         const message = canvasErrorMessage(reason);
         setError(message);
-        onRenderStateChange?.({ status: "error", error: message });
+        previewCallbacksRef.current.onRenderStateChange?.({ status: "error", error: message });
       },
     });
     schedulerRef.current = scheduler;
@@ -106,7 +117,7 @@ export function CanvasPane({
       scheduler.dispose();
       if (schedulerRef.current === scheduler) schedulerRef.current = null;
     };
-  }, [client, onPreviewSettled, onRenderStateChange, replaceAfter]);
+  }, [client, replaceAfter]);
 
   const loadPath = useCallback(async (path: string) => {
     if (!client) return;
@@ -133,7 +144,9 @@ export function CanvasPane({
       }
       replaceUrls(next);
       setLoadedPath(path);
-      lastRenderedSignatureRef.current = previewSignature(path, nextAnalysis, factor);
+      const signature = previewSignature(path, nextAnalysis, factor);
+      lastRenderedSignatureRef.current = signature;
+      previewCallbacksRef.current.onEffectPreview?.(pair.after, signature);
       setPhase("ready");
       onRenderStateChange?.({ status: "ready", error: null });
     } catch (reason) {
@@ -143,6 +156,7 @@ export function CanvasPane({
       onRenderStateChange?.({ status: "error", error: canvasErrorMessage(reason) });
     }
   }, [analysis, client, factor, onImagePathChange, onRenderStateChange, replaceUrls]);
+  loadPathRef.current = loadPath;
 
   const runAnalysis = async () => {
     if (!client || !loadedPath || analyzing) return;
@@ -196,7 +210,10 @@ export function CanvasPane({
     if (!element || !client) return;
     let cancelled = false;
     let unlisten: (() => void) | undefined;
-    void listenForTauriDrops(element, { onActive: setDragActive, onPath: loadPath })
+    void listenForTauriDrops(element, {
+      onActive: setDragActive,
+      onPath: (path) => { void loadPathRef.current(path); },
+    })
       .then((stop) => {
         if (cancelled) stop();
         else unlisten = stop;
@@ -208,7 +225,7 @@ export function CanvasPane({
       cancelled = true;
       unlisten?.();
     };
-  }, [client, loadPath]);
+  }, [client]);
 
   useEffect(() => () => {
     requestRef.current += 1;
@@ -248,7 +265,7 @@ export function CanvasPane({
       <div className="canvas-toolbar" aria-label="画布工具">
         <span>适合窗口</span>
         {phase === "ready" ? (
-          <button type="button" disabled={analyzing} onClick={() => void runAnalysis()}>
+          <button type="button" disabled={analyzing || analysisDisabled} onClick={() => void runAnalysis()}>
             {analyzing ? "AI 分析中…" : "AI 分析"}
           </button>
         ) : <span>100%</span>}

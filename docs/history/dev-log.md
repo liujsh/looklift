@@ -24,6 +24,45 @@
 - [x] **v2.0-B T11 集中人工验收（M1–M8）**：作者于 2026-07-18 使用最终安装包完成正式验收，M1–M8 全部通过；v2.0-B 与 2.0.0 收口完成。
   拖图→分析→调参→diff→收藏→导出、三栏视觉与手感、真实路径拖拽、连续预览、三份
   内置模板观感和 40MP 稳定性。逐项判据见 [v2.0-B/tasks.md](../versions/v2.0-B/tasks.md)。
+- [ ] **v2.1 AI Studio 人工验收**：实现与自动化收口已完成。请按
+  [v2.1/tasks.md](../versions/v2.1/tasks.md) 末尾清单，用真实供应商和照片验证单轮建议、
+  主曲线、保留/撤销/继续手调、最多两轮精修、重启恢复、元数据关闭与超范围操作说明。
+
+## v2.1 AI Studio 自动化收口（2026-07-18）
+
+- 新增安全代理图、白盒参数操作契约、无状态 `chat_step`、本地 SQLite 正式版本仓库与
+  五条会话/对话 API；候选计算和正式提交严格分离。
+- React 编辑 Store 增加 pending、undo/redo 和过期请求拒绝；普通消息单轮、显式精修
+  最多两轮，保存失败会保留候选供重试。
+- 左侧 AI Studio 默认启用且可折叠，展示供应商/代理图/元数据摘要、显影记录、能力限制、
+  近似方案和右侧手调步骤；视觉继续复用 v2.0-B 暗房 token。
+- 新增离线全链路测试，覆盖消息→候选→真实渲染→确认/撤销→重启恢复，以及超时、鉴权、
+  回滚、取消和渲染错误不污染正式版本。版本字段统一为 `2.1.0`。
+
+## v2.1 当前效果上下文与直方图（2026-07-18）
+
+- AI 不再把原片代理当作当前编辑效果：`preview.py` 统一 GUI 与 AI 的渲染入口，聊天请求把
+  `current_analysis`、factor 与同一快照渲染出的 2048px 无 EXIF JPEG 一并提交。
+- 编辑 Store 增加活动 AI request ID 锁。请求中右侧参数、模板、强度、重置和历史修改被阻止；
+  停止立即解锁，切图和供应商晚到响应不会生成候选。
+- 右侧新增当前 after 预览的 RGB 直方图、黑白场裁切提示和安全拍摄信息。直方图由独立 Worker
+  缩图计算，签名不匹配的旧结果被丢弃，计算失败不影响画布与调参。
+- 自动收口：Ruff 通过；Python `456 passed, 1 skipped`；前端 `100 passed`，production build
+  成功并产出独立 `histogramWorker` chunk。真实照片效果与交互仍保留给作者人工验收。
+
+## v2.1 人工验收预览回归修复（2026-07-18）
+
+- 人工验收发现模板、右侧手调和 AI 候选只更新参数、画布不更新；WebView Network 实证
+  `/api/preview` 排队 3.5 分钟，同时产生约 90 个 `plugin:event` listen/unlisten 请求。
+- 根因是 Canvas 原生拖图 effect 依赖随 analysis/factor 重建的 `loadPath`。改为每个
+  Canvas/client 只注册一次监听，通过 ref 调用最新回调，消除事件请求风暴。
+- 所有改变显示 analysis 的入口立即使旧预览失效；AI 候选只有在对应预览 ready 后才能保留、
+  继续手调或精修，渲染失败仍保留候选以便撤销或重试。
+- AI 精修从“一次点击自动连跑两轮”改为“一次点击一轮、累计最多两轮”，并在 workflow 层拦截
+  未渲染候选、并发重复点击和第三轮调用。
+- 自动验证：前端 `89 passed`、TypeScript 与 Vite production build 通过；Python
+  `452 passed, 1 skipped`、Ruff 与 Rust `cargo check` 通过。人工复验项目保留在
+  [v2.1/tasks.md](../versions/v2.1/tasks.md)，未提前勾选。
 
 ## v2.0-B T1 打包 gate 实证(2026-07-18)
 

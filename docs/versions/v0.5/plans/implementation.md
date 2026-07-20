@@ -76,10 +76,10 @@
 **Produces:** 配置示例、batch 用法、实现实况、版本 0.5.0。
 
 - [ ] README 写 OpenAI-compatible/Ollama 配置和 batch 目录约定；design 回填已实现架构。
-- [ ] 版本改为 0.5.0；运行 provider/batch/GUI focused tests与全量 pytest。
+- [ ] 版本改为 0.5.0；先运行 provider/batch/GUI 相关测试，全量套件留到本任务最后收口。
 - [ ] 成型代码自审：离线、中文错误、无密钥泄露、旧 provider 不回归、单文件职责。
 - [ ] 提交收尾；真实中转站/Ollama/batch 留给人工验收清单。
 
 ## 完成条件
 
-spec 与计划契约无矛盾即冻结；实现完成后全量测试通过，真实 OpenAI-compatible、Ollama 与照片目录各人工跑通一次。
+spec 与计划契约无矛盾即冻结；实现完成后仅在 Task 6 收口运行一次 `pytest -q`，真实 OpenAI-compatible、Ollama 与照片目录各人工跑通一次。
