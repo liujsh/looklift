@@ -93,6 +93,17 @@ describe("LookliftClient", () => {
     expect(new Uint8Array(await preview.arrayBuffer())).toEqual(jpeg);
   });
 
+  it("读取安全拍摄信息", async () => {
+    const queue = responseQueue([Response.json({ iso: 200, file_format: "JPEG" })]);
+    const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
+
+    await expect(client.imageInfo("C:/照片/a.jpg")).resolves.toEqual({
+      iso: 200,
+      file_format: "JPEG",
+    });
+    expect(queue.requests[0].url).toBe("http://127.0.0.1:9/api/image-info");
+  });
+
   it("浏览器上传使用 multipart 且不手写 Content-Type 边界", async () => {
     const queue = responseQueue([Response.json({ path: "C:/temp/photo.jpg" })]);
     const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
@@ -161,6 +172,7 @@ describe("LookliftClient", () => {
       {
         path: "C:/照片/a.jpg",
         current_analysis: analysis,
+        factor: 0.8,
         message: "提亮",
         history: [],
         include_metadata: true,

@@ -24,6 +24,7 @@ export type EditorState = Readonly<{
   analysis: Analysis | null;
   displayAnalysis: Analysis | null;
   pendingPreview: PendingPreview | null;
+  activeAiRequestId: number | null;
   factor: number;
   render: Readonly<{ status: RenderStatus; error: string | null }>;
   versions: readonly AnalysisVersion[];
@@ -34,7 +35,7 @@ export type EditorStore = {
   getSnapshot(): EditorState;
   subscribe(listener: () => void): () => void;
   openImage(imagePath: string, analysis: Analysis): void;
-  commitAnalysis(analysis: Analysis, source: ChangeSource): void;
+  commitAnalysis(analysis: Analysis, source: ChangeSource): boolean;
   updateFragment<K extends EditableSection>(section: K, value: Analysis[K], source: ChangeSource): void;
   previewFragment<K extends EditableSection>(section: K, value: Analysis[K]): void;
   finalizePreview(source: ChangeSource): boolean;
@@ -42,6 +43,8 @@ export type EditorStore = {
   setImagePath(path: string | null): void;
   setFactor(factor: number): void;
   setRenderState(render: EditorState["render"]): void;
+  beginAiRequest(requestId: number): boolean;
+  endAiRequest(requestId: number): boolean;
   beginPendingPreview(
     candidate: Analysis,
     changes: readonly ChatChange[],
@@ -62,6 +65,7 @@ const INITIAL_STATE: EditorState = Object.freeze({
   analysis: null,
   displayAnalysis: null,
   pendingPreview: null,
+  activeAiRequestId: null,
   factor: 1,
   render: Object.freeze({ status: "idle", error: null }),
   versions: Object.freeze([]),
@@ -98,6 +102,7 @@ export function createEditorStore(): EditorStore {
     : state.render;
 
   const commitAnalysis = (nextAnalysis: Analysis, source: ChangeSource) => {
+    if (state.activeAiRequestId !== null) return false;
     const next = immutableCopy(nextAnalysis);
     const previous = previewBase ?? state.analysis;
     const versions = previous
@@ -112,9 +117,11 @@ export function createEditorStore(): EditorStore {
       versions,
       redoVersions: Object.freeze([]),
     });
+    return true;
   };
 
   const promotePending = (): readonly ChatMessage[] | null => {
+    if (state.activeAiRequestId !== null) return null;
     const pending = state.pendingPreview;
     if (!pending) return null;
     const exchange = pending.exchange;
@@ -154,6 +161,7 @@ export function createEditorStore(): EditorStore {
       commitAnalysis({ ...state.analysis, [section]: value }, source);
     },
     previewFragment(section, value) {
+      if (state.activeAiRequestId !== null) return;
       if (!state.analysis) throw new Error("尚未载入 analysis，不能预览参数分片");
       previewBase ??= state.analysis;
       publish({
@@ -163,6 +171,7 @@ export function createEditorStore(): EditorStore {
       });
     },
     finalizePreview(source) {
+      if (state.activeAiRequestId !== null) return false;
       if (!previewBase || !state.analysis) return false;
       const previous = previewBase;
       previewBase = null;
@@ -176,6 +185,7 @@ export function createEditorStore(): EditorStore {
       return true;
     },
     applyDelta(transform, source) {
+      if (state.activeAiRequestId !== null) return;
       if (!state.analysis) throw new Error("尚未载入 analysis，不能应用参数 delta");
       commitAnalysis(transform(state.analysis), source);
     },
@@ -188,12 +198,14 @@ export function createEditorStore(): EditorStore {
         ...state,
         imagePath,
         pendingPreview: null,
+        activeAiRequestId: null,
         render: imagePath
           ? Object.freeze({ status: "rendering", error: null })
           : Object.freeze({ status: "idle", error: null }),
       });
     },
     setFactor(factor) {
+      if (state.activeAiRequestId !== null) return;
       if (!Number.isFinite(factor)) throw new TypeError("factor 必须是有限数值");
       const nextFactor = Math.min(1, Math.max(0, factor));
       if (nextFactor === state.factor) return;
@@ -204,6 +216,16 @@ export function createEditorStore(): EditorStore {
         ...state,
         render: Object.freeze({ ...render }),
       });
+      return true;
+    },
+    beginAiRequest(requestId) {
+      if (!Number.isInteger(requestId) || requestId < 1 || state.activeAiRequestId !== null) return false;
+      publish({ ...state, activeAiRequestId: requestId });
+      return true;
+    },
+    endAiRequest(requestId) {
+      if (state.activeAiRequestId !== requestId) return false;
+      publish({ ...state, activeAiRequestId: null });
       return true;
     },
     beginPendingPreview(candidate, changes, exchange, requestId, createdAt = new Date().toISOString()) {
@@ -225,12 +247,14 @@ export function createEditorStore(): EditorStore {
     },
     acceptPendingPreview: promotePending,
     discardPendingPreview() {
+      if (state.activeAiRequestId !== null) return;
       if (state.pendingPreview) {
         publish({ ...state, pendingPreview: null, render: invalidatedRender() });
       }
     },
     beginManualFromPending: promotePending,
     undo() {
+      if (state.activeAiRequestId !== null) return false;
       if (state.pendingPreview) {
         publish({ ...state, pendingPreview: null, render: invalidatedRender() });
         return true;
@@ -251,6 +275,7 @@ export function createEditorStore(): EditorStore {
       return true;
     },
     redo() {
+      if (state.activeAiRequestId !== null) return false;
       const next = state.redoVersions[state.redoVersions.length - 1];
       if (!next || !state.analysis) return false;
       previewBase = null;

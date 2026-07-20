@@ -81,6 +81,17 @@ export type PreviewRequest = {
   factor: number;
 };
 
+export type ImageInfo = Partial<{
+  iso: number;
+  shutter_seconds: number;
+  aperture: number;
+  focal_length_mm: number;
+  exposure_compensation_ev: number;
+  white_balance: string;
+  color_space: string;
+  file_format: string;
+}>;
+
 export type ProviderConfig = {
   configured: boolean;
   provider: string;
@@ -106,6 +117,7 @@ export type ChatChange = {
 export type ChatStepRequest = {
   path: string;
   current_analysis: Analysis;
+  factor: number;
   message: string;
   history: ChatMessage[];
   include_metadata: boolean;

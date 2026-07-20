@@ -4,6 +4,8 @@ import json
 import http.client
 import threading
 
+from PIL import Image
+
 from looklift import chat
 from looklift.gui import api
 from looklift.gui import server as gui_server
@@ -13,6 +15,25 @@ def _call(payload):
     return api.ROUTES[("POST", "/api/chat/step")](
         {"params": {}, "body": json.dumps(payload).encode(), "query": {}}
     )
+
+
+def _image_info_call(payload):
+    return api.ROUTES[("POST", "/api/image-info")](
+        {"params": {}, "body": json.dumps(payload).encode(), "query": {}}
+    )
+
+
+def test_image_info_returns_only_safe_baseline_fields(tmp_path):
+    photo = tmp_path / "private-name.jpg"
+    exif = Image.Exif()
+    exif[34855] = 200
+    exif[42033] = "SECRET-SERIAL"
+    Image.new("RGB", (40, 30)).save(photo, "JPEG", exif=exif)
+
+    status, body = _image_info_call({"path": str(photo)})
+
+    assert status == 200
+    assert body == {"iso": 200, "file_format": "JPEG"}
 
 
 def test_chat_step_returns_candidate_without_persistence(monkeypatch, tmp_path, sample_analysis):
@@ -41,6 +62,7 @@ def test_chat_step_returns_candidate_without_persistence(monkeypatch, tmp_path, 
         {
             "path": str(photo),
             "current_analysis": sample_analysis,
+            "factor": 0.75,
             "message": "提亮一点",
             "history": [{"role": "assistant", "content": "可以"}],
             "include_metadata": True,
@@ -48,6 +70,7 @@ def test_chat_step_returns_candidate_without_persistence(monkeypatch, tmp_path, 
     )
 
     assert status == 200
+    assert captured["factor"] == 0.75
     assert body["analysis"] == sample_analysis
     assert body["changes"][0]["path"] == "basic.exposure"
     assert captured["image_path"] == photo
@@ -60,6 +83,7 @@ def test_chat_step_validates_request(tmp_path, sample_analysis):
     base = {
         "path": str(photo),
         "current_analysis": sample_analysis,
+        "factor": 1.0,
         "message": "调整",
         "history": [],
         "include_metadata": False,
@@ -71,6 +95,7 @@ def test_chat_step_validates_request(tmp_path, sample_analysis):
         ({**base, "history": {}}, "history"),
         ({**base, "history": [{"role": "tool", "content": "x"}]}, "history"),
         ({**base, "include_metadata": 1}, "include_metadata"),
+        ({key: value for key, value in base.items() if key != "factor"}, "factor"),
     ]
     for payload, expected in invalid:
         status, body = _call(payload)
@@ -90,6 +115,7 @@ def test_chat_step_maps_stable_error(monkeypatch, tmp_path, sample_analysis):
         {
             "path": str(photo),
             "current_analysis": sample_analysis,
+            "factor": 1.0,
             "message": "调整",
             "history": [],
             "include_metadata": False,
@@ -115,7 +141,8 @@ def test_chat_route_requires_token_and_allows_trusted_cors(monkeypatch, tmp_path
     payload = json.dumps(
         {
             "path": str(photo),
-            "current_analysis": sample_analysis,
+                "current_analysis": sample_analysis,
+                "factor": 1.0,
             "message": "调整",
             "history": [],
             "include_metadata": False,

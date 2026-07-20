@@ -33,6 +33,7 @@ type CanvasPaneProps = {
   onAnalysisComplete?(analysis: Analysis): void;
   onRenderStateChange?(render: EditorState["render"]): void;
   onPreviewRendered?(analysis: JsonObject): void;
+  onEffectPreview?(blob: Blob, signature: string): void;
   analysisDisabled?: boolean;
 };
 
@@ -45,6 +46,7 @@ export function CanvasPane({
   onAnalysisComplete,
   onRenderStateChange,
   onPreviewRendered,
+  onEffectPreview,
   analysisDisabled = false,
 }: CanvasPaneProps) {
   const paneRef = useRef<HTMLElement>(null);
@@ -52,7 +54,7 @@ export function CanvasPane({
   const urlsRef = useRef<PreviewUrls | null>(null);
   const requestRef = useRef(0);
   const schedulerRef = useRef<PreviewScheduler<LivePreviewRequest> | null>(null);
-  const previewCallbacksRef = useRef({ onPreviewSettled, onRenderStateChange, onPreviewRendered });
+  const previewCallbacksRef = useRef({ onPreviewSettled, onRenderStateChange, onPreviewRendered, onEffectPreview });
   const analysisControllerRef = useRef<AbortController | null>(null);
   const lastRenderedSignatureRef = useRef<string | null>(null);
   const loadPathRef = useRef<(path: string) => Promise<void>>(async () => undefined);
@@ -63,7 +65,7 @@ export function CanvasPane({
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  previewCallbacksRef.current = { onPreviewSettled, onRenderStateChange, onPreviewRendered };
+  previewCallbacksRef.current = { onPreviewSettled, onRenderStateChange, onPreviewRendered, onEffectPreview };
 
   const replaceUrls = useCallback((next: PreviewUrls | null) => {
     if (urlsRef.current) {
@@ -102,6 +104,7 @@ export function CanvasPane({
         setError(null);
         previewCallbacksRef.current.onRenderStateChange?.({ status: "ready", error: null });
         previewCallbacksRef.current.onPreviewRendered?.(request.analysis);
+        previewCallbacksRef.current.onEffectPreview?.(blob, request.signature);
       },
       onError: (reason) => {
         const message = canvasErrorMessage(reason);
@@ -141,7 +144,9 @@ export function CanvasPane({
       }
       replaceUrls(next);
       setLoadedPath(path);
-      lastRenderedSignatureRef.current = previewSignature(path, nextAnalysis, factor);
+      const signature = previewSignature(path, nextAnalysis, factor);
+      lastRenderedSignatureRef.current = signature;
+      previewCallbacksRef.current.onEffectPreview?.(pair.after, signature);
       setPhase("ready");
       onRenderStateChange?.({ status: "ready", error: null });
     } catch (reason) {

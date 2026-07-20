@@ -120,7 +120,7 @@
 .panel-group > button { display: flex; width: 100%; justify-content: space-between; padding: 13px 2px; border: 0; color: var(--color-ink-soft); background: transparent; text-align: left; cursor: pointer; font-size: var(--text-ui); font-weight: 650; }
 .panel-group > button:hover { color: var(--color-accent); }
 .panel-group > button span:last-child { color: var(--color-muted); font: 400 var(--text-body)/1 var(--font-data); }
-.group-content { display: grid; gap: 10px; padding: 1px 2px var(--space-4); color: var(--color-faint); font-size: var(--text-caption); }
+.group-content { display: grid; min-width: 0; margin: 0; border: 0; gap: 10px; padding: 1px 2px var(--space-4); color: var(--color-faint); font-size: var(--text-caption); }
 .panel-note { margin-top: var(--space-4); color: var(--color-faint); font-size: var(--text-caption); text-align: center; }
 
 .slider-control { display: grid; gap: 4px; }

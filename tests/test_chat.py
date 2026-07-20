@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from looklift.chat import ChatCancelled, ChatStepError, chat_step
+from looklift.chat import ChatCancelled, ChatStepError, _system_prompt, chat_step
 
 
 class CaptureProvider:
@@ -20,6 +20,7 @@ class CaptureProvider:
         self.blocks: list[dict] = []
         self.schema: dict = {}
         self.image_existed_during_call = False
+        self.image_mean_during_call = 0.0
 
     def complete(self, system: str, blocks: list[dict], schema: dict) -> dict:
         self.system = system
@@ -27,6 +28,8 @@ class CaptureProvider:
         self.schema = deepcopy(schema)
         image = next(block for block in blocks if block["type"] == "image")
         self.image_existed_during_call = Path(image["path"]).is_file()
+        with Image.open(image["path"]) as opened:
+            self.image_mean_during_call = sum(opened.resize((1, 1)).getpixel((0, 0))) / 3
         if self.error:
             raise self.error
         return deepcopy(self.response)
@@ -51,6 +54,15 @@ def _response(*, operations: list[dict] | None = None) -> dict:
         "manual_steps": [],
         "done": False,
     }
+
+
+def test_system_prompt_treats_current_render_as_truth_and_requires_supported_operations():
+    prompt = _system_prompt()
+
+    assert "当前渲染画面" in prompt
+    assert "明确要求保留" in prompt
+    assert "必须在本次响应中返回 operation" in prompt
+    assert "不得仅凭参数绝对值" in prompt
 
 
 def test_chat_step_sends_proxy_context_and_returns_normalized_result(tmp_path, sample_analysis):
@@ -86,6 +98,27 @@ def test_chat_step_sends_proxy_context_and_returns_normalized_result(tmp_path, s
     assert "帮我提亮一点" in combined_text
     assert "basic.exposure" in provider.system
     assert "局部" in provider.system
+
+
+def test_chat_step_proxy_and_text_use_current_analysis_factor_snapshot(tmp_path, sample_analysis):
+    provider = CaptureProvider(_response())
+    current = deepcopy(sample_analysis)
+    current["basic"]["exposure"] = 2.0
+
+    chat_step(
+        image_path=_photo(tmp_path),
+        current_analysis=current,
+        factor=1.0,
+        message="检查当前效果",
+        history=[],
+        include_metadata=False,
+        provider=provider,
+    )
+
+    text = "\n".join(block["text"] for block in provider.blocks if block["type"] == "text")
+    assert '"factor": 1.0' in text
+    assert '"exposure": 2.0' in text
+    assert provider.image_mean_during_call > 150
 
 
 def test_chat_step_keeps_only_recent_history(tmp_path, sample_analysis):

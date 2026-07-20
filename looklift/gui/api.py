@@ -13,7 +13,6 @@ handler 收到的不再只是段参数，而是一个请求上下文 dict：
 """
 from __future__ import annotations
 
-import io
 import json
 import os
 import re
@@ -22,9 +21,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable
 
-from PIL import Image
-
-from .. import analyzer, chat, config, intensity, render, report, xmp_writer
+from .. import ai_proxy, analyzer, chat, config, intensity, report, xmp_writer
 from ..render import contract as render_contract
 from ..session_store import DatabaseRecoveryRequired, SessionSnapshot, SessionStore
 from . import lookstore
@@ -503,19 +500,15 @@ def _render_preview(image_path: Path, analysis: dict, factor: float) -> bytes:
     而不是散在 handler 里——这是这个路由唯一的"业务逻辑"，`_preview` 只做
     HTTP 参数校验和分发，图像管线细节集中在这一处，符合分层规范。
     """
-    with Image.open(image_path) as opened:
-        img = opened.convert("RGB")
-    img.thumbnail((_PREVIEW_MAX_EDGE, _PREVIEW_MAX_EDGE), Image.LANCZOS)
-    scaled = intensity.scale_analysis(analysis, factor)
-    rendered = render.render(img, scaled)
-    buf = io.BytesIO()
-    rendered.save(
-        buf,
-        format="JPEG",
+    from ..preview import render_preview_jpeg
+
+    return render_preview_jpeg(
+        image_path,
+        analysis,
+        factor,
+        max_edge=_PREVIEW_MAX_EDGE,
         quality=_PREVIEW_JPEG_QUALITY,
-        icc_profile=rendered.info["icc_profile"],
     )
-    return buf.getvalue()
 
 
 def _preview(ctx: dict) -> "tuple[int, dict] | tuple[int, bytes, str]":
@@ -607,10 +600,16 @@ def _chat_step(ctx: dict) -> tuple[int, dict]:
     include_metadata = payload.get("include_metadata", False)
     if not isinstance(include_metadata, bool):
         return 400, {"error": "include_metadata 必须是布尔值"}
+    if "factor" not in payload:
+        return 400, {"error": "缺少 factor 字段"}
+    factor, factor_error = _validate_factor(payload["factor"])
+    if factor_error is not None:
+        return factor_error
     try:
         result = chat.chat_step(
             image_path=image_path,
             current_analysis=analysis,
+            factor=factor,
             message=message.strip(),
             history=history,
             include_metadata=include_metadata,
@@ -619,6 +618,19 @@ def _chat_step(ctx: dict) -> tuple[int, dict]:
         status = {"timeout": 504, "cancelled": 499, "image_error": 400}.get(exc.code, 502)
         return status, {"error": str(exc), "code": exc.code}
     return 200, asdict(result)
+
+
+def _image_info(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    image_path, err = _validate_image_path(payload.get("path"))
+    if err is not None:
+        return err
+    try:
+        return 200, ai_proxy.read_safe_image_info(image_path)
+    except OSError:
+        return 400, {"error": "无法读取拍摄信息"}
 
 
 def _snapshot_payload(snapshot: SessionSnapshot) -> dict:
@@ -710,6 +722,7 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("POST", "/api/analyze"): _analyze,
     ("POST", "/api/preview"): _preview,
     ("POST", "/api/chat/step"): _chat_step,
+    ("POST", "/api/image-info"): _image_info,
     ("POST", "/api/sessions"): _create_session,
     ("GET", "/api/sessions/<id>"): _get_session,
     ("POST", "/api/sessions/<id>/commit"): _commit_session,

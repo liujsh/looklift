@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from looklift.ai_proxy import prepare_ai_proxy
+from looklift.ai_proxy import prepare_ai_proxy, read_safe_image_info
 from looklift.providers import MAX_EDGE, _encode_image
 
 
@@ -71,6 +71,19 @@ def test_proxy_returns_only_safe_structured_metadata(tmp_path):
         assert "FREE TEXT" not in serialized
 
 
+def test_safe_image_info_adds_format_without_exposing_identity_fields(tmp_path):
+    source = tmp_path / "private-name.jpg"
+    _jpeg_with_exif(source, (640, 480))
+
+    info = read_safe_image_info(source)
+
+    assert info["file_format"] == "JPEG"
+    assert info["iso"] == 400
+    serialized = repr(info)
+    assert "private-name" not in serialized
+    assert "SERIAL" not in serialized
+
+
 def test_metadata_switch_returns_empty_object(tmp_path):
     source = tmp_path / "source.jpg"
     _jpeg_with_exif(source, (640, 480))
@@ -90,3 +103,30 @@ def test_provider_reencode_keeps_proxy_bounded_and_does_not_restore_exif(tmp_pat
     with Image.open(io.BytesIO(base64.b64decode(encoded))) as image:
         assert max(image.size) <= MAX_EDGE
         assert len(image.getexif()) == 0
+
+
+def test_proxy_pixels_reflect_current_analysis_and_factor(tmp_path, sample_analysis):
+    source = tmp_path / "source.jpg"
+    Image.new("RGB", (640, 480), (70, 70, 70)).save(source, "JPEG", quality=95)
+    current = dict(sample_analysis)
+    current["basic"] = {**sample_analysis["basic"], "exposure": 2.0}
+
+    with prepare_ai_proxy(
+        source,
+        analysis=current,
+        factor=1.0,
+        include_metadata=False,
+    ) as proxy:
+        with Image.open(proxy.path) as rendered:
+            rendered_mean = sum(rendered.resize((1, 1)).getpixel((0, 0))) / 3
+
+    with prepare_ai_proxy(
+        source,
+        analysis=current,
+        factor=0.0,
+        include_metadata=False,
+    ) as proxy:
+        with Image.open(proxy.path) as neutral:
+            neutral_mean = sum(neutral.resize((1, 1)).getpixel((0, 0))) / 3
+
+    assert rendered_mean > neutral_mean + 25

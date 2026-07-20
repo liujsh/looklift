@@ -46,6 +46,7 @@ def chat_step(
     *,
     image_path: Path,
     current_analysis: dict,
+    factor: float = 1.0,
     message: str,
     history: list[dict],
     include_metadata: bool,
@@ -60,11 +61,17 @@ def chat_step(
             raise _map_provider_error(exc) from None
 
     try:
-        with prepare_ai_proxy(Path(image_path), include_metadata=include_metadata) as proxy:
+        with prepare_ai_proxy(
+            Path(image_path),
+            analysis=current_analysis,
+            factor=factor,
+            include_metadata=include_metadata,
+        ) as proxy:
             blocks = _request_blocks(
                 proxy_path=proxy.path,
                 metadata=proxy.metadata,
                 current_analysis=current_analysis,
+                factor=factor,
                 message=message,
                 history=history,
             )
@@ -105,12 +112,14 @@ def _request_blocks(
     proxy_path: Path,
     metadata: dict,
     current_analysis: dict,
+    factor: float,
     message: str,
     history: list[dict],
 ) -> list[dict]:
     recent_history = history[-_MAX_HISTORY_MESSAGES:] if isinstance(history, list) else []
     context = {
         "current_analysis": current_analysis,
+        "factor": factor,
         "recent_history": recent_history,
         "user_message": message,
     }
@@ -138,6 +147,12 @@ def _system_prompt() -> str:
         "或一次性替换 tone_curve 主明度曲线。不得生成像素、局部蒙版、RGB 分通道曲线，"
         "也不得把不支持的局部请求偷换成无关的全局调整。超出能力时必须说明限制、"
         "可达到的近似方案和右侧面板手动步骤。所有解释使用中文。\n"
+        "当前渲染画面是本轮效果事实，current_analysis 只是形成该画面的可编辑参数。"
+        "不要因为参数来自用户手调或已经非零就默认保护它；只有用户明确要求保留某项效果时，"
+        "才不得修改对应参数。对于当前引擎支持、且根据用户目标与当前画面判断需要调整的全局参数，"
+        "必须在本次响应中返回 operation，不得只说之后可由用户手动微调。"
+        "不得仅凭参数绝对值判断画面有问题，必须结合当前渲染画面和用户目标；"
+        "没有 operation 时，只能是当前效果已经满足目标，或所需能力确实不受支持。\n"
         "标量参数契约：\n"
         + json.dumps(scalar_contract, ensure_ascii=False, separators=(",", ":"))
     )

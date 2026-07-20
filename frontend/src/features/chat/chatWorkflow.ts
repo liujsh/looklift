@@ -42,6 +42,7 @@ export function createChatWorkflow(
 ): ChatWorkflow {
   let state = INITIAL;
   let controller: AbortController | null = null;
+  let activeLockId: number | null = null;
   let requestId = store.getSnapshot().pendingPreview?.requestId ?? 0;
   let includeMetadata = true;
   const listeners = new Set<() => void>();
@@ -54,6 +55,9 @@ export function createChatWorkflow(
   const runStep = async (message: string, round: number): Promise<ChatStepResponse | null> => {
     const editor = store.getSnapshot();
     if (!editor.imagePath || !editor.displayAnalysis) throw new Error("请先导入照片再开始 AI 对话");
+    const activeRequestId = ++requestId;
+    if (!store.beginAiRequest(activeRequestId)) throw new Error("AI 正在处理，请稍候");
+    activeLockId = activeRequestId;
     controller?.abort();
     const active = new AbortController();
     controller = active;
@@ -64,11 +68,13 @@ export function createChatWorkflow(
       response = await client.chatStep({
         path: editor.imagePath,
         current_analysis: editor.displayAnalysis,
+        factor: editor.factor,
         message,
         history: [...state.messages],
         include_metadata: includeMetadata,
       }, active.signal);
     } catch (reason) {
+      store.endAiRequest(activeRequestId);
       if (active.signal.aborted || (reason instanceof DOMException && reason.name === "AbortError")) {
         const exchange: ChatMessage[] = [
           user, { role: "assistant", content: "已停止等待；供应商端已发出的请求可能仍会完成，正式版本未改变。", status: "cancelled" },
@@ -91,10 +97,20 @@ export function createChatWorkflow(
       try { await hooks.onMessagesOnly?.(exchange); } catch { /* 保留原始服务错误。 */ }
       throw reason;
     } finally {
-      if (controller === active) controller = null;
+      if (controller === active) {
+        controller = null;
+        if (activeLockId === activeRequestId) activeLockId = null;
+      }
     }
 
-    if (active.signal.aborted) return null;
+    if (active.signal.aborted) {
+      store.endAiRequest(activeRequestId);
+      return null;
+    }
+    const stillCurrent = store.getSnapshot().activeAiRequestId === activeRequestId
+      && store.getSnapshot().imagePath === editor.imagePath;
+    store.endAiRequest(activeRequestId);
+    if (!stillCurrent) return null;
     const assistant: ChatMessage = {
       role: "assistant", content: response.explanation, provider: response.provider, status: "done",
     };
@@ -104,7 +120,7 @@ export function createChatWorkflow(
     if (response.changes.length > 0) {
       const prior = existingPending?.exchange ?? [];
       const accepted = store.beginPendingPreview(
-        response.analysis, response.changes, [...prior, ...exchange], ++requestId,
+        response.analysis, response.changes, [...prior, ...exchange], activeRequestId,
       );
       if (!accepted) {
         const reason = new Error("候选预览无法安全显示，请先解决渲染错误后重试");
@@ -118,7 +134,7 @@ export function createChatWorkflow(
         existingPending.candidate,
         existingPending.changes,
         [...existingPending.exchange, ...exchange],
-        ++requestId,
+        activeRequestId,
       );
       if (!accepted) throw new Error("候选预览状态已过期，请重试");
     }
@@ -158,7 +174,9 @@ export function createChatWorkflow(
       if (nextRound >= 2) publish({ phase: "pending", stopReason: "round_limit", round: 2 });
     },
     cancel() {
-      controller?.abort();
+      if (!controller) return;
+      controller.abort();
+      if (activeLockId !== null) store.endAiRequest(activeLockId);
     },
     setIncludeMetadata(include) {
       includeMetadata = include;

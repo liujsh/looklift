@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import math
 import tempfile
+from io import BytesIO
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
 
 from PIL import Image, ImageOps
+
+from .preview import render_preview_jpeg
 
 MAX_AI_PROXY_EDGE = 2048
 _JPEG_QUALITY = 90
@@ -32,14 +35,42 @@ class AiProxy:
     metadata: dict[str, str | int | float]
 
 
+def read_safe_image_info(source: Path) -> dict[str, str | int | float]:
+    """Read only the local baseline fields approved for display/provider context."""
+    with Image.open(Path(source)) as opened:
+        metadata = _safe_metadata(opened.getexif())
+        if opened.format:
+            metadata["file_format"] = opened.format
+    return metadata
+
+
 @contextmanager
-def prepare_ai_proxy(source: Path, *, include_metadata: bool) -> Iterator[AiProxy]:
-    """把源图重编码为最长边 2048px 的 RGB JPEG，退出时删除临时文件。"""
+def prepare_ai_proxy(
+    source: Path,
+    *,
+    analysis: dict | None = None,
+    factor: float = 1.0,
+    include_metadata: bool,
+) -> Iterator[AiProxy]:
+    """把当前效果重编码为最长边 2048px 的 RGB JPEG，退出时删除临时文件。"""
     source = Path(source)
     with Image.open(source) as opened:
         metadata = _safe_metadata(opened.getexif()) if include_metadata else {}
-        image = ImageOps.exif_transpose(opened).convert("RGB")
-    image.thumbnail((MAX_AI_PROXY_EDGE, MAX_AI_PROXY_EDGE), Image.Resampling.LANCZOS)
+        image = ImageOps.exif_transpose(opened).convert("RGB") if analysis is None else None
+
+    if analysis is None:
+        assert image is not None
+        image.thumbnail((MAX_AI_PROXY_EDGE, MAX_AI_PROXY_EDGE), Image.Resampling.LANCZOS)
+    else:
+        jpeg = render_preview_jpeg(
+            source,
+            analysis,
+            factor,
+            max_edge=MAX_AI_PROXY_EDGE,
+            quality=_JPEG_QUALITY,
+            include_icc=False,
+        )
+        image = Image.open(BytesIO(jpeg)).convert("RGB")
 
     with tempfile.TemporaryDirectory(prefix="looklift-ai-") as directory:
         proxy_path = Path(directory) / "proxy.jpg"

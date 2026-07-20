@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Analysis, ChatStepResponse } from "../../api/types";
+import type { Analysis, ChatStepRequest, ChatStepResponse } from "../../api/types";
 import { createEditorStore } from "../../store/editorStore";
 import { createChatWorkflow } from "./chatWorkflow";
 
@@ -30,9 +30,51 @@ describe("chatWorkflow", () => {
     await workflow.send("提亮");
 
     expect(chatStep).toHaveBeenCalledTimes(1);
+    expect(chatStep.mock.calls[0][0].factor).toBe(1);
     expect(store.getSnapshot().analysis?.basic.exposure).toBe(0);
     expect(store.getSnapshot().displayAnalysis?.basic.exposure).toBe(1);
     expect(store.getSnapshot().versions).toEqual([]);
+  });
+
+  it("请求期间锁定编辑并丢弃切图后的晚到响应", async () => {
+    const store = createEditorStore();
+    store.openImage("C:/first.jpg", analysis());
+    store.setFactor(0.65);
+    let finish!: (value: ChatStepResponse) => void;
+    const chatStep = vi.fn((_request: ChatStepRequest) => new Promise<ChatStepResponse>((resolve) => { finish = resolve; }));
+    const workflow = createChatWorkflow({ chatStep }, store);
+
+    const running = workflow.send("调整当前效果");
+    await Promise.resolve();
+    expect(store.getSnapshot().activeAiRequestId).not.toBeNull();
+    expect(chatStep.mock.calls[0][0].factor).toBe(0.65);
+    store.setFactor(0.2);
+    expect(store.getSnapshot().factor).toBe(0.65);
+
+    store.openImage("C:/second.jpg", analysis());
+    finish(response(2));
+    await running;
+    expect(store.getSnapshot().imagePath).toBe("C:/second.jpg");
+    expect(store.getSnapshot().pendingPreview).toBeNull();
+    expect(store.getSnapshot().activeAiRequestId).toBeNull();
+  });
+
+  it("供应商忽略 AbortSignal 并晚到时仍释放请求锁", async () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis());
+    let finish!: (value: ChatStepResponse) => void;
+    const workflow = createChatWorkflow({
+      chatStep: () => new Promise<ChatStepResponse>((resolve) => { finish = resolve; }),
+    }, store);
+
+    const running = workflow.send("调整");
+    workflow.cancel();
+    expect(store.getSnapshot().activeAiRequestId).toBeNull();
+    finish(response(1));
+    await running;
+
+    expect(store.getSnapshot().activeAiRequestId).toBeNull();
+    expect(store.getSnapshot().pendingPreview).toBeNull();
   });
 
   it("每次点击只精修一轮，累计两轮且每轮使用最新 candidate", async () => {

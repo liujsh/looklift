@@ -223,7 +223,7 @@ describe("editorStore", () => {
     expect(store.redo()).toBe(true);
     expect(store.getSnapshot().analysis?.basic.exposure).toBe(1);
     store.undo();
-    store.commitAnalysis(analysis(2), "manual");
+    expect(store.commitAnalysis(analysis(2), "manual")).toBe(true);
     expect(store.redo()).toBe(false);
 
     expect(store.beginPendingPreview(analysis(4), [], exchange, 4)).toBe(true);
@@ -233,5 +233,23 @@ describe("editorStore", () => {
     store.setRenderState({ status: "error", error: "渲染失败" });
     expect(store.beginPendingPreview(analysis(5), [], exchange, 5)).toBe(false);
     expect(store.getSnapshot().pendingPreview).toBeNull();
+  });
+
+  it("AI 请求锁阻止编辑，切图会清锁并让旧请求失效", () => {
+    const store = createEditorStore();
+    store.openImage("C:/first.jpg", analysis(0));
+
+    expect(store.beginAiRequest(7)).toBe(true);
+    expect(store.getSnapshot().activeAiRequestId).toBe(7);
+    expect(store.commitAnalysis(analysis(3), "ai")).toBe(false);
+    store.setFactor(0.4);
+    store.updateFragment("basic", { ...store.getSnapshot().analysis!.basic, exposure: 2 }, "manual");
+    expect(store.undo()).toBe(false);
+    expect(store.getSnapshot().factor).toBe(1);
+    expect(store.getSnapshot().analysis?.basic.exposure).toBe(0);
+
+    store.openImage("C:/second.jpg", analysis(0));
+    expect(store.getSnapshot().activeAiRequestId).toBeNull();
+    expect(store.endAiRequest(7)).toBe(false);
   });
 });

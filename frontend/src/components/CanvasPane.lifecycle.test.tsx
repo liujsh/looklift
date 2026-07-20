@@ -67,9 +67,10 @@ describe("CanvasPane lifecycle", () => {
       preview,
       upload: vi.fn(),
     } as unknown as LookliftClient;
+    const effectPreview = vi.fn();
 
     await act(async () => {
-      root.render(<CanvasPane client={client} analysis={analysis(0)} factor={1} />);
+      root.render(<CanvasPane client={client} analysis={analysis(0)} factor={1} onEffectPreview={effectPreview} />);
       await Promise.resolve();
     });
     expect(drop.callbacks).not.toBeNull();
@@ -80,11 +81,12 @@ describe("CanvasPane lifecycle", () => {
     });
     expect(container.querySelector(".canvas-pane")?.getAttribute("data-phase")).toBe("ready");
     expect(preview).toHaveBeenCalledTimes(2);
+    expect(effectPreview).toHaveBeenCalledWith(expect.any(Blob), expect.stringContaining("C:/photo.jpg"));
 
     await act(async () => {
-      root.render(<CanvasPane client={client} analysis={analysis(0.5)} factor={0.9} />);
-      root.render(<CanvasPane client={client} analysis={analysis(1)} factor={0.8} />);
-      root.render(<CanvasPane client={client} analysis={analysis(2)} factor={0.7} />);
+      root.render(<CanvasPane client={client} analysis={analysis(0.5)} factor={0.9} onEffectPreview={effectPreview} />);
+      root.render(<CanvasPane client={client} analysis={analysis(1)} factor={0.8} onEffectPreview={effectPreview} />);
+      root.render(<CanvasPane client={client} analysis={analysis(2)} factor={0.7} onEffectPreview={effectPreview} />);
       await Promise.resolve();
     });
     await act(async () => {
@@ -97,6 +99,7 @@ describe("CanvasPane lifecycle", () => {
       { path: "C:/photo.jpg", analysis: analysis(2), factor: 0.7 },
       expect.any(AbortSignal),
     );
+    expect(effectPreview).toHaveBeenLastCalledWith(expect.any(Blob), expect.stringContaining("0.7"));
   });
 
   it("父层回调身份变化不会取消已经发出的实时预览", async () => {

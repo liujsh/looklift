@@ -44,10 +44,12 @@ export function GalleryPane({ client, initialLooks, onActiveLookChange, onFormal
     setLoadingName(look.name);
     setError(null);
     try {
+      let applied = false;
       const analysis = await loadLookIntoEditor(client, look.name, (analysis, factor) => {
         editorStore.setFactor(factor);
-        editorStore.commitAnalysis(analysis, "library");
+        applied = editorStore.commitAnalysis(analysis, "library");
       });
+      if (!applied) return;
       await onFormalAnalysis?.(analysis, "library");
       onActiveLookChange?.(look.name);
       setActionStatus(`已载入：${look.name}`);
@@ -123,7 +125,7 @@ export function GalleryPane({ client, initialLooks, onActiveLookChange, onFormal
             <button
               className="look-load"
               type="button"
-              disabled={!client || loadingName !== null || editor.pendingPreview !== null}
+              disabled={!client || loadingName !== null || editor.pendingPreview !== null || editor.activeAiRequestId !== null}
               onClick={() => void load(look)}
             >
               <span aria-hidden="true" />

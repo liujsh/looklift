@@ -1,16 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { CanvasPane } from "../components/CanvasPane";
 import { ChatPane } from "../components/ChatPane";
 import { GalleryPane } from "../components/GalleryPane";
 import { PanelPane } from "../components/PanelPane";
 import { FEATURES } from "./featureFlags";
 import type { LookliftClient } from "../api/client";
-import type { ParamContract } from "../api/types";
+import type { ImageInfo, ParamContract } from "../api/types";
 import { createNeutralAnalysis } from "../panel/contractModel";
 import { exportLookFile, isCurrentLookSnapshot } from "../features/looks/lookActions";
 import { editorStore, useEditorState } from "../store/editorStore";
 import { createChatWorkflow } from "../features/chat/chatWorkflow";
 import { createSessionCoordinator } from "../features/sessions/sessionCoordinator";
+import { createHistogramController } from "../features/histogram/histogramController";
+import { calculateHistogramInWorker } from "../features/histogram/histogramWorkerClient";
 
 type EditorShellProps = {
   chatEnabled?: boolean;
@@ -30,6 +32,16 @@ export function EditorShell({
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [providerLabel, setProviderLabel] = useState("正在读取…");
+  const [imageInfo, setImageInfo] = useState<ImageInfo | null>(null);
+  const histogramController = useMemo(
+    () => createHistogramController(calculateHistogramInWorker),
+    [],
+  );
+  const histogram = useSyncExternalStore(
+    histogramController.subscribe,
+    histogramController.getSnapshot,
+    histogramController.getSnapshot,
+  );
   const manualCommitPending = useRef(false);
   const sessionCoordinator = useMemo(
     () => client ? createSessionCoordinator(client, editorStore) : null,
@@ -75,8 +87,7 @@ export function EditorShell({
   }, [persistFormal]);
   const applyAnalysis = useCallback((analysis: Parameters<typeof editorStore.commitAnalysis>[0]) => {
     editorStore.setFactor(1);
-    editorStore.commitAnalysis(analysis, "ai");
-    persistFormal(analysis, "analysis");
+    if (editorStore.commitAnalysis(analysis, "ai")) persistFormal(analysis, "analysis");
   }, [persistFormal]);
   const setRenderState = useCallback(editorStore.setRenderState, []);
   const activateLook = useCallback((name: string) => {
@@ -96,6 +107,18 @@ export function EditorShell({
     }).catch(() => { if (!cancelled) setProviderLabel("配置读取失败"); });
     return () => { cancelled = true; };
   }, [client]);
+
+  useEffect(() => {
+    histogramController.reset();
+    setImageInfo(null);
+    if (!client || !editor.imagePath) return;
+    const path = editor.imagePath;
+    let cancelled = false;
+    void client.imageInfo(path).then((info) => {
+      if (!cancelled && editorStore.getSnapshot().imagePath === path) setImageInfo(info);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [client, editor.imagePath, histogramController]);
 
   useEffect(() => {
     if (activeLookName && !isCurrentLookSnapshot(
@@ -160,9 +183,10 @@ export function EditorShell({
           onAnalysisComplete={applyAnalysis}
           onRenderStateChange={setRenderState}
           onPreviewRendered={(analysis) => persistRenderedManual(analysis as Parameters<typeof editorStore.commitAnalysis>[0])}
-          analysisDisabled={editor.pendingPreview !== null}
+          onEffectPreview={(blob, signature) => void histogramController.update(blob, signature)}
+          analysisDisabled={editor.pendingPreview !== null || editor.activeAiRequestId !== null}
         />
-        <PanelPane contract={contract} onFormalAnalysis={persistFormal} />
+        <PanelPane contract={contract} onFormalAnalysis={persistFormal} histogram={histogram} imageInfo={imageInfo} />
       </section>
 
       <GalleryPane client={client} onActiveLookChange={activateLook} onFormalAnalysis={persistFormal} />

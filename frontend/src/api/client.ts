@@ -9,6 +9,7 @@ import type {
   EngineProbe,
   ExportLookRequest,
   JsonObject,
+  ImageInfo,
   LookSummary,
   ParamContract,
   PreviewRequest,
@@ -75,6 +76,13 @@ export class LookliftClient {
       method: "POST",
       body: JSON.stringify(payload),
       signal,
+    });
+  }
+
+  imageInfo(path: string): Promise<ImageInfo> {
+    return this.json("/api/image-info", {
+      method: "POST",
+      body: JSON.stringify({ path }),
     });
   }
 
