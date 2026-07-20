@@ -58,4 +58,64 @@ describe("studioRuntime", () => {
 
     expect(current.isAlive()).toBe(false);
   });
+
+  it("AI 运行中先停止，晚到响应不能建立候选", async () => {
+    let finish!: (value: ChatStepResponse) => void;
+    const current = createStudioRuntime({
+      ...client(),
+      chatStep: vi.fn(() => new Promise<ChatStepResponse>((resolve) => { finish = resolve; })),
+    } as unknown as LookliftClient, snapshot("session-1", "C:/照片/a.jpg"));
+
+    const running = current.workflow.send("调整");
+    await Promise.resolve();
+    expect(current.closeRequirement()).toBe("ai");
+
+    expect(current.stopAiForClose()).toBe("direct");
+    current.dispose();
+    finish({
+      analysis: analysis(1), changes: [{ path: "basic.exposure", before: 0, after: 1 }],
+      rejected: [], explanation: "完成", limitations: [], approximation: "", manual_steps: [],
+      done: true, provider: "mock", proxy_count: 1, metadata_sent: false,
+    });
+
+    await expect(running).resolves.toBeNull();
+    expect(current.store.getSnapshot().pendingPreview).toBeNull();
+  });
+
+  it("候选保留成功后才允许关闭，保存失败时保留运行时和候选", async () => {
+    const commitSession = vi.fn().mockResolvedValue(snapshot("session-1", "C:/照片/a.jpg", 1));
+    const current = createStudioRuntime({ ...client(), commitSession } as unknown as LookliftClient, snapshot("session-1", "C:/照片/a.jpg"));
+    current.store.beginPendingPreview(analysis(1), [], [{ role: "user", content: "提亮" }], 1);
+    current.store.setRenderState({ status: "ready", error: null });
+
+    expect(current.closeRequirement()).toBe("pending");
+    await current.resolvePendingForClose("keep");
+    expect(commitSession).toHaveBeenCalledTimes(1);
+    expect(current.store.getSnapshot().pendingPreview).toBeNull();
+    expect(current.closeRequirement()).toBe("direct");
+
+    const failing = createStudioRuntime({
+      ...client(), commitSession: vi.fn().mockRejectedValue(new Error("磁盘已满")),
+    } as unknown as LookliftClient, snapshot("session-2", "C:/照片/b.jpg"));
+    failing.store.beginPendingPreview(analysis(1), [], [], 1);
+    failing.store.setRenderState({ status: "ready", error: null });
+
+    await expect(failing.resolvePendingForClose("keep")).rejects.toThrow("磁盘已满");
+    expect(failing.isAlive()).toBe(true);
+    expect(failing.store.getSnapshot().pendingPreview).not.toBeNull();
+  });
+
+  it("放弃候选只记录消息并清除临时预览", async () => {
+    const recordSessionMessages = vi.fn().mockResolvedValue(snapshot("session-1", "C:/照片/a.jpg"));
+    const current = createStudioRuntime({
+      ...client(), recordSessionMessages,
+    } as unknown as LookliftClient, snapshot("session-1", "C:/照片/a.jpg"));
+    current.store.beginPendingPreview(analysis(1), [], [{ role: "user", content: "提亮" }], 1);
+
+    await current.resolvePendingForClose("discard");
+
+    expect(recordSessionMessages).toHaveBeenCalledTimes(1);
+    expect(current.store.getSnapshot().analysis?.basic.exposure).toBe(0);
+    expect(current.store.getSnapshot().pendingPreview).toBeNull();
+  });
 });

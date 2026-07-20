@@ -8,8 +8,8 @@ import type { LookliftClient } from "../api/client";
 import type { ImageInfo, ParamContract } from "../api/types";
 import { createNeutralAnalysis } from "../panel/contractModel";
 import { exportLookFile, isCurrentLookSnapshot } from "../features/looks/lookActions";
-import { createChatWorkflow } from "../features/chat/chatWorkflow";
-import { createSessionCoordinator } from "../features/sessions/sessionCoordinator";
+import { createChatWorkflow, type ChatWorkflow } from "../features/chat/chatWorkflow";
+import { createSessionCoordinator, type SessionCoordinator } from "../features/sessions/sessionCoordinator";
 import { createHistogramController } from "../features/histogram/histogramController";
 import { calculateHistogramInWorker } from "../features/histogram/histogramWorkerClient";
 import type { EditorStore } from "../store/editorStore";
@@ -22,6 +22,8 @@ type EditorShellProps = {
   engineLabel?: string;
   client?: LookliftClient;
   contract?: ParamContract;
+  coordinator?: SessionCoordinator | null;
+  workflow?: ChatWorkflow | null;
 };
 
 export function EditorShell({
@@ -31,6 +33,8 @@ export function EditorShell({
   engineLabel = "本地引擎已连接",
   client,
   contract,
+  coordinator: providedCoordinator,
+  workflow: providedWorkflow,
 }: EditorShellProps) {
   const editor = useEditorState(store);
   const [activeLookName, setActiveLookName] = useState<string | null>(null);
@@ -48,16 +52,18 @@ export function EditorShell({
     histogramController.getSnapshot,
   );
   const manualCommitPending = useRef(false);
-  const sessionCoordinator = useMemo(
-    () => client ? createSessionCoordinator(client, store) : null,
-    [client, store],
+  const ownedCoordinator = useMemo(
+    () => providedCoordinator === undefined && client ? createSessionCoordinator(client, store) : null,
+    [client, providedCoordinator, store],
   );
-  const chatWorkflow = useMemo(
-    () => client ? createChatWorkflow(client, store, {
+  const sessionCoordinator = providedCoordinator === undefined ? ownedCoordinator : providedCoordinator;
+  const ownedWorkflow = useMemo(
+    () => providedWorkflow === undefined && client ? createChatWorkflow(client, store, {
       onMessagesOnly: (exchange) => sessionCoordinator?.recordMessages(exchange),
     }) : null,
-    [client, sessionCoordinator, store],
+    [client, providedWorkflow, sessionCoordinator, store],
   );
+  const chatWorkflow = providedWorkflow === undefined ? ownedWorkflow : providedWorkflow;
   const activeLookSnapshot = useRef({ analysis: editor.analysis, factor: editor.factor });
   const neutral = !editor.analysis && contract ? createNeutralAnalysis(contract) : undefined;
   const openImage = useCallback((path: string) => {
@@ -101,6 +107,10 @@ export function EditorShell({
     setActiveLookName(name);
     setExportStatus(null);
   }, [store]);
+
+  useEffect(() => {
+    return () => ownedWorkflow?.dispose();
+  }, [ownedWorkflow]);
 
   useEffect(() => {
     if (!client) return;

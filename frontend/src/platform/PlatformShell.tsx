@@ -3,13 +3,14 @@ import type { LookliftClient } from "../api/client";
 import type { ParamContract, SessionSnapshot } from "../api/types";
 import { EditorShell } from "../app/EditorShell";
 import { createPlatformStore, type PlatformPage, type PlatformStore } from "./platformStore";
-import { createStudioRuntime } from "./studioRuntime";
+import { createStudioRuntime, type StudioRuntime } from "./studioRuntime";
 import { HomePage, type FutureEntry } from "./HomePage";
 import { NavigationRail } from "./NavigationRail";
 import { WorkspaceTabs } from "./WorkspaceTabs";
 import { ComingSoonPage } from "./ComingSoonPage";
 import { createNeutralAnalysis } from "../panel/contractModel";
 import { chooseBrowserImageFile, nativeImageChooser, runQuickEdit } from "./quickEdit";
+import { CloseStudioDialog, type CloseDialogPhase } from "./CloseStudioDialog";
 
 type PlatformShellProps = {
   client: LookliftClient;
@@ -28,6 +29,14 @@ const PLATFORM_TITLES: Record<PlatformPage, string> = {
   settings: "设置与帮助",
 };
 
+type CloseDialogState = {
+  tabId: string;
+  title: string;
+  phase: CloseDialogPhase;
+  busy: boolean;
+  error: string | null;
+};
+
 function localStorageOrUndefined(): Storage | undefined {
   try { return typeof window === "undefined" ? undefined : window.localStorage; } catch { return undefined; }
 }
@@ -39,6 +48,8 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
   const [shellError, setShellError] = useState<string | null>(null);
   const [quickEditBusy, setQuickEditBusy] = useState(false);
   const quickEditRunning = useRef(false);
+  const [closeDialog, setCloseDialog] = useState<CloseDialogState | null>(null);
+  const closeActionRunning = useRef(false);
   const activeTab = platform.tabs.find((tab) => tab.id === platform.activeTabId) ?? platform.tabs[0];
 
   const openPage = (page: PlatformPage) => store.openPlatform(page, PLATFORM_TITLES[page]);
@@ -82,6 +93,51 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
       setQuickEditBusy(false);
     }
   } : undefined;
+  const closeRuntime = () => {
+    if (!closeDialog) return null;
+    const tab = store.getSnapshot().tabs.find((candidate) => candidate.id === closeDialog.tabId);
+    return tab?.kind === "studio" ? tab.runtime as StudioRuntime : null;
+  };
+  const requestClose = (id: string) => {
+    if (closeActionRunning.current) return;
+    const tab = store.getSnapshot().tabs.find((candidate) => candidate.id === id);
+    if (!tab || tab.kind === "home") return;
+    if (tab.kind === "platform") {
+      store.removeTab(id);
+      return;
+    }
+    const runtime = tab.runtime as StudioRuntime;
+    const requirement = runtime.closeRequirement();
+    if (requirement === "direct") store.removeTab(id);
+    else setCloseDialog({ tabId: id, title: tab.title, phase: requirement, busy: false, error: null });
+  };
+  const runCloseAction = async (action: (runtime: StudioRuntime) => Promise<"closed" | "pending">) => {
+    if (!closeDialog || closeActionRunning.current) return;
+    const runtime = closeRuntime();
+    if (!runtime) {
+      setCloseDialog(null);
+      return;
+    }
+    closeActionRunning.current = true;
+    setCloseDialog((current) => current ? { ...current, busy: true, error: null } : current);
+    try {
+      const result = await action(runtime);
+      if (result === "closed") {
+        store.removeTab(closeDialog.tabId);
+        setCloseDialog(null);
+      } else {
+        setCloseDialog((current) => current ? { ...current, phase: "pending", busy: false } : current);
+      }
+    } catch (reason) {
+      setCloseDialog((current) => current ? {
+        ...current,
+        busy: false,
+        error: reason instanceof Error ? reason.message : String(reason),
+      } : current);
+    } finally {
+      closeActionRunning.current = false;
+    }
+  };
 
   const activeTarget = activeTab.kind === "home"
     ? "home"
@@ -94,8 +150,8 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
         tabs={platform.tabs}
         activeTabId={platform.activeTabId}
         onActivate={store.activateTab}
-        canClose={(tab) => tab.kind === "platform"}
-        onClose={store.removeTab}
+        canClose={(tab) => tab.kind !== "home"}
+        onClose={requestClose}
         onQuickEdit={quickEdit}
         quickEditBusy={quickEditBusy}
         onFuture={openFuture}
@@ -106,7 +162,7 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
         onToggle={() => store.setNavigationCollapsed(!platform.navigationCollapsed)}
         onNavigate={(target) => target === "home" ? store.activateTab("home") : openPage(target)}
       />
-      <section className="platform-content">
+      <section className="platform-content" inert={closeDialog ? true : undefined}>
         {shellError && <div className="platform-error" role="alert">{shellError}</div>}
         {activeTab.kind === "home" && <HomePage client={client} onResume={resume} onQuickEdit={quickEdit} quickEditBusy={quickEditBusy} onFuture={openFuture} />}
         {activeTab.kind === "platform" && <ComingSoonPage page={activeTab.page} />}
@@ -120,10 +176,30 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
               client={client}
               contract={contract}
               engineLabel={engineLabel}
+              coordinator={runtime.coordinator}
+              workflow={runtime.workflow}
             />
           </div>;
         })}
       </section>
+      {closeDialog && <CloseStudioDialog
+        title={closeDialog.title}
+        phase={closeDialog.phase}
+        busy={closeDialog.busy}
+        error={closeDialog.error}
+        onCancel={() => {
+          if (!closeActionRunning.current) setCloseDialog(null);
+        }}
+        onStop={() => runCloseAction(async (runtime) => runtime.stopAiForClose() === "pending" ? "pending" : "closed")}
+        onKeep={() => runCloseAction(async (runtime) => {
+          await runtime.resolvePendingForClose("keep");
+          return "closed";
+        })}
+        onDiscard={() => runCloseAction(async (runtime) => {
+          await runtime.resolvePendingForClose("discard");
+          return "closed";
+        })}
+      />}
     </main>
   );
 }

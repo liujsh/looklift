@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createEditorStore } from "../store/editorStore";
+import type { ChatWorkflow } from "../features/chat/chatWorkflow";
 import { EditorShell } from "./EditorShell";
 
 describe("EditorShell", () => {
@@ -39,6 +40,20 @@ describe("EditorShell", () => {
     expect(firstHtml).not.toContain("80%");
     expect(secondHtml).toContain("80%");
     expect(secondHtml).not.toContain("35%");
+  });
+
+  it("使用 StudioRuntime 注入的聊天工作流", () => {
+    const workflow = {
+      getSnapshot: () => ({
+        phase: "idle", messages: [{ role: "assistant", content: "来自所属运行时" }],
+        lastResponse: null, error: null, round: 0, stopReason: null,
+      }),
+      subscribe: vi.fn(() => () => undefined),
+    } as unknown as ChatWorkflow;
+
+    const html = renderToStaticMarkup(<EditorShell store={createEditorStore()} workflow={workflow} />);
+
+    expect(html).toContain("来自所属运行时");
   });
 
   it("布局轨道允许画布收缩且各工作区自行处理溢出", () => {

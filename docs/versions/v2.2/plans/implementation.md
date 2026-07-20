@@ -321,21 +321,21 @@
 - 保留必须等待现有 session 事务成功；失败时 runtime 和标签继续存在。
 - 销毁顺序固定为停止新输入、解决候选/请求、取消派生任务、释放监听与 URL、移除标签。
 
-- [ ] **Step 1：写关闭状态机失败测试**
+- [x] **Step 1：写关闭状态机失败测试**
 
   覆盖纯正式直接关闭、AI 请求取消关闭、停止后关闭、候选三选项、保留失败不关闭、重复点击幂等和晚到响应拒绝。
 
-- [ ] **Step 2：运行聚焦测试并确认失败**
+- [x] **Step 2：运行聚焦测试并确认失败**
 
   在 `frontend/` 运行：`pnpm exec vitest run src/platform/platformStore.test.ts src/platform/studioRuntime.test.ts src/platform/CloseStudioDialog.test.tsx src/platform/PlatformShell.test.tsx`
 
   预期：活动归属或关闭门禁尚未实现而失败。
 
-- [ ] **Step 3：实现关闭状态机和对话框**
+- [x] **Step 3：实现关闭状态机和对话框**
 
   复用 SessionCoordinator 的 accept/discard 与 ChatWorkflow 的 cancel，不另写一套提交逻辑。对话框只驱动状态机并显示异步结果。
 
-- [ ] **Step 4：运行聚焦验证**
+- [x] **Step 4：运行聚焦验证**
 
   在 `frontend/` 运行：`pnpm exec vitest run src/platform/platformStore.test.ts src/platform/studioRuntime.test.ts src/platform/CloseStudioDialog.test.tsx src/platform/PlatformShell.test.tsx src/features/chat/chatWorkflow.test.ts`
 
@@ -343,7 +343,7 @@
 
   预期：全部通过。
 
-- [ ] **Step 5：自审并提交**
+- [x] **Step 5：自审并提交**
 
   重点审查重复监听、未等待事务、关闭后 setState 和跨 runtime 污染；提交：`feat(v2.2): 完善标签关闭与资源清理`。
 
