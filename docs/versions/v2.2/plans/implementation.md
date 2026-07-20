@@ -44,25 +44,25 @@
 - 不返回完整 analysis、消息、版本栈、绝对路径或任何临时预览数据。
 - 完整恢复继续使用现有 `GET /api/sessions/<id>`。
 
-- [ ] **Step 1：先写 SessionStore 失败测试**
+- [x] **Step 1：先写 SessionStore 失败测试**
 
   在临时数据库建立至少三个更新时间可区分的会话，断言排序、limit、当前正式摘要和存在/缺失文件状态；同时断言 schema version 不变化。
 
-- [ ] **Step 2：运行后端聚焦测试并确认失败**
+- [x] **Step 2：运行后端聚焦测试并确认失败**
 
   运行：`pytest tests/test_session_store.py -q`
 
   预期：因 `list_recent` 或摘要类型尚不存在而失败。
 
-- [ ] **Step 3：实现最小只读查询**
+- [x] **Step 3：实现最小只读查询**
 
   使用现有表连接当前版本指针和当前版本记录；文件可用性在查询结果投影阶段判断，不写数据库、不触发迁移。
 
-- [ ] **Step 4：先写 API 和前端 client 失败测试**
+- [x] **Step 4：先写 API 和前端 client 失败测试**
 
   覆盖缺省查询、合法 limit、非法 limit、数据库错误脱敏，以及前端生成正确查询字符串并解析 `{sessions}`。
 
-- [ ] **Step 5：运行聚焦测试并确认失败**
+- [x] **Step 5：运行聚焦测试并确认失败**
 
   运行：`pytest tests/test_gui_sessions_api.py -q`
 
@@ -70,11 +70,11 @@
 
   预期：最近会话路由、类型或 client 方法尚不存在而失败。
 
-- [ ] **Step 6：接通 HTTP 与前端类型**
+- [x] **Step 6：接通 HTTP 与前端类型**
 
   复用 `_session_error` 的脱敏边界；路由只做 query 校验、调用仓库和序列化。前端新增只读摘要类型与列表方法，不改变现有单会话接口。
 
-- [ ] **Step 7：运行聚焦验证**
+- [x] **Step 7：运行聚焦验证**
 
   运行：`pytest tests/test_session_store.py tests/test_gui_sessions_api.py -q`
 
@@ -84,7 +84,7 @@
 
   预期：全部通过。
 
-- [ ] **Step 8：自审并提交**
+- [x] **Step 8：自审并提交**
 
   自审查询是否只读、是否泄露绝对路径、是否错误引入 v2.3 表；提交：`feat(v2.2): 添加最近会话查询`。
 

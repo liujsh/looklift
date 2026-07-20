@@ -204,6 +204,23 @@ describe("LookliftClient", () => {
     }
   });
 
+  it("读取有上限的最近正式会话摘要", async () => {
+    const sessions = [{
+      id: "session-1",
+      display_name: "照片.jpg",
+      updated_at: "2026-07-20T04:00:00+00:00",
+      current_version_id: "version-1",
+      summary: "柔和暖调",
+      source_available: true,
+    }];
+    const queue = responseQueue([Response.json({ sessions })]);
+    const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
+
+    await expect(client.recentSessions(3)).resolves.toEqual(sessions);
+
+    expect(queue.requests[0].url).toBe("http://127.0.0.1:9/api/sessions?limit=3");
+  });
+
   it("优先透传后端中文错误，并为非 JSON 和网络错误提供稳定文案", async () => {
     const queue = responseQueue([
       Response.json({ error: "缺少 analysis 字段" }, { status: 400 }),

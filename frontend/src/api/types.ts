@@ -164,6 +164,15 @@ export type SessionSnapshot = {
   current_analysis: Analysis;
 };
 
+export type SessionSummary = {
+  id: string;
+  display_name: string;
+  updated_at: string;
+  current_version_id: string;
+  summary: string;
+  source_available: boolean;
+};
+
 export type CreateSessionRequest = { path: string; initial_analysis: Analysis };
 
 export type CommitSessionRequest = {

@@ -675,6 +675,19 @@ def _get_session(ctx: dict) -> tuple[int, dict]:
     return 200, _snapshot_payload(snapshot)
 
 
+def _get_sessions(ctx: dict) -> tuple[int, dict]:
+    raw_limit = ctx.get("query", {}).get("limit", "8")
+    try:
+        limit = int(raw_limit)
+    except (TypeError, ValueError):
+        return 400, {"error": "limit 必须是 1 到 50 的整数"}
+    try:
+        sessions = SessionStore().list_recent(limit)
+    except (ValueError, OSError, DatabaseRecoveryRequired) as exc:
+        return _session_error(exc)
+    return 200, {"sessions": [asdict(session) for session in sessions]}
+
+
 def _commit_session(ctx: dict) -> tuple[int, dict]:
     payload, err = _json_body(ctx)
     if err is not None:
@@ -724,6 +737,7 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("POST", "/api/chat/step"): _chat_step,
     ("POST", "/api/image-info"): _image_info,
     ("POST", "/api/sessions"): _create_session,
+    ("GET", "/api/sessions"): _get_sessions,
     ("GET", "/api/sessions/<id>"): _get_session,
     ("POST", "/api/sessions/<id>/commit"): _commit_session,
     ("POST", "/api/sessions/<id>/messages"): _record_session_messages,

@@ -39,6 +39,48 @@ def test_create_or_resume_builds_initial_version_and_reuses_photo(tmp_path, samp
     assert resumed.messages == ()
 
 
+def test_list_recent_projects_current_formal_version_and_file_availability(
+    tmp_path, sample_analysis, monkeypatch
+):
+    timestamps = iter([
+        "2026-07-20T01:00:00+00:00",
+        "2026-07-20T02:00:00+00:00",
+        "2026-07-20T03:00:00+00:00",
+        "2026-07-20T04:00:00+00:00",
+    ])
+    monkeypatch.setattr("looklift.session_store._now", lambda: next(timestamps))
+    store = SessionStore(tmp_path / "sessions.db")
+    first_photo = tmp_path / "第一张.jpg"
+    second_photo = tmp_path / "第二张.jpg"
+    first_photo.write_bytes(b"jpeg")
+    second_photo.write_bytes(b"jpeg")
+
+    first = store.create_or_resume(str(first_photo), {**sample_analysis, "summary": "初始一"})
+    second = store.create_or_resume(str(second_photo), {**sample_analysis, "summary": "初始二"})
+    changed = {**sample_analysis, "summary": "当前正式版本"}
+    store.commit_exchange(first.id, _exchange(), changed, "chat")
+    second_photo.unlink()
+
+    recent = store.list_recent(2)
+
+    assert [item.id for item in recent] == [first.id, second.id]
+    assert recent[0].display_name == "第一张.jpg"
+    assert recent[0].summary == "当前正式版本"
+    assert recent[0].current_version_id != first.current_version_id
+    assert recent[0].source_available is True
+    assert recent[1].source_available is False
+    with sqlite3.connect(store.path) as connection:
+        assert connection.execute("SELECT version FROM schema_version").fetchone() == (1,)
+
+
+@pytest.mark.parametrize("limit", [0, 51])
+def test_list_recent_rejects_limit_outside_safe_range(tmp_path, limit):
+    store = SessionStore(tmp_path / "sessions.db")
+
+    with pytest.raises(ValueError, match="1 到 50"):
+        store.list_recent(limit)
+
+
 def test_commit_exchange_is_atomic_and_restart_restores_current_version(tmp_path, sample_analysis):
     path = tmp_path / "sessions.db"
     store = SessionStore(path)
