@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { LookSummary } from "../api/types";
+import { createEditorStore } from "../store/editorStore";
 import { GalleryPane } from "./GalleryPane";
 
 const looks: LookSummary[] = [
@@ -11,7 +12,7 @@ const looks: LookSummary[] = [
 
 describe("GalleryPane", () => {
   it("默认显示内置模板卡片并保留用户来源 tab", () => {
-    const html = renderToStaticMarkup(<GalleryPane initialLooks={looks} />);
+    const html = renderToStaticMarkup(<GalleryPane store={createEditorStore()} initialLooks={looks} />);
 
     expect(html).toContain('aria-pressed="true">内置模板');
     expect(html).toContain('aria-pressed="false">我的风格');

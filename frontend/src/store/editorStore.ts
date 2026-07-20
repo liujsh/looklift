@@ -304,8 +304,6 @@ export function createEditorStore(): EditorStore {
   };
 }
 
-export const editorStore = createEditorStore();
-
-export function useEditorState(): EditorState {
-  return useSyncExternalStore(editorStore.subscribe, editorStore.getSnapshot, editorStore.getSnapshot);
+export function useEditorState(store: EditorStore): EditorState {
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 }

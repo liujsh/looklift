@@ -141,4 +141,29 @@ describe("CanvasPane lifecycle", () => {
 
     expect(liveSignal!.aborted).toBe(false);
   });
+
+  it("只有活动 Studio 注册原生拖图监听", async () => {
+    const client = {
+      preview: vi.fn(),
+      upload: vi.fn(),
+    } as unknown as LookliftClient;
+
+    await act(async () => {
+      root.render(<CanvasPane client={client} active={false} />);
+      await Promise.resolve();
+    });
+    expect(drop.listen).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.render(<CanvasPane client={client} active />);
+      await Promise.resolve();
+    });
+    expect(drop.listen).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      root.render(<CanvasPane client={client} active={false} />);
+      await Promise.resolve();
+    });
+    expect(drop.unlisten).toHaveBeenCalledTimes(1);
+  });
 });

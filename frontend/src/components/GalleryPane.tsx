@@ -3,9 +3,11 @@ import type { LookliftClient } from "../api/client";
 import type { Analysis, LookSummary } from "../api/types";
 import { loadLookIntoEditor, looksForSource, type GallerySource } from "../features/gallery/galleryStore";
 import { exportLookFile, openLookReport, saveCurrentLook } from "../features/looks/lookActions";
-import { editorStore, useEditorState } from "../store/editorStore";
+import type { EditorStore } from "../store/editorStore";
+import { useEditorState } from "../store/editorStore";
 
 type GalleryPaneProps = {
+  store: EditorStore;
   client?: LookliftClient;
   initialLooks?: readonly LookSummary[];
   onActiveLookChange?(name: string): void;
@@ -16,8 +18,8 @@ function actionError(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
 }
 
-export function GalleryPane({ client, initialLooks, onActiveLookChange, onFormalAnalysis }: GalleryPaneProps) {
-  const editor = useEditorState();
+export function GalleryPane({ store, client, initialLooks, onActiveLookChange, onFormalAnalysis }: GalleryPaneProps) {
+  const editor = useEditorState(store);
   const [source, setSource] = useState<GallerySource>("built_in");
   const [looks, setLooks] = useState<readonly LookSummary[]>(initialLooks ?? []);
   const [loading, setLoading] = useState(Boolean(client && !initialLooks));
@@ -46,8 +48,8 @@ export function GalleryPane({ client, initialLooks, onActiveLookChange, onFormal
     try {
       let applied = false;
       const analysis = await loadLookIntoEditor(client, look.name, (analysis, factor) => {
-        editorStore.setFactor(factor);
-        applied = editorStore.commitAnalysis(analysis, "library");
+        store.setFactor(factor);
+        applied = store.commitAnalysis(analysis, "library");
       });
       if (!applied) return;
       await onFormalAnalysis?.(analysis, "library");

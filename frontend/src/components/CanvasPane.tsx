@@ -25,6 +25,7 @@ type LivePreviewRequest = {
 };
 
 type CanvasPaneProps = {
+  active?: boolean;
   client?: LookliftClient;
   analysis?: JsonObject;
   factor?: number;
@@ -38,6 +39,7 @@ type CanvasPaneProps = {
 };
 
 export function CanvasPane({
+  active = true,
   client,
   analysis = {},
   factor = 1,
@@ -207,7 +209,7 @@ export function CanvasPane({
 
   useEffect(() => {
     const element = paneRef.current;
-    if (!element || !client) return;
+    if (!active || !element || !client) return;
     let cancelled = false;
     let unlisten: (() => void) | undefined;
     void listenForTauriDrops(element, {
@@ -225,7 +227,7 @@ export function CanvasPane({
       cancelled = true;
       unlisten?.();
     };
-  }, [client]);
+  }, [active, client]);
 
   useEffect(() => () => {
     requestRef.current += 1;

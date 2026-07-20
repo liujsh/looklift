@@ -111,22 +111,22 @@
 - `EditorShell` 接收活动状态，Canvas 只有在所属 Studio 活动时注册窗口级拖放监听。
 - 现有 analysis、pendingPreview、编辑锁、undo/redo 和渲染签名语义不改变。
 
-- [ ] **Step 1：写双 Store 隔离失败测试**
+- [x] **Step 1：写双 Store 隔离失败测试**
 
   使用两个 Store 渲染两个编辑壳或关键子组件，修改其中一个后断言另一个的参数、强度和禁用状态不变化；
   同时断言只有 active EditorShell 的 Canvas 注册窗口级拖放。
 
-- [ ] **Step 2：运行受影响前端测试并确认失败**
+- [x] **Step 2：运行受影响前端测试并确认失败**
 
   在 `frontend/` 运行：`pnpm exec vitest run src/app/EditorShell.test.tsx src/components/PanelPane.test.tsx src/components/GalleryPane.test.tsx src/components/CanvasPane.lifecycle.test.tsx`
 
   预期：组件尚不能接收显式 Store，或仍读全局单例而失败。
 
-- [ ] **Step 3：最小化完成 Store 注入**
+- [x] **Step 3：最小化完成 Store 注入**
 
   参数面板、模板带和 EditorShell 的所有读写都改用传入实例。完成所有调用点迁移后删除生产路径中的模块级单例依赖，测试按需自行创建 Store；Canvas 的原生监听随 active 状态转移且不重置编辑状态。
 
-- [ ] **Step 4：运行聚焦测试与 TypeScript**
+- [x] **Step 4：运行聚焦测试与 TypeScript**
 
   在 `frontend/` 运行：`pnpm exec vitest run src/store/editorStore.test.ts src/app/EditorShell.test.tsx src/components/PanelPane.test.tsx src/components/GalleryPane.test.tsx src/components/CanvasPane.lifecycle.test.tsx src/features/sessions/sessionCoordinator.test.ts src/features/chat/chatWorkflow.test.ts`
 
@@ -134,7 +134,7 @@
 
   预期：全部通过。
 
-- [ ] **Step 5：自审并提交**
+- [x] **Step 5：自审并提交**
 
   用 `rg "editorStore" frontend/src` 确认没有组件偷偷回读模块级单例；提交：`refactor(v2.2): 隔离 Studio 编辑状态`。
 

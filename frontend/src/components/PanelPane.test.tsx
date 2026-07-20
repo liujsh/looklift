@@ -1,10 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { createEditorStore } from "../store/editorStore";
 import { PanelPane } from "./PanelPane";
 
 describe("PanelPane", () => {
   it("从固定映射渲染五个分组与全局强度 seam", () => {
-    const html = renderToStaticMarkup(<PanelPane />);
+    const html = renderToStaticMarkup(<PanelPane store={createEditorStore()} />);
 
     expect(html).toContain('data-control="factor"');
     expect(html).toContain("100%");
@@ -15,7 +16,7 @@ describe("PanelPane", () => {
   });
 
   it("没有 analysis 时保留分组结构但明确等待回填", () => {
-    const html = renderToStaticMarkup(<PanelPane />);
+    const html = renderToStaticMarkup(<PanelPane store={createEditorStore()} />);
 
     expect(html).toContain("载入分析结果后显示参数");
     expect(html).toContain("导入照片后显示参数控件");

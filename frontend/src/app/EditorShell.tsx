@@ -8,13 +8,16 @@ import type { LookliftClient } from "../api/client";
 import type { ImageInfo, ParamContract } from "../api/types";
 import { createNeutralAnalysis } from "../panel/contractModel";
 import { exportLookFile, isCurrentLookSnapshot } from "../features/looks/lookActions";
-import { editorStore, useEditorState } from "../store/editorStore";
 import { createChatWorkflow } from "../features/chat/chatWorkflow";
 import { createSessionCoordinator } from "../features/sessions/sessionCoordinator";
 import { createHistogramController } from "../features/histogram/histogramController";
 import { calculateHistogramInWorker } from "../features/histogram/histogramWorkerClient";
+import type { EditorStore } from "../store/editorStore";
+import { useEditorState } from "../store/editorStore";
 
 type EditorShellProps = {
+  store: EditorStore;
+  active?: boolean;
   chatEnabled?: boolean;
   engineLabel?: string;
   client?: LookliftClient;
@@ -22,12 +25,14 @@ type EditorShellProps = {
 };
 
 export function EditorShell({
+  store,
+  active = true,
   chatEnabled = FEATURES.chatPane,
   engineLabel = "本地引擎已连接",
   client,
   contract,
 }: EditorShellProps) {
-  const editor = useEditorState();
+  const editor = useEditorState(store);
   const [activeLookName, setActiveLookName] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
@@ -44,58 +49,58 @@ export function EditorShell({
   );
   const manualCommitPending = useRef(false);
   const sessionCoordinator = useMemo(
-    () => client ? createSessionCoordinator(client, editorStore) : null,
-    [client],
+    () => client ? createSessionCoordinator(client, store) : null,
+    [client, store],
   );
   const chatWorkflow = useMemo(
-    () => client ? createChatWorkflow(client, editorStore, {
+    () => client ? createChatWorkflow(client, store, {
       onMessagesOnly: (exchange) => sessionCoordinator?.recordMessages(exchange),
     }) : null,
-    [client, sessionCoordinator],
+    [client, sessionCoordinator, store],
   );
   const activeLookSnapshot = useRef({ analysis: editor.analysis, factor: editor.factor });
   const neutral = !editor.analysis && contract ? createNeutralAnalysis(contract) : undefined;
   const openImage = useCallback((path: string) => {
     if (!contract) {
-      editorStore.setImagePath(path);
+      store.setImagePath(path);
       return undefined;
     }
     const next = createNeutralAnalysis(contract);
-    editorStore.openImage(path, next);
+    store.openImage(path, next);
     void sessionCoordinator?.open(path, next)
       .then((snapshot) => chatWorkflow?.restoreMessages(snapshot.messages))
       .catch((reason) => {
-        editorStore.setRenderState({
+        store.setRenderState({
           status: "error",
           error: reason instanceof Error ? reason.message : String(reason),
         });
       });
     return next;
-  }, [chatWorkflow, contract, sessionCoordinator]);
-  const persistFormal = useCallback((analysis: Parameters<typeof editorStore.commitAnalysis>[0], source: "manual" | "library" | "analysis") => {
+  }, [chatWorkflow, contract, sessionCoordinator, store]);
+  const persistFormal = useCallback((analysis: Parameters<typeof store.commitAnalysis>[0], source: "manual" | "library" | "analysis") => {
     void sessionCoordinator?.commitFormal(analysis, source).catch((reason) => {
       setExportStatus(`版本保存失败：${reason instanceof Error ? reason.message : String(reason)}`);
     });
   }, [sessionCoordinator]);
   const settleManualPreview = useCallback(() => {
-    manualCommitPending.current = editorStore.finalizePreview("manual");
-  }, []);
-  const persistRenderedManual = useCallback((analysis: Parameters<typeof editorStore.commitAnalysis>[0]) => {
+    manualCommitPending.current = store.finalizePreview("manual");
+  }, [store]);
+  const persistRenderedManual = useCallback((analysis: Parameters<typeof store.commitAnalysis>[0]) => {
     if (!manualCommitPending.current) return;
     manualCommitPending.current = false;
     persistFormal(analysis, "manual");
   }, [persistFormal]);
-  const applyAnalysis = useCallback((analysis: Parameters<typeof editorStore.commitAnalysis>[0]) => {
-    editorStore.setFactor(1);
-    if (editorStore.commitAnalysis(analysis, "ai")) persistFormal(analysis, "analysis");
-  }, [persistFormal]);
-  const setRenderState = useCallback(editorStore.setRenderState, []);
+  const applyAnalysis = useCallback((analysis: Parameters<typeof store.commitAnalysis>[0]) => {
+    store.setFactor(1);
+    if (store.commitAnalysis(analysis, "ai")) persistFormal(analysis, "analysis");
+  }, [persistFormal, store]);
+  const setRenderState = useCallback(store.setRenderState, [store]);
   const activateLook = useCallback((name: string) => {
-    const current = editorStore.getSnapshot();
+    const current = store.getSnapshot();
     activeLookSnapshot.current = { analysis: current.analysis, factor: current.factor };
     setActiveLookName(name);
     setExportStatus(null);
-  }, []);
+  }, [store]);
 
   useEffect(() => {
     if (!client) return;
@@ -115,10 +120,10 @@ export function EditorShell({
     const path = editor.imagePath;
     let cancelled = false;
     void client.imageInfo(path).then((info) => {
-      if (!cancelled && editorStore.getSnapshot().imagePath === path) setImageInfo(info);
+      if (!cancelled && store.getSnapshot().imagePath === path) setImageInfo(info);
     }).catch(() => undefined);
     return () => { cancelled = true; };
-  }, [client, editor.imagePath, histogramController]);
+  }, [client, editor.imagePath, histogramController, store]);
 
   useEffect(() => {
     if (activeLookName && !isCurrentLookSnapshot(
@@ -175,6 +180,7 @@ export function EditorShell({
           renderStatus={editor.render.status}
         />
         <CanvasPane
+          active={active}
           client={client}
           analysis={editor.displayAnalysis ?? neutral}
           factor={editor.factor}
@@ -182,14 +188,14 @@ export function EditorShell({
           onPreviewSettled={settleManualPreview}
           onAnalysisComplete={applyAnalysis}
           onRenderStateChange={setRenderState}
-          onPreviewRendered={(analysis) => persistRenderedManual(analysis as Parameters<typeof editorStore.commitAnalysis>[0])}
+          onPreviewRendered={(analysis) => persistRenderedManual(analysis as Parameters<typeof store.commitAnalysis>[0])}
           onEffectPreview={(blob, signature) => void histogramController.update(blob, signature)}
           analysisDisabled={editor.pendingPreview !== null || editor.activeAiRequestId !== null}
         />
-        <PanelPane contract={contract} onFormalAnalysis={persistFormal} histogram={histogram} imageInfo={imageInfo} />
+        <PanelPane store={store} contract={contract} onFormalAnalysis={persistFormal} histogram={histogram} imageInfo={imageInfo} />
       </section>
 
-      <GalleryPane client={client} onActiveLookChange={activateLook} onFormalAnalysis={persistFormal} />
+      <GalleryPane store={store} client={client} onActiveLookChange={activateLook} onFormalAnalysis={persistFormal} />
     </main>
   );
 }
