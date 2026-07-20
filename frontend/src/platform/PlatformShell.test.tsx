@@ -48,6 +48,7 @@ describe("PlatformShell", () => {
       expect(html).toContain(label);
     }
     expect(html).toContain('aria-label="新建工作上下文"');
+    expect(html).toContain("请将窗口增大到至少 880px");
     for (const action of ["添加文件夹", "从设备导入", "快速修图"]) {
       expect(html).toContain(action);
     }

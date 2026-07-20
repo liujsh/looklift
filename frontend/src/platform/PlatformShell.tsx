@@ -200,6 +200,10 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
           return "closed";
         })}
       />}
+      <aside className="window-width-warning" role="status">
+        <strong>需要更宽的工作区</strong>
+        <span>请将窗口增大到至少 880px，以完整使用画布和调整面板。</span>
+      </aside>
     </main>
   );
 }
