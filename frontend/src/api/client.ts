@@ -91,6 +91,10 @@ export class LookliftClient {
     return this.json("/api/config");
   }
 
+  saveConfig(payload: Partial<Omit<ProviderConfig, "timeout">> & { timeout?: number | string; api_key?: string }): Promise<{ ok: boolean }> {
+    return this.json("/api/config", { method: "POST", body: JSON.stringify(payload) });
+  }
+
   chatStep(payload: ChatStepRequest, signal?: AbortSignal): Promise<ChatStepResponse> {
     return this.json("/api/chat/step", {
       method: "POST",
