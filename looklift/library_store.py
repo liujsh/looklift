@@ -26,6 +26,7 @@ class LibraryItem:
     path: str
     display_name: str
     available: bool
+    thumbnail_path: str | None
 
 
 @dataclass(frozen=True)
@@ -75,10 +76,13 @@ class LibraryStore:
                 CREATE TABLE IF NOT EXISTS library_roots(id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE);
                 CREATE TABLE IF NOT EXISTS library_items(
                     id TEXT PRIMARY KEY, root_id TEXT NOT NULL REFERENCES library_roots(id) ON DELETE CASCADE,
-                    path TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL, available INTEGER NOT NULL
+                    path TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL, available INTEGER NOT NULL, thumbnail_path TEXT
                 );
                 CREATE TABLE IF NOT EXISTS library_tags(item_id TEXT NOT NULL REFERENCES library_items(id) ON DELETE CASCADE, tag TEXT NOT NULL, PRIMARY KEY(item_id, tag));
             """)
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(library_items)")}
+            if "thumbnail_path" not in columns:
+                connection.execute("ALTER TABLE library_items ADD COLUMN thumbnail_path TEXT")
 
     def add_root(self, path: Path) -> LibraryRoot:
         root = str(Path(path).resolve())
@@ -101,13 +105,15 @@ class LibraryStore:
             existing = {row["path"]: row for row in rows}
             added = 0
             updated = 0
+            thumbnails = ThumbnailService(self.path.parent / "thumbnails")
             for path, name in discovered.items():
+                thumbnail = thumbnails.create(Path(path)).path
                 row = existing.pop(path, None)
                 if row is None:
-                    connection.execute("INSERT INTO library_items(id, root_id, path, display_name, available) VALUES(?,?,?,?,1)", (uuid.uuid4().hex, root_id, path, name))
+                    connection.execute("INSERT INTO library_items(id, root_id, path, display_name, available, thumbnail_path) VALUES(?,?,?,?,1,?)", (uuid.uuid4().hex, root_id, path, name, str(thumbnail) if thumbnail else None))
                     added += 1
                 elif not row["available"]:
-                    connection.execute("UPDATE library_items SET available = 1, display_name = ? WHERE id = ?", (name, row["id"]))
+                    connection.execute("UPDATE library_items SET available = 1, display_name = ?, thumbnail_path = ? WHERE id = ?", (name, str(thumbnail) if thumbnail else None, row["id"]))
                     updated += 1
             missing = 0
             for row in existing.values():
@@ -144,8 +150,8 @@ class LibraryStore:
             clauses.append("EXISTS(SELECT 1 FROM library_tags AS tags WHERE tags.item_id = items.id AND tags.tag = ?)")
             values.append(tag.strip())
         with self._connect() as connection:
-            rows = connection.execute(f"SELECT items.id, items.path, items.display_name, items.available FROM library_items AS items WHERE {' AND '.join(clauses)} ORDER BY items.display_name COLLATE NOCASE", values).fetchall()
-        return tuple(LibraryItem(row["id"], row["path"], row["display_name"], bool(row["available"])) for row in rows)
+            rows = connection.execute(f"SELECT items.id, items.path, items.display_name, items.available, items.thumbnail_path FROM library_items AS items WHERE {' AND '.join(clauses)} ORDER BY items.display_name COLLATE NOCASE", values).fetchall()
+        return tuple(LibraryItem(row["id"], row["path"], row["display_name"], bool(row["available"]), row["thumbnail_path"]) for row in rows)
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path)

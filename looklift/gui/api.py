@@ -760,7 +760,7 @@ def _post_library_scan(ctx: dict) -> tuple[int, dict]:
 def _get_library_items(ctx: dict) -> tuple[int, dict]:
     query = ctx.get("query", {})
     items = LibraryStore().list_items(query.get("keyword", ""), query.get("tag", ""))
-    return 200, {"items": [{"id": item.id, "path": item.path, "display_name": item.display_name, "available": item.available} for item in items]}
+    return 200, {"items": [{"id": item.id, "path": item.path, "display_name": item.display_name, "available": item.available, "thumbnail_path": item.thumbnail_path} for item in items]}
 
 
 def _put_library_item_tags(ctx: dict) -> tuple[int, dict]:

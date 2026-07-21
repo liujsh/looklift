@@ -102,7 +102,7 @@ export type ProviderConfig = {
 };
 
 export type LibraryRoot = { id: string; path: string };
-export type LibraryItem = { id: string; path: string; display_name: string; available: boolean };
+export type LibraryItem = { id: string; path: string; display_name: string; available: boolean; thumbnail_path: string | null };
 
 export type ChatMessage = {
   role: "user" | "assistant";
