@@ -62,8 +62,8 @@ describe("PlatformShell", () => {
       <PlatformShell client={client} store={store} engineLabel="测试引擎" />,
     );
 
-    expect(html).toContain("将在 v2.3-A 提供");
-    expect(html).toContain("只索引，不复制原文件");
+    expect(html).toContain("只索引原文件，不复制或移动照片。");
+    expect(html).toContain("加入图库");
     expect(html).toContain('data-closable="true"');
     expect(html).not.toContain("128 张");
   });
