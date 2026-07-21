@@ -24,6 +24,7 @@ export type ChatWorkflow = {
   setIncludeMetadata(include: boolean): void;
   restoreMessages(messages: readonly ChatMessage[]): void;
   settlePending(): void;
+  dispose(): void;
 };
 
 type ChatWorkflowHooks = {
@@ -45,14 +46,17 @@ export function createChatWorkflow(
   let activeLockId: number | null = null;
   let requestId = store.getSnapshot().pendingPreview?.requestId ?? 0;
   let includeMetadata = true;
+  let disposed = false;
   const listeners = new Set<() => void>();
 
   const publish = (patch: Partial<ChatWorkflowState>) => {
+    if (disposed) return;
     state = Object.freeze({ ...state, ...patch });
     for (const listener of listeners) listener();
   };
 
   const runStep = async (message: string, round: number): Promise<ChatStepResponse | null> => {
+    if (disposed) throw new Error("Studio 已关闭");
     const editor = store.getSnapshot();
     if (!editor.imagePath || !editor.displayAnalysis) throw new Error("请先导入照片再开始 AI 对话");
     const activeRequestId = ++requestId;
@@ -75,6 +79,7 @@ export function createChatWorkflow(
       }, active.signal);
     } catch (reason) {
       store.endAiRequest(activeRequestId);
+      if (disposed) return null;
       if (active.signal.aborted || (reason instanceof DOMException && reason.name === "AbortError")) {
         const exchange: ChatMessage[] = [
           user, { role: "assistant", content: "已停止等待；供应商端已发出的请求可能仍会完成，正式版本未改变。", status: "cancelled" },
@@ -103,7 +108,7 @@ export function createChatWorkflow(
       }
     }
 
-    if (active.signal.aborted) {
+    if (disposed || active.signal.aborted) {
       store.endAiRequest(activeRequestId);
       return null;
     }
@@ -151,14 +156,17 @@ export function createChatWorkflow(
   return {
     getSnapshot: () => state,
     subscribe(listener) {
+      if (disposed) return () => undefined;
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
     send(message) {
+      if (disposed) return Promise.reject(new Error("Studio 已关闭"));
       if (!message.trim()) return Promise.reject(new Error("请输入修图要求"));
       return runStep(message.trim(), 0);
     },
     async refine() {
+      if (disposed) throw new Error("Studio 已关闭");
       if (state.phase === "requesting") throw new Error("AI 正在处理，请稍候");
       if (!store.getSnapshot().pendingPreview) throw new Error("当前没有可精修的 AI 候选");
       if (state.round >= 2) {
@@ -189,6 +197,15 @@ export function createChatWorkflow(
     },
     settlePending() {
       publish({ phase: "idle", error: null, round: 0, stopReason: null });
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      controller?.abort();
+      controller = null;
+      if (activeLockId !== null) store.endAiRequest(activeLockId);
+      activeLockId = null;
+      listeners.clear();
     },
   };
 }

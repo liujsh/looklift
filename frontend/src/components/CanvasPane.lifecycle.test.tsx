@@ -141,4 +141,48 @@ describe("CanvasPane lifecycle", () => {
 
     expect(liveSignal!.aborted).toBe(false);
   });
+
+  it("只有活动 Studio 注册原生拖图监听", async () => {
+    const client = {
+      preview: vi.fn(),
+      upload: vi.fn(),
+    } as unknown as LookliftClient;
+
+    await act(async () => {
+      root.render(<CanvasPane client={client} active={false} />);
+      await Promise.resolve();
+    });
+    expect(drop.listen).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.render(<CanvasPane client={client} active />);
+      await Promise.resolve();
+    });
+    expect(drop.listen).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      root.render(<CanvasPane client={client} active={false} />);
+      await Promise.resolve();
+    });
+    expect(drop.unlisten).toHaveBeenCalledTimes(1);
+  });
+
+  it("恢复的正式图片路径自动生成当前效果预览", async () => {
+    const preview = vi.fn(async () => new Blob(["jpeg"], { type: "image/jpeg" }));
+    const client = { preview, upload: vi.fn() } as unknown as LookliftClient;
+
+    await act(async () => {
+      root.render(<CanvasPane client={client} imagePath="C:/恢复/photo.jpg" analysis={analysis(0.4)} />);
+      for (let index = 0; index < 6; index += 1) await Promise.resolve();
+    });
+
+    expect(preview).toHaveBeenCalledTimes(2);
+    expect(preview).toHaveBeenNthCalledWith(1,
+      { path: "C:/恢复/photo.jpg", analysis: analysis(0.4), factor: 0 },
+    );
+    expect(preview).toHaveBeenNthCalledWith(2,
+      { path: "C:/恢复/photo.jpg", analysis: analysis(0.4), factor: 1 },
+    );
+    expect(container.querySelector(".canvas-pane")?.getAttribute("data-phase")).toBe("ready");
+  });
 });

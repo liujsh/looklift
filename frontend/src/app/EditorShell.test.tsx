@@ -1,12 +1,14 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { createEditorStore } from "../store/editorStore";
+import type { ChatWorkflow } from "../features/chat/chatWorkflow";
 import { EditorShell } from "./EditorShell";
 
 describe("EditorShell", () => {
   it("保留四个 pane 的稳定语义结构", () => {
-    const html = renderToStaticMarkup(<EditorShell />);
+    const html = renderToStaticMarkup(<EditorShell store={createEditorStore()} />);
 
     expect(html).toContain('aria-label="照片编辑工作区"');
     expect(html).toContain('data-pane="chat"');
@@ -16,13 +18,42 @@ describe("EditorShell", () => {
   });
 
   it("聊天功能默认开启且仍可通过 seam 故障回退", () => {
-    const disabled = renderToStaticMarkup(<EditorShell chatEnabled={false} />);
-    const enabled = renderToStaticMarkup(<EditorShell />);
+    const disabled = renderToStaticMarkup(<EditorShell store={createEditorStore()} chatEnabled={false} />);
+    const enabled = renderToStaticMarkup(<EditorShell store={createEditorStore()} />);
 
     expect(disabled).toContain('data-chat-enabled="false"');
     expect(disabled).toMatch(/data-pane="chat"[^>]*hidden=""/);
     expect(enabled).toContain('data-chat-enabled="true"');
     expect(enabled).not.toMatch(/data-pane="chat"[^>]*hidden=""/);
+  });
+
+  it("每个编辑壳只读取显式传入的 Store", () => {
+    const first = createEditorStore();
+    const second = createEditorStore();
+    first.setFactor(0.35);
+    second.setFactor(0.8);
+
+    const firstHtml = renderToStaticMarkup(<EditorShell store={first} />);
+    const secondHtml = renderToStaticMarkup(<EditorShell store={second} />);
+
+    expect(firstHtml).toContain("35%");
+    expect(firstHtml).not.toContain("80%");
+    expect(secondHtml).toContain("80%");
+    expect(secondHtml).not.toContain("35%");
+  });
+
+  it("使用 StudioRuntime 注入的聊天工作流", () => {
+    const workflow = {
+      getSnapshot: () => ({
+        phase: "idle", messages: [{ role: "assistant", content: "来自所属运行时" }],
+        lastResponse: null, error: null, round: 0, stopReason: null,
+      }),
+      subscribe: vi.fn(() => () => undefined),
+    } as unknown as ChatWorkflow;
+
+    const html = renderToStaticMarkup(<EditorShell store={createEditorStore()} workflow={workflow} />);
+
+    expect(html).toContain("来自所属运行时");
   });
 
   it("布局轨道允许画布收缩且各工作区自行处理溢出", () => {

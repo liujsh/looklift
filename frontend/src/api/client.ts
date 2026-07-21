@@ -18,6 +18,7 @@ import type {
   SaveLookRequest,
   SidecarStatus,
   SessionSnapshot,
+  SessionSummary,
   TaskResult,
 } from "./types";
 
@@ -90,6 +91,10 @@ export class LookliftClient {
     return this.json("/api/config");
   }
 
+  saveConfig(payload: Partial<Omit<ProviderConfig, "timeout">> & { timeout?: number | string; api_key?: string }): Promise<{ ok: boolean }> {
+    return this.json("/api/config", { method: "POST", body: JSON.stringify(payload) });
+  }
+
   chatStep(payload: ChatStepRequest, signal?: AbortSignal): Promise<ChatStepResponse> {
     return this.json("/api/chat/step", {
       method: "POST",
@@ -100,6 +105,11 @@ export class LookliftClient {
 
   createSession(payload: CreateSessionRequest): Promise<SessionSnapshot> {
     return this.json("/api/sessions", { method: "POST", body: JSON.stringify(payload) });
+  }
+
+  async recentSessions(limit = 8): Promise<SessionSummary[]> {
+    const result = await this.json<{ sessions: SessionSummary[] }>(`/api/sessions?limit=${limit}`);
+    return result.sessions;
   }
 
   getSession(id: string): Promise<SessionSnapshot> {

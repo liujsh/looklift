@@ -1,5 +1,5 @@
-import { EditorShell } from "./app/EditorShell";
 import { useEngineGate } from "./app/useEngineGate";
+import { PlatformShell } from "./platform/PlatformShell";
 import "./App.css";
 
 function App() {
@@ -19,7 +19,7 @@ function App() {
   }
 
   return (
-    <EditorShell
+    <PlatformShell
       client={engine.client}
       contract={engine.contract}
       engineLabel={`${engine.numba} · libvips ${engine.libvips}`}

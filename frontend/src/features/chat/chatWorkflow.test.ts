@@ -210,4 +210,25 @@ describe("chatWorkflow", () => {
     current.restoreMessages([{ role: "assistant", content: "另一张照片" }]);
     expect(current.getSnapshot()).toMatchObject({ phase: "idle", lastResponse: null, error: null });
   });
+
+  it("销毁后拒绝晚到响应和新的请求", async () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis());
+    let finish!: (value: ChatStepResponse) => void;
+    const recorded = vi.fn();
+    const workflow = createChatWorkflow({
+      chatStep: () => new Promise<ChatStepResponse>((resolve) => { finish = resolve; }),
+    }, store, { onMessagesOnly: recorded });
+
+    const running = workflow.send("调整");
+    await Promise.resolve();
+    workflow.dispose();
+    finish(response(1));
+
+    await expect(running).resolves.toBeNull();
+    await expect(workflow.send("再次请求")).rejects.toThrow("已关闭");
+    expect(store.getSnapshot().activeAiRequestId).toBeNull();
+    expect(store.getSnapshot().pendingPreview).toBeNull();
+    expect(recorded).not.toHaveBeenCalled();
+  });
 });

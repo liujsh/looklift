@@ -9,10 +9,12 @@ import { HslMixer } from "../panel/HslMixer";
 import { SliderControl } from "../panel/SliderControl";
 import { StrengthSlider } from "../panel/StrengthSlider";
 import { ToneCurve } from "../panel/ToneCurve";
-import { editorStore, useEditorState } from "../store/editorStore";
+import type { EditorStore } from "../store/editorStore";
+import { useEditorState } from "../store/editorStore";
 import { HistogramPanel } from "./HistogramPanel";
 
 type PanelPaneProps = {
+  store: EditorStore;
   contract?: ParamContract;
   onFormalAnalysis?(analysis: ReturnType<typeof createNeutralAnalysis>, source: "manual"): void;
   histogram?: HistogramState;
@@ -23,8 +25,8 @@ const EMPTY_HISTOGRAM: HistogramState = Object.freeze({
   status: "idle", data: null, signature: null, error: null,
 });
 
-export function PanelPane({ contract, onFormalAnalysis, histogram = EMPTY_HISTOGRAM, imageInfo = null }: PanelPaneProps) {
-  const editor = useEditorState();
+export function PanelPane({ store, contract, onFormalAnalysis, histogram = EMPTY_HISTOGRAM, imageInfo = null }: PanelPaneProps) {
+  const editor = useEditorState(store);
   const analysis = editor.displayAnalysis;
   const pending = editor.pendingPreview !== null;
   const locked = pending || editor.activeAiRequestId !== null;
@@ -41,7 +43,7 @@ export function PanelPane({ contract, onFormalAnalysis, histogram = EMPTY_HISTOG
           rule={requireRule(contract, path)}
           value={analysis.basic[field]}
           disabled={locked}
-          onChange={(value) => !locked && editorStore.previewFragment(
+          onChange={(value) => !locked && store.previewFragment(
             "basic", { ...analysis.basic, [field]: value },
           )}
         />;
@@ -50,16 +52,16 @@ export function PanelPane({ contract, onFormalAnalysis, histogram = EMPTY_HISTOG
     if (groupId === "hsl") return <HslMixer
       contract={contract}
       value={analysis.hsl}
-      onChange={(value) => !locked && editorStore.previewFragment("hsl", value)}
+      onChange={(value) => !locked && store.previewFragment("hsl", value)}
     />;
     if (groupId === "tone-curve") return <ToneCurve
       value={analysis.tone_curve}
-      onChange={(value) => !locked && editorStore.previewFragment("tone_curve", value)}
+      onChange={(value) => !locked && store.previewFragment("tone_curve", value)}
     />;
     if (groupId === "color-grading") return <ColorGradingWheels
       contract={contract}
       value={analysis.color_grading}
-      onChange={(value) => !locked && editorStore.previewFragment("color_grading", value)}
+      onChange={(value) => !locked && store.previewFragment("color_grading", value)}
     />;
     return EFFECT_CONTROLS.map(({ path, label }) => {
       const field = path.slice("effects.".length) as keyof EffectsAnalysis;
@@ -69,7 +71,7 @@ export function PanelPane({ contract, onFormalAnalysis, histogram = EMPTY_HISTOG
         rule={requireRule(contract, path)}
         value={analysis.effects[field]}
         disabled={locked}
-        onChange={(value) => !locked && editorStore.previewFragment(
+        onChange={(value) => !locked && store.previewFragment(
           "effects", { ...analysis.effects, [field]: value },
         )}
       />;
@@ -88,9 +90,9 @@ export function PanelPane({ contract, onFormalAnalysis, histogram = EMPTY_HISTOG
           disabled={!editor.analysis || !contract || locked}
           onClick={() => {
             if (!contract) return;
-            editorStore.setFactor(1);
+            store.setFactor(1);
             const neutral = createNeutralAnalysis(contract);
-            editorStore.commitAnalysis(neutral, "manual");
+            store.commitAnalysis(neutral, "manual");
             onFormalAnalysis?.(neutral, "manual");
           }}
         >重置</button>
@@ -101,7 +103,7 @@ export function PanelPane({ contract, onFormalAnalysis, histogram = EMPTY_HISTOG
       <StrengthSlider
         factor={editor.factor}
         disabled={!editor.analysis || locked}
-        onChange={editorStore.setFactor}
+        onChange={store.setFactor}
       />
 
       {analysis && <AnalysisBrief analysis={analysis} />}

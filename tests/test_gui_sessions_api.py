@@ -5,9 +5,13 @@ import json
 from looklift.gui import api
 
 
-def _call(method: str, pattern: str, payload=None, **params):
+def _call(method: str, pattern: str, payload=None, query=None, **params):
     body = None if payload is None else json.dumps(payload).encode()
-    return api.ROUTES[(method, pattern)]({"params": params, "body": body, "query": {}})
+    return api.ROUTES[(method, pattern)]({
+        "params": params,
+        "body": body,
+        "query": query or {},
+    })
 
 
 def test_session_create_commit_and_failed_messages(tmp_path, sample_analysis):
@@ -70,6 +74,28 @@ def test_creating_same_photo_resumes_session(tmp_path, sample_analysis):
     _, first = _call("POST", "/api/sessions", payload)
     _, second = _call("POST", "/api/sessions", payload)
     assert second["id"] == first["id"]
+
+
+def test_recent_sessions_route_returns_bounded_summaries(tmp_path, sample_analysis):
+    photo = tmp_path / "photo.jpg"
+    photo.write_bytes(b"jpeg")
+    _call("POST", "/api/sessions", {"path": str(photo), "initial_analysis": sample_analysis})
+
+    status, body = _call("GET", "/api/sessions", query={"limit": "1"})
+
+    assert status == 200
+    assert len(body["sessions"]) == 1
+    assert body["sessions"][0]["display_name"] == "photo.jpg"
+    assert body["sessions"][0]["source_available"] is True
+    assert "image_path" not in body["sessions"][0]
+
+
+def test_recent_sessions_route_validates_limit():
+    for limit in ("0", "51", "abc"):
+        status, body = _call("GET", "/api/sessions", query={"limit": limit})
+
+        assert status == 400
+        assert "limit" in body["error"]
 
 
 def test_session_io_error_does_not_leak_local_path(monkeypatch, tmp_path, sample_analysis):

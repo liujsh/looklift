@@ -60,6 +60,16 @@ class SessionSnapshot:
     current_analysis: dict
 
 
+@dataclass(frozen=True)
+class SessionSummary:
+    id: str
+    display_name: str
+    updated_at: str
+    current_version_id: str
+    summary: str
+    source_available: bool
+
+
 class SessionStore:
     """每个方法使用独立连接，适配 ThreadingHTTPServer 的多线程请求。"""
 
@@ -202,6 +212,33 @@ class SessionStore:
         return SessionSnapshot(
             session["id"], session["image_path"], session["created_at"], session["updated_at"],
             messages, versions, current_id, current_version.analysis,
+        )
+
+    def list_recent(self, limit: int = 8) -> tuple[SessionSummary, ...]:
+        """返回最近正式会话的只读摘要，不暴露源文件绝对路径。"""
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 50:
+            raise ValueError("limit 必须是 1 到 50 的整数")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT sessions.id, sessions.image_path, sessions.updated_at,
+                          current.version_id AS current_version_id, versions.summary
+                   FROM edit_sessions AS sessions
+                   JOIN session_current_versions AS current ON current.session_id = sessions.id
+                   JOIN edit_versions AS versions ON versions.id = current.version_id
+                   ORDER BY sessions.updated_at DESC, sessions.id ASC
+                   LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return tuple(
+            SessionSummary(
+                id=row["id"],
+                display_name=Path(row["image_path"]).name,
+                updated_at=row["updated_at"],
+                current_version_id=row["current_version_id"],
+                summary=row["summary"],
+                source_available=Path(row["image_path"]).is_file(),
+            )
+            for row in rows
         )
 
     def _initialize(self) -> None:
