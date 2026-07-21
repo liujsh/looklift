@@ -741,6 +741,14 @@ def _get_library_roots(ctx: dict) -> tuple[int, dict]:
     return 200, {"roots": [{"id": root.id, "path": root.path} for root in roots]}
 
 
+def _delete_library_root(ctx: dict) -> tuple[int, dict]:
+    try:
+        LibraryStore().remove_root(ctx["params"]["id"])
+    except KeyError:
+        return 404, {"error": "图库根不存在"}
+    return 200, {"ok": True}
+
+
 def _post_library_scan(ctx: dict) -> tuple[int, dict]:
     try:
         result = LibraryStore().scan_root(ctx["params"]["id"])
@@ -788,6 +796,7 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("POST", "/api/sessions/<id>/messages"): _record_session_messages,
     ("POST", "/api/library/roots"): _post_library_roots,
     ("GET", "/api/library/roots"): _get_library_roots,
+    ("DELETE", "/api/library/roots/<id>"): _delete_library_root,
     ("POST", "/api/library/roots/<id>/scan"): _post_library_scan,
     ("GET", "/api/library/items"): _get_library_items,
     ("PUT", "/api/library/items/<id>/tags"): _put_library_item_tags,

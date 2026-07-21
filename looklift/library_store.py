@@ -121,6 +121,11 @@ class LibraryStore:
             rows = connection.execute("SELECT id, path FROM library_roots ORDER BY path COLLATE NOCASE").fetchall()
         return tuple(LibraryRoot(row["id"], row["path"]) for row in rows)
 
+    def remove_root(self, root_id: str) -> None:
+        with self._connect() as connection, connection:
+            if connection.execute("DELETE FROM library_roots WHERE id = ?", (root_id,)).rowcount == 0:
+                raise KeyError(root_id)
+
     def set_tags(self, item_id: str, tags: list[str]) -> None:
         cleaned = sorted({tag.strip() for tag in tags if tag.strip()})
         with self._connect() as connection, connection:

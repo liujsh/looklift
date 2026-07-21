@@ -37,6 +37,22 @@ def test_tags_and_keyword_search_are_combined(tmp_path):
     assert store.list_items(tag="夜景") == ()
 
 
+def test_remove_root_only_removes_index_not_source_files(tmp_path):
+    root = tmp_path / "图库"
+    root.mkdir()
+    photo = root / "保留.jpg"
+    photo.write_bytes(b"jpeg")
+    store = LibraryStore(tmp_path / "library.db")
+    library_root = store.add_root(root)
+    store.scan_root(library_root.id)
+
+    store.remove_root(library_root.id)
+
+    assert photo.is_file()
+    assert store.list_roots() == ()
+    assert store.list_items() == ()
+
+
 def test_thumbnail_service_creates_bounded_jpeg_and_keeps_raw_as_placeholder(tmp_path):
     source = tmp_path / "source.jpg"
     Image.new("RGB", (1600, 800), "red").save(source)
