@@ -113,3 +113,32 @@ def test_session_io_error_does_not_leak_local_path(monkeypatch, tmp_path, sample
     assert status == 500
     assert "secret" not in body["error"]
     assert "数据库" in body["error"]
+
+
+def test_library_root_scan_and_search_routes(tmp_path, monkeypatch):
+    monkeypatch.setattr(api.config, "CONFIG_PATH", tmp_path / "profile" / "config.toml")
+    root = tmp_path / "图库"
+    root.mkdir()
+    (root / "海边.jpg").write_bytes(b"jpeg")
+    status, created = _call("POST", "/api/library/roots", {"path": str(root)})
+    assert status == 200
+    status, scanned = _call("POST", "/api/library/roots/<id>/scan", id=created["id"])
+    assert scanned["added"] == 1
+    status, items = _call("GET", "/api/library/items", query={"keyword": "海边"})
+    assert status == 200
+    assert items["items"][0]["display_name"] == "海边.jpg"
+
+
+def test_library_tag_route_updates_searchable_tags(tmp_path, monkeypatch):
+    monkeypatch.setattr(api.config, "CONFIG_PATH", tmp_path / "profile" / "config.toml")
+    root = tmp_path / "图库"
+    root.mkdir()
+    (root / "胶片.jpg").write_bytes(b"jpeg")
+    _, created = _call("POST", "/api/library/roots", {"path": str(root)})
+    _call("POST", "/api/library/roots/<id>/scan", id=created["id"])
+    _, items = _call("GET", "/api/library/items")
+
+    status, _ = _call("PUT", "/api/library/items/<id>/tags", {"tags": ["旅行", "胶片"]}, id=items["items"][0]["id"])
+    assert status == 200
+    _, tagged = _call("GET", "/api/library/items", query={"tag": "胶片"})
+    assert [item["display_name"] for item in tagged["items"]] == ["胶片.jpg"]

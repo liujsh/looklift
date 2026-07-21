@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .. import ai_proxy, analyzer, chat, config, intensity, report, xmp_writer
+from ..library_store import LibraryStore
 from ..render import contract as render_contract
 from ..session_store import DatabaseRecoveryRequired, SessionSnapshot, SessionStore
 from . import lookstore
@@ -724,6 +725,50 @@ def _record_session_messages(ctx: dict) -> tuple[int, dict]:
     return 200, _snapshot_payload(snapshot)
 
 
+def _post_library_roots(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    try:
+        root = LibraryStore().add_root(Path(payload.get("path", "")))
+    except (OSError, ValueError):
+        return 400, {"error": "图库根目录无效或不存在"}
+    return 200, {"id": root.id, "path": root.path}
+
+
+def _get_library_roots(ctx: dict) -> tuple[int, dict]:
+    roots = LibraryStore().list_roots()
+    return 200, {"roots": [{"id": root.id, "path": root.path} for root in roots]}
+
+
+def _post_library_scan(ctx: dict) -> tuple[int, dict]:
+    try:
+        result = LibraryStore().scan_root(ctx["params"]["id"])
+    except KeyError:
+        return 404, {"error": "图库根不存在"}
+    return 200, {"added": result.added, "updated": result.updated, "missing": result.missing}
+
+
+def _get_library_items(ctx: dict) -> tuple[int, dict]:
+    query = ctx.get("query", {})
+    items = LibraryStore().list_items(query.get("keyword", ""), query.get("tag", ""))
+    return 200, {"items": [{"id": item.id, "path": item.path, "display_name": item.display_name, "available": item.available} for item in items]}
+
+
+def _put_library_item_tags(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    tags = payload.get("tags")
+    if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+        return 400, {"error": "tags 必须是字符串数组"}
+    try:
+        LibraryStore().set_tags(ctx["params"]["id"], tags)
+    except KeyError:
+        return 404, {"error": "图库项目不存在"}
+    return 200, {"ok": True}
+
+
 ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/ping"): _ping,
     ("GET", "/api/param-contract"): _param_contract,
@@ -741,6 +786,11 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/sessions/<id>"): _get_session,
     ("POST", "/api/sessions/<id>/commit"): _commit_session,
     ("POST", "/api/sessions/<id>/messages"): _record_session_messages,
+    ("POST", "/api/library/roots"): _post_library_roots,
+    ("GET", "/api/library/roots"): _get_library_roots,
+    ("POST", "/api/library/roots/<id>/scan"): _post_library_scan,
+    ("GET", "/api/library/items"): _get_library_items,
+    ("PUT", "/api/library/items/<id>/tags"): _put_library_item_tags,
     ("POST", "/api/looks"): _post_looks,
     ("GET", "/api/looks"): _get_looks,
     ("GET", "/api/looks/<name>"): _get_look,

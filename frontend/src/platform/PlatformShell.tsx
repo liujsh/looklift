@@ -12,6 +12,7 @@ import { createNeutralAnalysis } from "../panel/contractModel";
 import { chooseBrowserImageFile, nativeImageChooser, runQuickEdit } from "./quickEdit";
 import { CloseStudioDialog, type CloseDialogPhase } from "./CloseStudioDialog";
 import { SettingsPage } from "./SettingsPage";
+import { LibraryPage } from "./LibraryPage";
 
 type PlatformShellProps = {
   client: LookliftClient;
@@ -166,7 +167,7 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
       <section className="platform-content" inert={closeDialog ? true : undefined}>
         {shellError && <div className="platform-error" role="alert">{shellError}</div>}
         {activeTab.kind === "home" && <HomePage client={client} onResume={resume} onQuickEdit={quickEdit} quickEditBusy={quickEditBusy} onFuture={openFuture} />}
-        {activeTab.kind === "platform" && (activeTab.page === "settings" ? <SettingsPage client={client} /> : <ComingSoonPage page={activeTab.page} />)}
+        {activeTab.kind === "platform" && (activeTab.page === "settings" ? <SettingsPage client={client} /> : activeTab.page === "library" ? <LibraryPage client={client} /> : <ComingSoonPage page={activeTab.page} />)}
         {platform.tabs.filter((tab) => tab.kind === "studio").map((tab) => {
           const active = tab.id === platform.activeTabId;
           const runtime = tab.runtime as ReturnType<typeof createStudioRuntime>;

@@ -14,6 +14,8 @@ import type {
   ParamContract,
   PreviewRequest,
   ProviderConfig,
+  LibraryItem,
+  LibraryRoot,
   RecordSessionMessagesRequest,
   SaveLookRequest,
   SidecarStatus,
@@ -94,6 +96,12 @@ export class LookliftClient {
   saveConfig(payload: Partial<Omit<ProviderConfig, "timeout">> & { timeout?: number | string; api_key?: string }): Promise<{ ok: boolean }> {
     return this.json("/api/config", { method: "POST", body: JSON.stringify(payload) });
   }
+
+  libraryRoots(): Promise<{ roots: LibraryRoot[] }> { return this.json("/api/library/roots"); }
+  addLibraryRoot(path: string): Promise<LibraryRoot> { return this.json("/api/library/roots", { method: "POST", body: JSON.stringify({ path }) }); }
+  scanLibraryRoot(id: string): Promise<{ added: number; updated: number; missing: number }> { return this.json(`/api/library/roots/${encodeURIComponent(id)}/scan`, { method: "POST" }); }
+  libraryItems(keyword = "", tag = ""): Promise<{ items: LibraryItem[] }> { return this.json(`/api/library/items?keyword=${encodeURIComponent(keyword)}&tag=${encodeURIComponent(tag)}`); }
+  setLibraryTags(id: string, tags: string[]): Promise<{ ok: boolean }> { return this.json(`/api/library/items/${encodeURIComponent(id)}/tags`, { method: "PUT", body: JSON.stringify({ tags }) }); }
 
   chatStep(payload: ChatStepRequest, signal?: AbortSignal): Promise<ChatStepResponse> {
     return this.json("/api/chat/step", {

@@ -101,6 +101,9 @@ export type ProviderConfig = {
   has_key: boolean;
 };
 
+export type LibraryRoot = { id: string; path: string };
+export type LibraryItem = { id: string; path: string; display_name: string; available: boolean };
+
 export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
