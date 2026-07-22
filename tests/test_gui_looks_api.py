@@ -29,6 +29,7 @@ import pytest
 
 from looklift import intensity, report, xmp_reader, xmp_writer
 from looklift.gui import server as gui_server
+from looklift.library_store import LibraryStore
 
 
 @pytest.fixture
@@ -345,6 +346,26 @@ def test_export_with_sidecar_writes_alongside_raw(running_server, tmp_path, samp
 
     settings = xmp_reader.read_crs_settings(sidecar_path)
     assert "PresetType" not in settings  # sidecar 不是预设
+
+
+def test_sidecar_export_is_summarized_for_indexed_library_item(
+    running_server, tmp_path, sample_analysis
+):
+    _request(running_server, "POST", "/api/looks", {"name": "history", "analysis": sample_analysis})
+    raw = tmp_path / "history.CR3"
+    raw.write_bytes(b"\x00fake")
+    store = LibraryStore()
+    root = store.add_root(tmp_path)
+    store.scan_root(root.id)
+
+    status, _ = _request(
+        running_server, "POST", "/api/looks/history/export", {"sidecar": str(raw)}
+    )
+
+    assert status == 200
+    indexed = LibraryStore().list_items(keyword="history.CR3")[0]
+    assert indexed.export_count == 1
+    assert indexed.last_export_at is not None
 
 
 def test_export_sidecar_missing_raw_returns_400(running_server, tmp_path, sample_analysis):

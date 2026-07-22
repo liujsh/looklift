@@ -104,3 +104,8 @@ def looks_dir() -> Path:
 def session_db_path() -> Path:
     """v2.1 正式会话数据库与配置文件共享应用数据目录。"""
     return CONFIG_PATH.parent / "looklift.db"
+
+
+def library_db_path() -> Path:
+    """v2.3-A 图库索引与会话数据库分离，避免扫描迁移影响正式编辑会话。"""
+    return CONFIG_PATH.parent / "library.db"
