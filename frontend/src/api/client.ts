@@ -14,8 +14,9 @@ import type {
   ParamContract,
   PreviewRequest,
   ProviderConfig,
-  LibraryItem,
+  LibraryItemsPage,
   LibraryRoot,
+  LibraryScanTask,
   RecordSessionMessagesRequest,
   SaveLookRequest,
   SidecarStatus,
@@ -97,12 +98,49 @@ export class LookliftClient {
     return this.json("/api/config", { method: "POST", body: JSON.stringify(payload) });
   }
 
-  libraryRoots(): Promise<{ roots: LibraryRoot[] }> { return this.json("/api/library/roots"); }
-  addLibraryRoot(path: string): Promise<LibraryRoot> { return this.json("/api/library/roots", { method: "POST", body: JSON.stringify({ path }) }); }
-  removeLibraryRoot(id: string): Promise<{ ok: boolean }> { return this.json(`/api/library/roots/${encodeURIComponent(id)}`, { method: "DELETE" }); }
-  scanLibraryRoot(id: string): Promise<{ added: number; updated: number; missing: number }> { return this.json(`/api/library/roots/${encodeURIComponent(id)}/scan`, { method: "POST" }); }
-  libraryItems(keyword = "", tag = ""): Promise<{ items: LibraryItem[] }> { return this.json(`/api/library/items?keyword=${encodeURIComponent(keyword)}&tag=${encodeURIComponent(tag)}`); }
-  setLibraryTags(id: string, tags: string[]): Promise<{ ok: boolean }> { return this.json(`/api/library/items/${encodeURIComponent(id)}/tags`, { method: "PUT", body: JSON.stringify({ tags }) }); }
+  libraryRoots(): Promise<{ roots: LibraryRoot[] }> {
+    return this.json("/api/library/roots");
+  }
+
+  addLibraryRoot(path: string): Promise<LibraryRoot> {
+    return this.json("/api/library/roots", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    });
+  }
+
+  removeLibraryRoot(id: string): Promise<{ ok: boolean }> {
+    return this.json(`/api/library/roots/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
+  scanLibraryRoot(id: string): Promise<{ task_id: string }> {
+    return this.json(`/api/library/roots/${encodeURIComponent(id)}/scan`, { method: "POST" });
+  }
+
+  libraryScan(id: string): Promise<LibraryScanTask> {
+    return this.json(`/api/library/scans/${encodeURIComponent(id)}`);
+  }
+
+  cancelLibraryScan(id: string): Promise<{ ok: boolean }> {
+    return this.json(`/api/library/scans/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+  }
+
+  libraryItems(keyword = "", tag = "", page = 1, pageSize = 48): Promise<LibraryItemsPage> {
+    return this.json(
+      `/api/library/items?keyword=${encodeURIComponent(keyword)}&tag=${encodeURIComponent(tag)}&page=${page}&page_size=${pageSize}`,
+    );
+  }
+
+  setLibraryTags(id: string, tags: string[]): Promise<{ ok: boolean }> {
+    return this.json(`/api/library/items/${encodeURIComponent(id)}/tags`, {
+      method: "PUT",
+      body: JSON.stringify({ tags }),
+    });
+  }
+
+  revealLibraryItem(id: string): Promise<{ ok: boolean }> {
+    return this.json(`/api/library/items/${encodeURIComponent(id)}/reveal`, { method: "POST" });
+  }
 
   chatStep(payload: ChatStepRequest, signal?: AbortSignal): Promise<ChatStepResponse> {
     return this.json("/api/chat/step", {

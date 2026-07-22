@@ -221,6 +221,37 @@ describe("LookliftClient", () => {
     expect(queue.requests[0].url).toBe("http://127.0.0.1:9/api/sessions?limit=3");
   });
 
+  it("覆盖图库分页、异步扫描、标签和 Explorer 端点", async () => {
+    const queue = responseQueue([
+      Response.json({ roots: [] }),
+      Response.json({ task_id: "scan-1" }, { status: 202 }),
+      Response.json({ status: "running", scanned: 2 }),
+      Response.json({ ok: true }),
+      Response.json({ items: [], total: 0, page: 2, page_size: 24 }),
+      Response.json({ ok: true }),
+      Response.json({ ok: true }),
+    ]);
+    const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
+
+    await client.libraryRoots();
+    await client.scanLibraryRoot("root/1");
+    await client.libraryScan("scan/1");
+    await client.cancelLibraryScan("scan/1");
+    await client.libraryItems("海边", "旅行", 2, 24);
+    await client.setLibraryTags("item/1", ["旅行"]);
+    await client.revealLibraryItem("item/1");
+
+    expect(queue.requests.map((request) => request.url)).toEqual([
+      "http://127.0.0.1:9/api/library/roots",
+      "http://127.0.0.1:9/api/library/roots/root%2F1/scan",
+      "http://127.0.0.1:9/api/library/scans/scan%2F1",
+      "http://127.0.0.1:9/api/library/scans/scan%2F1/cancel",
+      "http://127.0.0.1:9/api/library/items?keyword=%E6%B5%B7%E8%BE%B9&tag=%E6%97%85%E8%A1%8C&page=2&page_size=24",
+      "http://127.0.0.1:9/api/library/items/item%2F1/tags",
+      "http://127.0.0.1:9/api/library/items/item%2F1/reveal",
+    ]);
+  });
+
   it("优先透传后端中文错误，并为非 JSON 和网络错误提供稳定文案", async () => {
     const queue = responseQueue([
       Response.json({ error: "缺少 analysis 字段" }, { status: 400 }),

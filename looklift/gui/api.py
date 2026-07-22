@@ -17,11 +17,12 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable
 
-from .. import ai_proxy, analyzer, chat, config, intensity, report, xmp_writer
+from .. import ai_proxy, analyzer, chat, config, intensity, library_tasks, platform_files, report, xmp_writer
 from ..library_store import LibraryStore
 from ..render import contract as render_contract
 from ..session_store import DatabaseRecoveryRequired, SessionSnapshot, SessionStore
@@ -400,6 +401,10 @@ def _export_look(ctx: dict) -> tuple[int, dict]:
             return 400, {"error": f"RAW 文件不存在：{sidecar}"}
         crs = xmp_writer.analysis_to_crs(analysis)
         out = xmp_writer.write_sidecar(crs, raw_path)
+        try:
+            LibraryStore().record_operation_for_path(raw_path, "sidecar_export", "已导出 RAW sidecar")
+        except (OSError, sqlite3.Error):
+            pass  # 导出成功不应被非关键的图库历史写入失败反转
         return 200, {"sidecar": str(out.resolve())}
 
     out = lookstore.export_preset(looks_dir, name, analysis)
@@ -751,16 +756,58 @@ def _delete_library_root(ctx: dict) -> tuple[int, dict]:
 
 def _post_library_scan(ctx: dict) -> tuple[int, dict]:
     try:
-        result = LibraryStore().scan_root(ctx["params"]["id"])
+        task_id = library_tasks.submit(ctx["params"]["id"])
     except KeyError:
         return 404, {"error": "图库根不存在"}
-    return 200, {"added": result.added, "updated": result.updated, "missing": result.missing}
+    return 202, {"task_id": task_id}
+
+
+def _get_library_scan(ctx: dict) -> tuple[int, dict]:
+    task = library_tasks.get(ctx["params"]["id"])
+    if task is None:
+        return 404, {"error": "图库扫描任务不存在"}
+    return 200, task
+
+
+def _cancel_library_scan(ctx: dict) -> tuple[int, dict]:
+    if not library_tasks.cancel(ctx["params"]["id"]):
+        if library_tasks.get(ctx["params"]["id"]) is None:
+            return 404, {"error": "图库扫描任务不存在"}
+        return 409, {"error": "图库扫描任务已经结束"}
+    return 200, {"ok": True}
 
 
 def _get_library_items(ctx: dict) -> tuple[int, dict]:
     query = ctx.get("query", {})
-    items = LibraryStore().list_items(query.get("keyword", ""), query.get("tag", ""))
-    return 200, {"items": [{"id": item.id, "path": item.path, "display_name": item.display_name, "available": item.available, "thumbnail_path": item.thumbnail_path} for item in items]}
+    try:
+        page = int(query.get("page", "1"))
+        page_size = int(query.get("page_size", "48"))
+        result = LibraryStore().search_items(
+            query.get("keyword", ""), query.get("tag", ""), page=page, page_size=page_size
+        )
+    except (TypeError, ValueError):
+        return 400, {"error": "分页参数无效：page 从 1 开始，page_size 范围为 1 到 100"}
+    try:
+        sessions = SessionStore().summaries_for_paths([item.path for item in result.items])
+    except (OSError, DatabaseRecoveryRequired):
+        sessions = {}
+    return 200, {
+        "items": [_library_item_payload(item, sessions.get(item.path)) for item in result.items],
+        "total": result.total,
+        "page": result.page,
+        "page_size": result.page_size,
+    }
+
+
+def _library_item_payload(item, session) -> dict:
+    payload = asdict(item)
+    payload["tags"] = list(item.tags)
+    payload.update({
+        "session_id": session.id if session else None,
+        "current_version_id": session.current_version_id if session else None,
+        "current_summary": session.summary if session else "",
+    })
+    return payload
 
 
 def _put_library_item_tags(ctx: dict) -> tuple[int, dict]:
@@ -774,6 +821,20 @@ def _put_library_item_tags(ctx: dict) -> tuple[int, dict]:
         LibraryStore().set_tags(ctx["params"]["id"], tags)
     except KeyError:
         return 404, {"error": "图库项目不存在"}
+    return 200, {"ok": True}
+
+
+def _reveal_library_item(ctx: dict) -> tuple[int, dict]:
+    try:
+        item = LibraryStore().get_item(ctx["params"]["id"])
+    except KeyError:
+        return 404, {"error": "图库项目不存在"}
+    if not item.available:
+        return 409, {"error": "原文件已缺失，无法在资源管理器中定位"}
+    try:
+        platform_files.reveal_in_explorer(Path(item.path))
+    except OSError:
+        return 500, {"error": "无法打开 Windows 资源管理器"}
     return 200, {"ok": True}
 
 
@@ -798,8 +859,11 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/library/roots"): _get_library_roots,
     ("DELETE", "/api/library/roots/<id>"): _delete_library_root,
     ("POST", "/api/library/roots/<id>/scan"): _post_library_scan,
+    ("GET", "/api/library/scans/<id>"): _get_library_scan,
+    ("POST", "/api/library/scans/<id>/cancel"): _cancel_library_scan,
     ("GET", "/api/library/items"): _get_library_items,
     ("PUT", "/api/library/items/<id>/tags"): _put_library_item_tags,
+    ("POST", "/api/library/items/<id>/reveal"): _reveal_library_item,
     ("POST", "/api/looks"): _post_looks,
     ("GET", "/api/looks"): _get_looks,
     ("GET", "/api/looks/<name>"): _get_look,

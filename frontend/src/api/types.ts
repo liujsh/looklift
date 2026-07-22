@@ -102,7 +102,34 @@ export type ProviderConfig = {
 };
 
 export type LibraryRoot = { id: string; path: string };
-export type LibraryItem = { id: string; path: string; display_name: string; available: boolean; thumbnail_path: string | null };
+export type LibraryItem = {
+  id: string;
+  path: string;
+  display_name: string;
+  available: boolean;
+  thumbnail_path: string | null;
+  file_size: number;
+  modified_ns: number;
+  width: number | null;
+  height: number | null;
+  file_format: string;
+  metadata: ImageInfo;
+  tags: string[];
+  export_count: number;
+  last_export_at: string | null;
+  session_id: string | null;
+  current_version_id: string | null;
+  current_summary: string;
+};
+export type LibraryItemsPage = { items: LibraryItem[]; total: number; page: number; page_size: number };
+export type LibraryScanTask = {
+  status: "running" | "done" | "cancelled" | "error";
+  message: string | null;
+  result: { added: number; updated: number; missing: number } | null;
+  error: string | null;
+  scanned: number;
+  current: string | null;
+};
 
 export type ChatMessage = {
   role: "user" | "assistant";

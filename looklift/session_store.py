@@ -241,6 +241,34 @@ class SessionStore:
             for row in rows
         )
 
+    def summaries_for_paths(self, paths: list[str]) -> dict[str, SessionSummary]:
+        """批量返回图库当前页对应的最近正式版本摘要。"""
+        normalized = [str(Path(path).resolve()) for path in paths]
+        if not normalized:
+            return {}
+        placeholders = ",".join("?" for _ in normalized)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""SELECT sessions.id, sessions.image_path, sessions.updated_at,
+                           current.version_id AS current_version_id, versions.summary
+                    FROM edit_sessions AS sessions
+                    JOIN session_current_versions AS current ON current.session_id=sessions.id
+                    JOIN edit_versions AS versions ON versions.id=current.version_id
+                    WHERE sessions.image_path IN ({placeholders})""",
+                normalized,
+            ).fetchall()
+        return {
+            row["image_path"]: SessionSummary(
+                id=row["id"],
+                display_name=Path(row["image_path"]).name,
+                updated_at=row["updated_at"],
+                current_version_id=row["current_version_id"],
+                summary=row["summary"],
+                source_available=Path(row["image_path"]).is_file(),
+            )
+            for row in rows
+        }
+
     def _initialize(self) -> None:
         existed = self.path.exists()
         try:
