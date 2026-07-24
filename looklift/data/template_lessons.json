@@ -1,0 +1,26 @@
+{
+  "青橙经典": {
+    "suitable_for": ["旅行与城市街景", "有人物的日落或夜景", "需要强化冷暖层次的画面"],
+    "principles": [
+      "让阴影偏青、亮部和肤色偏暖，用互补色建立清晰层次。",
+      "先控制高光和绿色，再增加蓝橙分离，避免整体饱和度失控。"
+    ],
+    "key_paths": ["basic.highlights", "basic.contrast", "basic.temperature_shift", "color_grading.shadows.hue", "color_grading.highlights.hue", "effects.vignette_amount"]
+  },
+  "柔和胶片": {
+    "suitable_for": ["人像与生活记录", "柔和自然光", "希望降低数码锐利感的照片"],
+    "principles": [
+      "压低反差并抬起暗部，让高光和阴影过渡更接近胶片的宽容感。",
+      "以轻颗粒和克制饱和度提供质感，不模拟任何具体商业胶片预设。"
+    ],
+    "key_paths": ["basic.contrast", "basic.highlights", "basic.blacks", "basic.saturation", "effects.grain_amount", "effects.vignette_amount"]
+  },
+  "清透日系": {
+    "suitable_for": ["自然光人像", "室内生活记录", "明亮低对比的清新画面"],
+    "principles": [
+      "提高整体明度并保留柔和高光，以较轻的阴影形成通透感。",
+      "用轻微暖色和降低部分绿色饱和度保持肤色干净。"
+    ],
+    "key_paths": ["basic.exposure", "basic.shadows", "basic.highlights", "basic.temperature_shift", "basic.vibrance", "effects.grain_amount"]
+  }
+}

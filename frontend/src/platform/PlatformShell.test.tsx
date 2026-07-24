@@ -62,7 +62,7 @@ describe("PlatformShell", () => {
       <PlatformShell client={client} store={store} engineLabel="测试引擎" />,
     );
 
-    expect(html).toContain("只索引原文件，不复制或移动照片。");
+    expect(html).toContain("只建立本地索引，不复制、移动或删除原文件。");
     expect(html).toContain("加入图库");
     expect(html).toContain('data-closable="true"');
     expect(html).not.toContain("128 张");

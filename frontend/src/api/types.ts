@@ -221,6 +221,17 @@ export type LookSummary = {
   readonly: boolean;
 };
 
+export type TemplateCard = {
+  name: string;
+  summary: string;
+  source: "built_in" | "user";
+  readonly: boolean;
+  suitable_for: string[];
+  principles: string[];
+  steps: string[];
+  key_parameters: Array<{ path: string; value: number }>;
+};
+
 export type SaveLookRequest = {
   name: string;
   analysis: Analysis;

@@ -188,6 +188,7 @@ export function EditorShell({
           coordinator={sessionCoordinator}
           providerLabel={providerLabel}
           renderStatus={editor.render.status}
+          client={client}
         />
         <CanvasPane
           active={active}

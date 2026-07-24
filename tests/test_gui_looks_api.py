@@ -251,6 +251,23 @@ def test_get_looks_empty_when_no_looks_dir_content(running_server):
     assert all(entry["source"] == "built_in" for entry in data["looks"])
 
 
+def test_get_templates_exposes_official_teaching_without_parameter_duplication(running_server):
+    status, data = _request(running_server, "GET", "/api/templates")
+
+    assert status == 200
+    cards = data["templates"]
+    assert {card["name"] for card in cards} == {"青橙经典", "柔和胶片", "清透日系"}
+    teal_orange = next(card for card in cards if card["name"] == "青橙经典")
+    assert teal_orange["source"] == "built_in"
+    assert teal_orange["readonly"] is True
+    assert teal_orange["suitable_for"]
+    assert teal_orange["principles"]
+    assert teal_orange["steps"]
+    assert {item["path"] for item in teal_orange["key_parameters"]} >= {
+        "basic.highlights", "basic.contrast",
+    }
+
+
 # ─── GET /api/looks/<name>：详情 ────────────────────────────────────────
 
 

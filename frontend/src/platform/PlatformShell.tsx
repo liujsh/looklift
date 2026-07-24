@@ -13,6 +13,8 @@ import { chooseBrowserImageFile, nativeImageChooser, runQuickEdit } from "./quic
 import { CloseStudioDialog, type CloseDialogPhase } from "./CloseStudioDialog";
 import { SettingsPage } from "./SettingsPage";
 import { LibraryPage } from "./LibraryPage";
+import { TemplatePage } from "./TemplatePage";
+import { applyTemplateToStudio } from "./templateWorkflow";
 
 type PlatformShellProps = {
   client: LookliftClient;
@@ -60,6 +62,14 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
     const existing = store.findStudio(snapshot.id);
     if (existing) store.activateTab(existing.id);
     else store.openStudio(createStudioRuntime(client, snapshot));
+  };
+  const studioTabs = platform.tabs.filter((tab) => tab.kind === "studio");
+  const applyTemplate = async (name: string) => {
+    const tab = studioTabs[studioTabs.length - 1];
+    if (!tab || tab.kind !== "studio") throw new Error("请先打开一张照片");
+    const runtime = tab.runtime as StudioRuntime;
+    await applyTemplateToStudio(client, runtime, name);
+    store.activateTab(tab.id);
   };
   const resume = async (sessionId: string) => {
     setShellError(null);
@@ -167,7 +177,7 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
       <section className="platform-content" inert={closeDialog ? true : undefined}>
         {shellError && <div className="platform-error" role="alert">{shellError}</div>}
         {activeTab.kind === "home" && <HomePage client={client} onResume={resume} onQuickEdit={quickEdit} quickEditBusy={quickEditBusy} onFuture={openFuture} />}
-        {activeTab.kind === "platform" && (activeTab.page === "settings" ? <SettingsPage client={client} /> : activeTab.page === "library" ? <LibraryPage client={client} onOpen={async (path) => {
+        {activeTab.kind === "platform" && (activeTab.page === "settings" ? <SettingsPage client={client} /> : activeTab.page === "templates" ? <TemplatePage client={client} canApply={studioTabs.length > 0} onApply={applyTemplate} /> : activeTab.page === "library" ? <LibraryPage client={client} onOpen={async (path) => {
           if (!contract) throw new Error("参数契约尚未就绪");
           openSnapshot(await client.createSession({ path, initial_analysis: createNeutralAnalysis(contract) }));
         }} /> : <ComingSoonPage page={activeTab.page} />)}

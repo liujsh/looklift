@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { ChatWorkflow, ChatWorkflowState } from "../features/chat/chatWorkflow";
 import type { SessionCoordinator } from "../features/sessions/sessionCoordinator";
-import { ChatPane, submitChatInput } from "./ChatPane";
+import { buildTemplatePrompt, ChatPane, submitChatInput } from "./ChatPane";
 
 function workflow(state: Partial<ChatWorkflowState> = {}): ChatWorkflow {
   const snapshot: ChatWorkflowState = {
@@ -94,5 +94,19 @@ describe("ChatPane", () => {
     const current = workflow();
     await submitChatInput("  提亮一点  ", current);
     expect(current.send).toHaveBeenCalledWith("提亮一点");
+  });
+
+  it("模板附件生成自适应白盒请求，不选模板时保持原消息", () => {
+    expect(buildTemplatePrompt("提亮人物")).toBe("提亮人物");
+    const prompt = buildTemplatePrompt("提亮人物", {
+      template: {
+        name: "柔和胶片", summary: "低反差暖调", source: "built_in", readonly: true,
+        suitable_for: [], principles: [], steps: [], key_parameters: [],
+      },
+      analysis: { basic: { contrast: -12 } } as never,
+    });
+    expect(prompt).toContain("参考模板：柔和胶片");
+    expect(prompt).toContain('"contrast":-12');
+    expect(prompt).toContain("结合当前照片自适应");
   });
 });
