@@ -1,11 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   Analysis,
+  AutomationPlan,
+  AutomationRun,
+  AutomationWorkflow,
   AnalyzeRequest,
   ChatStepRequest,
   ChatStepResponse,
   CommitSessionRequest,
   CreateSessionRequest,
+  CreateAutomationWorkflowRequest,
   EngineProbe,
   ExportLookRequest,
   JsonObject,
@@ -243,6 +247,47 @@ export class LookliftClient {
 
   reportUrl(name: string): string {
     return `${this.baseUrl}/report/${encodeURIComponent(name)}`;
+  }
+
+  async listAutomationWorkflows(): Promise<AutomationWorkflow[]> {
+    const result = await this.json<{ workflows: AutomationWorkflow[] }>("/api/automation/workflows");
+    return result.workflows;
+  }
+
+  createAutomationWorkflow(payload: CreateAutomationWorkflowRequest): Promise<AutomationWorkflow> {
+    return this.json("/api/automation/workflows", { method: "POST", body: JSON.stringify(payload) });
+  }
+
+  deleteAutomationWorkflow(id: string): Promise<{ ok: boolean }> {
+    return this.json(`/api/automation/workflows/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
+  planAutomation(payload: { workflow_id: string; inputs: string[]; output_dir: string }): Promise<AutomationPlan> {
+    return this.json("/api/automation/plans", { method: "POST", body: JSON.stringify(payload) });
+  }
+
+  startAutomationRun(planId: string): Promise<{ run_id: string }> {
+    return this.json("/api/automation/runs", {
+      method: "POST",
+      body: JSON.stringify({ plan_id: planId }),
+    });
+  }
+
+  async listAutomationRuns(): Promise<AutomationRun[]> {
+    const result = await this.json<{ runs: AutomationRun[] }>("/api/automation/runs");
+    return result.runs;
+  }
+
+  automationRun(id: string): Promise<AutomationRun> {
+    return this.json(`/api/automation/runs/${encodeURIComponent(id)}`);
+  }
+
+  cancelAutomationRun(id: string): Promise<{ ok: boolean }> {
+    return this.json(`/api/automation/runs/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+  }
+
+  retryAutomationRun(id: string): Promise<{ run_id: string }> {
+    return this.json(`/api/automation/runs/${encodeURIComponent(id)}/retry`, { method: "POST" });
   }
 
   private async request(
