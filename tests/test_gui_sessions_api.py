@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+from PIL import Image
+
 from looklift.gui import api
 
 
@@ -155,6 +157,44 @@ def test_library_tag_route_updates_searchable_tags(tmp_path, monkeypatch):
     assert tagged["items"][0]["tags"] == ["旅行", "胶片"]
 
 
+def test_library_thumbnail_route_returns_indexed_jpeg(tmp_path, monkeypatch):
+    monkeypatch.setattr(api.config, "CONFIG_PATH", tmp_path / "profile" / "config.toml")
+    root = tmp_path / "图库"
+    root.mkdir()
+    photo = root / "缩略图.jpg"
+    Image.new("RGB", (80, 40), "red").save(photo)
+    from looklift.library_store import LibraryStore
+
+    store = LibraryStore()
+    root_record = store.add_root(root)
+    store.scan_root(root_record.id)
+    item = store.list_items()[0]
+
+    status, data, content_type = _call(
+        "GET", "/api/library/items/<id>/thumbnail", id=item.id
+    )
+
+    assert status == 200
+    assert content_type == "image/jpeg"
+    assert data.startswith(b"\xff\xd8")
+
+
+def test_library_thumbnail_route_rejects_path_outside_thumbnail_store(tmp_path, monkeypatch):
+    secret = tmp_path / "secret.jpg"
+    secret.write_bytes(b"secret")
+
+    class UnsafeStore:
+        def get_item(self, _item_id):
+            return type("Item", (), {"thumbnail_path": str(secret)})()
+
+    monkeypatch.setattr(api, "LibraryStore", UnsafeStore)
+
+    status, body = _call("GET", "/api/library/items/<id>/thumbnail", id="item")
+
+    assert status == 404
+    assert "路径无效" in body["error"]
+
+
 def test_library_items_validate_pagination(tmp_path, monkeypatch):
     monkeypatch.setattr(api.config, "CONFIG_PATH", tmp_path / "profile" / "config.toml")
 
@@ -163,6 +203,41 @@ def test_library_items_validate_pagination(tmp_path, monkeypatch):
 
         assert status == 400
         assert "分页" in body["error"]
+
+
+def test_library_folder_home_then_drill(tmp_path, monkeypatch):
+    monkeypatch.setattr(api.config, "CONFIG_PATH", tmp_path / "profile" / "config.toml")
+    root = tmp_path / "图库"
+    root.mkdir()
+    (root / "顶层.jpg").write_bytes(b"jpeg")
+    sub = root / "子目录"
+    sub.mkdir()
+    (sub / "内层.jpg").write_bytes(b"jpeg")
+    _, created = _call("POST", "/api/library/roots", {"path": str(root)})
+    from looklift.library_store import LibraryStore
+
+    LibraryStore().scan_root(created["id"])
+
+    status, home = _call("GET", "/api/library/folder")
+    assert status == 200
+    assert [f["name"] for f in home["folders"]] == ["图库"]
+    assert home["items"] == []
+
+    status, drilled = _call(
+        "GET", "/api/library/folder", query={"path": str(root.resolve())}
+    )
+    assert status == 200
+    assert {f["name"] for f in drilled["folders"]} == {"子目录"}
+    assert [i["display_name"] for i in drilled["items"]] == ["顶层.jpg"]
+    assert drilled["total"] == 1
+
+
+def test_library_folder_rejects_bad_pagination(tmp_path, monkeypatch):
+    monkeypatch.setattr(api.config, "CONFIG_PATH", tmp_path / "profile" / "config.toml")
+
+    status, body = _call("GET", "/api/library/folder", query={"page": "0"})
+    assert status == 400
+    assert "分页参数无效" in body["error"]
 
 
 def test_library_scan_can_be_cancelled_and_reports_status(monkeypatch):
