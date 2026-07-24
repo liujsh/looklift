@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { LookliftClient } from "../api/client";
-import type { LibraryItem, LibraryRoot, LibraryScanTask } from "../api/types";
+import type { LibraryFolderEntry, LibraryItem, LibraryRoot, LibraryScanTask } from "../api/types";
 import { LibraryCard } from "./LibraryCard";
+import { folderCrumbs } from "./libraryFolderPath";
 import { waitForLibraryScan } from "./libraryWorkflow";
 
 const PAGE_SIZE = 48;
@@ -20,6 +21,8 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
   const [keywordInput, setKeywordInput] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [filters, setFilters] = useState({ keyword: "", tag: "" });
+  const [currentFolder, setCurrentFolder] = useState<string | null>(null);
+  const [folders, setFolders] = useState<LibraryFolderEntry[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -46,11 +49,23 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
     setPage(result.page);
   };
 
+  const browsing = !filters.keyword && !filters.tag;
+
+  const loadFolder = async (folder: string | null, nextPage = 1) => {
+    const view = await client.libraryFolder(folder, nextPage, PAGE_SIZE);
+    setFolders(view.folders);
+    setItems(view.items);
+    setTotal(view.total);
+    setPage(view.page);
+    setCurrentFolder(folder);
+  };
+
   const refresh = async (nextPage = page, nextFilters = filters) => {
     setError("");
+    const browsingNow = !nextFilters.keyword && !nextFilters.tag;
     const [rootResult] = await Promise.all([
       client.libraryRoots(),
-      loadItems(nextPage, nextFilters),
+      browsingNow ? loadFolder(currentFolder, nextPage) : loadItems(nextPage, nextFilters),
     ]);
     setRoots(rootResult.roots);
   };
@@ -146,9 +161,21 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
     const nextFilters = { keyword: keywordInput.trim(), tag: tagInput.trim() };
     setFilters(nextFilters);
     try {
-      await loadItems(1, nextFilters);
+      if (!nextFilters.keyword && !nextFilters.tag) {
+        await loadFolder(currentFolder, 1);
+      } else {
+        await loadItems(1, nextFilters);
+      }
     } catch (reason) {
       setError(message(reason, "图库搜索失败"));
+    }
+  };
+
+  const openFolder = async (folder: string | null) => {
+    try {
+      await loadFolder(folder, 1);
+    } catch (reason) {
+      setError(message(reason, "图库读取失败"));
     }
   };
 
@@ -193,7 +220,8 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const changePage = async (nextPage: number) => {
     try {
-      await loadItems(nextPage);
+      if (browsing) await loadFolder(currentFolder, nextPage);
+      else await loadItems(nextPage);
     } catch (reason) {
       setError(message(reason, "图库翻页失败"));
     }
@@ -218,7 +246,7 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
         </form>
       </section>
 
-      {roots.length > 0 && <section className="library-roots" aria-label="索引文件夹">
+      {browsing && currentFolder === null && roots.length > 0 && <section className="library-roots" aria-label="索引文件夹">
         {roots.map((root) => <div key={root.id}>
           <span title={root.path}>{root.path}</span>
           <button type="button" disabled={Boolean(scan)} onClick={() => void runScan(root.id)}>刷新</button>
@@ -233,7 +261,34 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
       {error && <div className="library-message error" role="alert">{error}</div>}
       {status && <div className="library-message" role="status">{status}</div>}
 
-      {loading ? <p className="library-empty">正在读取图库…</p> : items.length === 0 ? <p className="library-empty">没有符合条件的照片</p> : <div className="library-grid">
+      {browsing && <nav className="library-breadcrumb" aria-label="文件夹路径">
+        {folderCrumbs(currentFolder, roots).map((crumb, index, all) => {
+          const isLast = index === all.length - 1;
+          return isLast
+            ? <span key={crumb.path ?? "home"} aria-current="page">{crumb.label}</span>
+            : <button
+                key={crumb.path ?? "home"}
+                type="button"
+                data-crumb={crumb.path === null ? "home" : crumb.path}
+                onClick={() => void openFolder(crumb.path)}
+              >{crumb.label}</button>;
+        })}
+      </nav>}
+
+      {browsing && folders.length > 0 && <section className="library-folders" aria-label="子文件夹">
+        {folders.map((folder) => <button
+          key={folder.path}
+          type="button"
+          className="library-folder-card"
+          data-folder={folder.path}
+          onClick={() => void openFolder(folder.path)}
+        >
+          <span className="library-folder-name" title={folder.path}>📁 {folder.name}</span>
+          <span className="library-folder-count">{folder.count} 张</span>
+        </button>)}
+      </section>}
+
+      {loading ? <p className="library-empty">正在读取图库…</p> : items.length === 0 && folders.length === 0 ? <p className="library-empty">没有符合条件的照片</p> : <div className="library-grid">
         {items.map((item) => <LibraryCard
           key={item.id}
           item={item}

@@ -136,6 +136,16 @@
 .library-card > footer button:first-child { grid-column: 1 / -1; }
 .library-empty { padding: 64px 20px; color: var(--color-muted); text-align: center; }
 .library-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 7px; margin-top: var(--space-4); color: var(--color-muted); font-size: var(--text-caption); }
+.library-breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; margin: var(--space-3) 0; font-size: var(--text-utility); }
+.library-breadcrumb button { padding: 0.1rem 0.3rem; border: none; color: var(--color-accent); background: none; cursor: pointer; }
+.library-breadcrumb button:hover { text-decoration: underline; }
+.library-breadcrumb span[aria-current="page"] { color: var(--color-ink); font-weight: 600; }
+.library-breadcrumb > :not(:last-child)::after { margin-left: 0.25rem; color: var(--color-muted); content: "›"; }
+.library-folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
+.library-folder-card { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.9rem; border: 1px solid var(--color-line); border-radius: var(--radius-sm); color: var(--color-ink); text-align: left; background: var(--color-paper-raised); box-shadow: var(--shadow-panel); cursor: pointer; }
+.library-folder-card:hover { border-color: var(--color-accent); }
+.library-folder-name { font-weight: 600; }
+.library-folder-count { color: var(--color-muted); font-size: var(--text-utility); }
 .close-studio-dialog { position: fixed; z-index: 100; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; color: var(--color-ink); background: transparent; }
 .dialog-scrim { position: absolute; inset: 0; background: rgb(0 0 0 / 55%); }
 .close-studio-dialog > section { position: relative; width: min(460px, calc(100% - 40px)); margin: 18vh auto 0; padding: 24px; border: 1px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-paper-raised); box-shadow: var(--shadow-panel); }
