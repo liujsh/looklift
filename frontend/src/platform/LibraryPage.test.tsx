@@ -74,6 +74,38 @@ describe("LibraryPage", () => {
     expect(libraryItems).toHaveBeenLastCalledWith("海边", "旅行", 2, 48);
   });
 
+  it("通过鉴权客户端加载缩略图，空摘要显示稳定的已编辑标识", async () => {
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:library-thumbnail"),
+      revokeObjectURL: vi.fn(),
+    });
+    const thumbnailItem = {
+      ...item,
+      thumbnail_path: "C:/用户数据/thumbnails/item.jpg",
+      current_summary: "",
+    };
+    const client = {
+      libraryRoots: vi.fn().mockResolvedValue({ roots: [] }),
+      libraryItems: vi.fn().mockResolvedValue({
+        items: [thumbnailItem], total: 1, page: 1, page_size: 48,
+      }),
+      libraryThumbnail: vi.fn().mockResolvedValue(
+        new Blob(["thumbnail"], { type: "image/jpeg" }),
+      ),
+    };
+
+    await act(async () => {
+      root.render(<LibraryPage client={client as unknown as LookliftClient} onOpen={vi.fn()} />);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(client.libraryThumbnail).toHaveBeenCalledWith("item-1", expect.any(AbortSignal));
+    expect(container.querySelector("img")?.getAttribute("src")).toBe("blob:library-thumbnail");
+    expect(container.textContent).toContain("当前版本 · 已建立 Studio 会话");
+  });
+
   it("缺失文件禁用 Studio 和定位入口", async () => {
     const missing = { ...item, available: false };
     const client = {

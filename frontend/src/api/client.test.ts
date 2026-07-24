@@ -229,6 +229,7 @@ describe("LookliftClient", () => {
       Response.json({ ok: true }),
       Response.json({ items: [], total: 0, page: 2, page_size: 24 }),
       Response.json({ ok: true }),
+      new Response(new Blob(["thumbnail"], { type: "image/jpeg" })),
       Response.json({ ok: true }),
     ]);
     const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
@@ -239,6 +240,7 @@ describe("LookliftClient", () => {
     await client.cancelLibraryScan("scan/1");
     await client.libraryItems("海边", "旅行", 2, 24);
     await client.setLibraryTags("item/1", ["旅行"]);
+    await client.libraryThumbnail("item/1");
     await client.revealLibraryItem("item/1");
 
     expect(queue.requests.map((request) => request.url)).toEqual([
@@ -248,6 +250,7 @@ describe("LookliftClient", () => {
       "http://127.0.0.1:9/api/library/scans/scan%2F1/cancel",
       "http://127.0.0.1:9/api/library/items?keyword=%E6%B5%B7%E8%BE%B9&tag=%E6%97%85%E8%A1%8C&page=2&page_size=24",
       "http://127.0.0.1:9/api/library/items/item%2F1/tags",
+      "http://127.0.0.1:9/api/library/items/item%2F1/thumbnail",
       "http://127.0.0.1:9/api/library/items/item%2F1/reveal",
     ]);
   });

@@ -56,6 +56,12 @@ class _RequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         self._dispatch("POST")
 
+    def do_PUT(self) -> None:
+        self._dispatch("PUT")
+
+    def do_DELETE(self) -> None:
+        self._dispatch("DELETE")
+
     def do_OPTIONS(self) -> None:
         """只为受信 Tauri/Vite origin 回应带自定义令牌头的预检。"""
         path = unquote(urlsplit(self.path).path)
@@ -102,7 +108,7 @@ class _RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", origin)
         self.send_header("Vary", "Origin")
         if preflight:
-            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Looklift-Token")
             self.send_header("Access-Control-Max-Age", "600")
 

@@ -187,6 +187,9 @@ def test_api_cors_allows_tauri_and_dev_origins_but_not_unknown(running_server):
         assert response.status == 204
         assert response.getheader("Access-Control-Allow-Origin") == origin
         assert "X-Looklift-Token" in response.getheader("Access-Control-Allow-Headers")
+        allowed_methods = response.getheader("Access-Control-Allow-Methods")
+        assert "PUT" in allowed_methods
+        assert "DELETE" in allowed_methods
         conn.close()
 
     status, _, _ = _get(
@@ -201,6 +204,24 @@ def test_api_cors_allows_tauri_and_dev_origins_but_not_unknown(running_server):
     response.read()
     assert response.getheader("Access-Control-Allow-Origin") is None
     conn.close()
+
+
+@pytest.mark.parametrize("method", ["PUT", "DELETE"])
+def test_server_dispatches_library_write_methods(running_server, monkeypatch, method):
+    path = f"/api/test-{method.lower()}"
+    monkeypatch.setitem(
+        gui_server.api.ROUTES,
+        (method, path),
+        lambda _ctx: (200, {"method": method}),
+    )
+    conn = http.client.HTTPConnection("127.0.0.1", running_server.server_port, timeout=5)
+    try:
+        conn.request(method, path)
+        response = conn.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read()) == {"method": method}
+    finally:
+        conn.close()
 
 
 def test_engine_probe_route_executes_real_probe_boundary(running_server, monkeypatch):

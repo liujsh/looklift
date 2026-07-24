@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { LookliftClient } from "../api/client";
@@ -29,6 +29,10 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
   const pollController = useRef<AbortController | null>(null);
   const activeScanId = useRef<string | null>(null);
   const scanRunning = useRef(false);
+  const loadThumbnail = useCallback(
+    (target: LibraryItem, signal: AbortSignal) => client.libraryThumbnail(target.id, signal),
+    [client],
+  );
 
   const loadItems = async (nextPage: number, nextFilters = filters) => {
     const result = await client.libraryItems(
@@ -230,7 +234,14 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
       {status && <div className="library-message" role="status">{status}</div>}
 
       {loading ? <p className="library-empty">正在读取图库…</p> : items.length === 0 ? <p className="library-empty">没有符合条件的照片</p> : <div className="library-grid">
-        {items.map((item) => <LibraryCard key={item.id} item={item} onOpen={openStudio} onReveal={reveal} onTags={saveTags} />)}
+        {items.map((item) => <LibraryCard
+          key={item.id}
+          item={item}
+          loadThumbnail={loadThumbnail}
+          onOpen={openStudio}
+          onReveal={reveal}
+          onTags={saveTags}
+        />)}
       </div>}
 
       <footer className="library-pagination">
