@@ -164,6 +164,7 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
       if (!nextFilters.keyword && !nextFilters.tag) {
         await loadFolder(currentFolder, 1);
       } else {
+        setFolders([]);
         await loadItems(1, nextFilters);
       }
     } catch (reason) {
@@ -185,7 +186,8 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
     try {
       await client.setLibraryTags(item.id, next.split(","));
       setStatus("标签已保存");
-      await loadItems(page);
+      if (browsing) await loadFolder(currentFolder, page);
+      else await loadItems(page);
     } catch (reason) {
       setError(message(reason, "标签保存失败"));
     }

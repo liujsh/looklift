@@ -268,4 +268,62 @@ describe("LibraryPage", () => {
     });
     expect(libraryFolder).toHaveBeenLastCalledWith(null, 1, 48);
   });
+
+  it("浏览模式下编辑标签保存后按文件夹视图刷新，不误触全库平铺", async () => {
+    const libraryFolder = vi.fn().mockResolvedValue({
+      folders: [], items: [item], total: 1, page: 1, page_size: 48,
+    });
+    const libraryItems = vi.fn();
+    const setLibraryTags = vi.fn().mockResolvedValue({ ok: true });
+    const client = {
+      libraryRoots: vi.fn().mockResolvedValue({ roots: [{ id: "r1", path: "C:/图库" }] }),
+      libraryItems,
+      libraryFolder,
+      setLibraryTags,
+    };
+    vi.stubGlobal("prompt", vi.fn().mockReturnValue("纪实, 夜景"));
+
+    await act(async () => {
+      root.render(<LibraryPage client={client as unknown as LookliftClient} onOpen={vi.fn()} />);
+      await Promise.resolve(); await Promise.resolve();
+    });
+
+    const buttons = [...container.querySelectorAll("button")];
+    await act(async () => {
+      buttons.find((button) => button.textContent?.includes("编辑标签"))?.click();
+      await Promise.resolve(); await Promise.resolve();
+    });
+
+    expect(setLibraryTags).toHaveBeenCalledWith("item-1", ["纪实", " 夜景"]);
+    expect(libraryFolder).toHaveBeenLastCalledWith(null, 1, 48);
+    expect(libraryItems).not.toHaveBeenCalled();
+  });
+
+  it("文件夹已加载后搜索无结果时显示空态提示", async () => {
+    const libraryFolder = vi.fn().mockResolvedValue({
+      folders: [{ name: "2024", path: "C:/图库/2024", count: 3, cover_item_id: null }],
+      items: [item], total: 1, page: 1, page_size: 48,
+    });
+    const libraryItems = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 48 });
+    const client = {
+      libraryRoots: vi.fn().mockResolvedValue({ roots: [{ id: "r1", path: "C:/图库" }] }),
+      libraryItems, libraryFolder,
+    };
+
+    await act(async () => {
+      root.render(<LibraryPage client={client as unknown as LookliftClient} onOpen={vi.fn()} />);
+      await Promise.resolve(); await Promise.resolve();
+    });
+    expect(container.textContent).toContain("2024");
+
+    const inputs = container.querySelectorAll("input");
+    await act(async () => {
+      changeInput(inputs[1], "不存在的关键字");
+      container.querySelector("form[data-form='search']")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await Promise.resolve(); await Promise.resolve();
+    });
+
+    expect(libraryItems).toHaveBeenLastCalledWith("不存在的关键字", "", 1, 48);
+    expect(container.textContent).toContain("没有符合条件的照片");
+  });
 });
