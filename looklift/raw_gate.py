@@ -202,6 +202,7 @@ def _probe_sample(
         decoded = decoder(sample.path)
         array = np.asarray(decoded.rgb)
         _validate_output(array, decoded)
+        elapsed = time.perf_counter() - started
         try:
             pipeline_ok = bool(pipeline_check(decoded.rgb))
         except Exception as exc:  # noqa: BLE001 —— 管线失败归类为当前样本不兼容
@@ -214,7 +215,6 @@ def _probe_sample(
     except Exception as exc:  # noqa: BLE001 —— 单个坏样本不能中断整份报告
         result["error"] = {"code": "decode_failed", "message": str(exc)}
         return result
-    elapsed = time.perf_counter() - started
     try:
         memory = memory_measure()
     except Exception:  # noqa: BLE001 —— 平台测量失败不能中断其余样本

@@ -1,7 +1,7 @@
 # looklift 设计文档
 
 > 产品定位、用户故事、路线图见 [requirements.md](requirements.md)。本文档记录**已实现**的技术架构与关键设计决策。
-> 未实现迭代的详细设计写在 `docs/versions/`(每迭代一个版本目录,实现后要点回填本文档)。当前:[RAW 可行性门](../versions/raw-gate/)。
+> 未实现迭代的详细设计写在 `docs/versions/`(每迭代一个版本目录,实现后要点回填本文档)。最近完成:[RAW 可行性门](../versions/raw-gate/)。
 
 ## 架构总览
 

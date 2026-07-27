@@ -125,3 +125,30 @@ def test_gate_reports_pipeline_failure_before_derived_coverage(tmp_path):
 def test_resource_peak_memory_units_follow_platform_contract():
     assert raw_gate_runtime._resource_peak_mb(2 * 1024 * 1024, "linux") == 2048.0
     assert raw_gate_runtime._resource_peak_mb(2 * 1024 * 1024 * 1024, "darwin") == 2048.0
+
+
+def test_decode_measurement_excludes_pipeline_check_time(tmp_path, monkeypatch):
+    manifest, _ = _manifest(tmp_path)
+    clock = [0.0]
+
+    def decoder(_path):
+        clock[0] = 2.0
+        return raw_gate.DecodedRaw(
+            rgb=np.zeros((6325, 6325, 3), dtype=np.uint16),
+            orientation="normal",
+            white_balance_checked=True,
+        )
+
+    def pipeline_check(_rgb):
+        clock[0] = 9.0
+        return True
+
+    monkeypatch.setattr(raw_gate.time, "perf_counter", lambda: clock[0])
+    report = raw_gate.run_gate(
+        manifest,
+        decoder=decoder,
+        memory_measure=lambda: 768.0,
+        pipeline_check=pipeline_check,
+    )
+
+    assert report["samples"][0]["decode_ms"] == 2000.0
