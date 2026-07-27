@@ -19,6 +19,10 @@ export function IconSprite() {
         <symbol id="i-add" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
         <symbol id="i-min" viewBox="0 0 24 24"><path d="M5 12h14" /></symbol>
         <symbol id="i-max" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1" /></symbol>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M20 20l-4.3-4.3" /></symbol>
+        <symbol id="i-folder" viewBox="0 0 24 24"><path d="M4 7a1 1 0 0 1 1-1h4.6l2 2H19a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" /></symbol>
+        <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 0 1 13-5.2M19.5 12a7.5 7.5 0 0 1-13 5.2" /><path d="M17.2 4.8v3.6h-3.6" /><path d="M6.8 19.2v-3.6h3.6" /></symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15" /><path d="M9.5 7V5a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v2" /><path d="M6.5 7l1 12.5a1 1 0 0 0 1 .9h7a1 1 0 0 0 1-.9L17.5 7" /><path d="M10.3 11v6M13.7 11v6" /></symbol>
       </defs>
     </svg>
   );
@@ -27,7 +31,8 @@ export function IconSprite() {
 export type IconName =
   | "home" | "library" | "template" | "skill" | "plugin" | "settings"
   | "aperture" | "folder-plus" | "import" | "relocate" | "arrow-right"
-  | "collapse" | "close" | "add" | "min" | "max";
+  | "collapse" | "close" | "add" | "min" | "max"
+  | "search" | "folder" | "refresh" | "trash";
 
 type IconProps = { name: IconName; className?: string };
 
