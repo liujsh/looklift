@@ -42,7 +42,7 @@
 
 - `looklift.raw_gate` 是独立的离线诊断入口，不进入 Studio 运行时；`python -m looklift.raw_gate`
   接受作者提供的 manifest，只读本地 RAW 并输出原子替换的 JSON 报告和中文摘要。
-- rawpy 通过函数内可选导入接入，缺失或 DLL 不可用时报告结构化 `rawpy_unavailable` NO-GO，
+- rawpy 通过可选依赖组 `raw` 与函数内可选导入接入，缺失或 DLL 不可用时报告结构化 `rawpy_unavailable` NO-GO，
   不让 GUI 在导入模块时崩溃。每个样本独立记录解码错误、RGB 形状/位深、方向、白平衡、耗时、
   峰值内存和现有图像管线兼容性。
 - 决策要求样本/相机覆盖、全部样本成功、RGB/方向/白平衡契约、管线检查和性能测量同时通过；

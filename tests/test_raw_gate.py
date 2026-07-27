@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pytest
 
-from looklift import raw_gate
+from looklift import raw_gate, raw_gate_runtime
 
 
 def _manifest(tmp_path, count=5):
@@ -78,6 +78,7 @@ def test_gate_isolates_bad_sample_and_returns_no_go(tmp_path):
     assert failed["status"] == "error"
     assert failed["error"]["code"] == "decode_failed"
     assert sum(item["status"] == "ok" for item in report["samples"]) == 4
+    assert report["reason"] == "sample_failed"
 
 
 def test_missing_rawpy_is_structured_no_go_and_report_is_writable(tmp_path, monkeypatch):
@@ -93,3 +94,34 @@ def test_missing_rawpy_is_structured_no_go_and_report_is_writable(tmp_path, monk
     assert report["reason"] == "rawpy_unavailable"
     assert json.loads(output.read_text(encoding="utf-8"))["decision"] == "NO-GO"
     assert "降级" in raw_gate.render_summary(report)
+
+
+def test_default_pipeline_check_accepts_rawpy_uint16_rgb():
+    rgb = np.full((4, 6, 3), 32768, dtype=np.uint16)
+
+    assert raw_gate.default_pipeline_check(rgb) is True
+
+
+def test_gate_reports_pipeline_failure_before_derived_coverage(tmp_path):
+    manifest, _ = _manifest(tmp_path)
+
+    def decoder(_path):
+        return raw_gate.DecodedRaw(
+            rgb=np.zeros((6325, 6325, 3), dtype=np.uint16),
+            orientation="normal",
+            white_balance_checked=True,
+        )
+
+    report = raw_gate.run_gate(
+        manifest,
+        decoder=decoder,
+        memory_measure=lambda: 768.0,
+        pipeline_check=lambda _rgb: False,
+    )
+
+    assert report["reason"] == "pipeline_incompatible"
+
+
+def test_resource_peak_memory_units_follow_platform_contract():
+    assert raw_gate_runtime._resource_peak_mb(2 * 1024 * 1024, "linux") == 2048.0
+    assert raw_gate_runtime._resource_peak_mb(2 * 1024 * 1024 * 1024, "darwin") == 2048.0

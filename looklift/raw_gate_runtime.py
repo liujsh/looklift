@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import sys
 
 try:
     import resource
@@ -65,6 +66,13 @@ def measure_memory_mb() -> float | None:
         return None
     try:
         value = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        return value / (1024 * 1024) if value > 1024 * 1024 else value / 1024
+        return _resource_peak_mb(value, sys.platform)
     except (AttributeError, OSError):
         return None
+
+
+def _resource_peak_mb(value: float, platform: str) -> float:
+    """把各平台 ru_maxrss 单位统一为 MiB。"""
+
+    divisor = 1024 * 1024 if platform == "darwin" else 1024
+    return value / divisor

@@ -111,15 +111,24 @@ def run_gate(
     )
     failed = [result for result in results if result["status"] != "ok"]
     performance_failed = any(result.get("performance_pass") is False for result in results)
-    if (
+    if failed:
+        error_codes = {
+            result["error"]["code"]
+            for result in failed
+            if isinstance(result.get("error"), dict)
+        }
+        report["reason"] = (
+            "pipeline_incompatible"
+            if "pipeline_incompatible" in error_codes
+            else "sample_failed"
+        )
+    elif (
         len(samples) < MIN_SAMPLES
         or len({sample.camera for sample in samples}) < MIN_SAMPLES
         or not report["coverage"]["has_24mp"]
         or not report["coverage"]["has_40mp"]
     ):
         report["reason"] = "sample_coverage"
-    elif failed:
-        report["reason"] = "sample_failed"
     elif not pipeline_ok:
         report["reason"] = "pipeline_incompatible"
     elif not report["performance"]["measurements_available"]:
@@ -157,10 +166,19 @@ def render_summary(report: dict[str, Any]) -> str:
 
 
 def default_pipeline_check(rgb: Any) -> bool:
-    from PIL import Image
+    from .render import pipeline
 
-    image = Image.fromarray(rgb)
-    return image.mode == "RGB"
+    array = np.asarray(rgb)
+    longest_edge = max(array.shape[:2])
+    stride = max(1, (longest_edge + 511) // 512)
+    proxy = np.ascontiguousarray(array[::stride, ::stride], dtype=np.float32)
+    proxy /= np.float32(np.iinfo(array.dtype).max)
+    rendered = pipeline.render_complete(proxy, {})
+    return (
+        rendered.shape == proxy.shape
+        and rendered.dtype == np.float32
+        and bool(np.isfinite(rendered).all())
+    )
 
 
 def _probe_sample(
