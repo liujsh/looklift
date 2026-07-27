@@ -52,6 +52,7 @@ describe("PlatformShell 集成流程", () => {
         { id: "session-2", display_name: "第二张.jpg", updated_at: "2026-07-20T01:00:00Z", current_version_id: "session-2-v1", summary: "正式版本", source_available: true },
       ]),
       getSession: vi.fn().mockResolvedValue(secondSnapshot),
+      sessionThumbnail: vi.fn().mockResolvedValue(new Blob()),
       config: vi.fn().mockResolvedValue({ configured: true, provider: "mock" }),
       listLooks: vi.fn().mockResolvedValue([]), imageInfo: vi.fn().mockResolvedValue({}),
       preview: vi.fn().mockResolvedValue(new Blob(["preview"], { type: "image/jpeg" })),

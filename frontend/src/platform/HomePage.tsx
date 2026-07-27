@@ -4,6 +4,7 @@ import { Icon } from "./icons";
 
 type RecentSessionClient = {
   recentSessions(limit?: number): Promise<SessionSummary[]>;
+  sessionThumbnail(id: string, signal?: AbortSignal): Promise<Blob>;
 };
 
 export type FutureEntry = "folder" | "device";
@@ -30,6 +31,42 @@ function toneFor(id: string): (typeof THUMB_TONES)[number] {
 
 function frameCode(index: number): string {
   return `A·${String(index + 1).padStart(2, "0")}`;
+}
+
+function useSessionThumbnail(client: RecentSessionClient, session: SessionSummary): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    setUrl(null);
+    if (!session.source_available) return;
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+    void client.sessionThumbnail(session.id, controller.signal)
+      .then((blob) => {
+        if (controller.signal.aborted) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      })
+      .catch(() => undefined);
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [client, session.id, session.source_available]);
+  return url;
+}
+
+function SessionThumb({ client, session, index }: { client: RecentSessionClient; session: SessionSummary; index: number }) {
+  const thumbnailUrl = useSessionThumbnail(client, session);
+  return (
+    <div className="session-thumb-wrap">
+      <span className="sprocket tl" aria-hidden="true" />
+      <span className="sprocket tr" aria-hidden="true" />
+      <div className={`session-thumb ${toneFor(session.id)}`} aria-hidden="true">
+        {thumbnailUrl && <img src={thumbnailUrl} alt="" />}
+      </div>
+      <span className="frame-code">{session.source_available ? frameCode(index) : "—"}</span>
+    </div>
+  );
 }
 
 export function HomePage({ client, onResume, onQuickEdit, quickEditBusy = false, onFuture }: HomePageProps) {
@@ -101,12 +138,7 @@ export function HomePage({ client, onResume, onQuickEdit, quickEditBusy = false,
         {!loading && sessions.length > 0 && <div className="session-cards">
           {sessions.map((session, index) => (
             <article className="session-card" key={session.id} data-available={session.source_available}>
-              <div className="session-thumb-wrap">
-                <span className="sprocket tl" aria-hidden="true" />
-                <span className="sprocket tr" aria-hidden="true" />
-                <div className={`session-thumb ${toneFor(session.id)}`} aria-hidden="true" />
-                <span className="frame-code">{session.source_available ? frameCode(index) : "—"}</span>
-              </div>
+              <SessionThumb client={client} session={session} index={index} />
               <div className="session-meta">
                 <span className="session-name">{session.display_name}</span>
                 <span className={`pill ${session.source_available ? "official" : "missing"}`}>
