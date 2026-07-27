@@ -14,23 +14,29 @@ export function LibraryCard({ item, loadThumbnail, onOpen, onReveal, onTags }: L
   const shooting = shootingInfo(item);
   const thumbnailUrl = useThumbnail(item, loadThumbnail);
   return <article className="library-card" data-available={item.available}>
-    <div className="library-thumbnail">
-      {thumbnailUrl
-        ? <img src={thumbnailUrl} alt="" />
-        : <span>{item.file_format || "图片"}</span>}
+    <div className="library-thumb-wrap">
+      <span className="sprocket tl" aria-hidden="true" />
+      <span className="sprocket tr" aria-hidden="true" />
+      <div className="library-thumb">
+        {thumbnailUrl
+          ? <img src={thumbnailUrl} alt="" />
+          : <span className="library-thumb-fallback" aria-hidden="true">{item.file_format || "图片"}</span>}
+      </div>
     </div>
     <div className="library-card-body">
       <strong title={item.path}>{item.display_name}</strong>
-      <span>{item.available ? `${item.file_format} · ${dimensions} · ${formatBytes(item.file_size)}` : "原文件已缺失"}</span>
-      {shooting && <span>{shooting}</span>}
-      {item.current_version_id && <span>当前版本 · {item.current_summary || "已建立 Studio 会话"}</span>}
-      {item.export_count > 0 && <span>已导出 {item.export_count} 次</span>}
-      <div className="library-tags">{item.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
+      {item.available
+        ? <span className="library-card-line">{item.file_format} · {dimensions} · {formatBytes(item.file_size)}</span>
+        : <span className="pill missing">源文件不可用</span>}
+      {shooting && <span className="library-card-line">{shooting}</span>}
+      {item.current_version_id && <span className="library-card-line">当前版本 · {item.current_summary || "已建立 Studio 会话"}</span>}
+      {item.export_count > 0 && <span className="library-card-line">已导出 {item.export_count} 次</span>}
+      {item.tags.length > 0 && <div className="library-tags">{item.tags.map((tag) => <span key={tag} className="pill tag">{tag}</span>)}</div>}
     </div>
     <footer>
       <button type="button" disabled={!item.available} onClick={() => void onOpen(item)}>进入 Studio</button>
       <button type="button" aria-label="在资源管理器中显示" disabled={!item.available} onClick={() => void onReveal(item)}>定位文件</button>
-      <button type="button" onClick={() => void onTags(item)}>编辑标签</button>
+      <button type="button" className="quiet" onClick={() => void onTags(item)}>编辑标签</button>
     </footer>
   </article>;
 }
