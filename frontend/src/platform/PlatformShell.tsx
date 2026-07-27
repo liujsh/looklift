@@ -7,6 +7,7 @@ import { createStudioRuntime, type StudioRuntime } from "./studioRuntime";
 import { HomePage, type FutureEntry } from "./HomePage";
 import { NavigationRail } from "./NavigationRail";
 import { WorkspaceTabs } from "./WorkspaceTabs";
+import { IconSprite } from "./icons";
 import { ComingSoonPage } from "./ComingSoonPage";
 import { createNeutralAnalysis } from "../panel/contractModel";
 import { chooseBrowserImageFile, nativeImageChooser, runQuickEdit } from "./quickEdit";
@@ -148,6 +149,7 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
 
   return (
     <main className="platform-shell" data-navigation-collapsed={navigationCollapsed}>
+      <IconSprite />
       <WorkspaceTabs
         tabs={platform.tabs}
         activeTabId={platform.activeTabId}

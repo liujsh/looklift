@@ -1,5 +1,6 @@
 import type { WorkspaceTab } from "./platformStore";
 import type { FutureEntry } from "./HomePage";
+import { BrandLogo } from "./icons";
 
 type WorkspaceTabsProps = {
   tabs: readonly WorkspaceTab[];
@@ -15,7 +16,7 @@ type WorkspaceTabsProps = {
 export function WorkspaceTabs({ tabs, activeTabId, onActivate, canClose, onClose, onQuickEdit, quickEditBusy = false, onFuture }: WorkspaceTabsProps) {
   return (
     <header className="workspace-tabs" data-tauri-drag-region>
-      <strong className="platform-brand" data-tauri-drag-region>LookLift</strong>
+      <strong className="platform-brand" data-tauri-drag-region><BrandLogo />LookLift</strong>
       <div className="tab-list" role="tablist" aria-label="工作上下文">
         {tabs.map((tab) => {
           const closable = Boolean(onClose && canClose?.(tab));

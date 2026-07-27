@@ -48,17 +48,23 @@ describe("HomePage", () => {
     expect(container.textContent).toContain("源文件不可用");
 
     const buttons = [...container.querySelectorAll("button")];
+    const cards = [...container.querySelectorAll(".session-card")];
+    const availableCard = cards.find((card) => card.textContent?.includes("可恢复.jpg"));
+    const missingCard = cards.find((card) => card.textContent?.includes("已移动.jpg"));
+    const resumeButton = availableCard?.querySelector(".session-go") as HTMLButtonElement | null;
+    expect(resumeButton?.textContent).toContain("继续");
+
     await act(async () => {
       buttons.find((button) => button.textContent?.includes("快速修图"))?.click();
       buttons.find((button) => button.textContent?.includes("添加文件夹"))?.click();
-      buttons.find((button) => button.textContent?.includes("继续 可恢复.jpg"))?.click();
+      resumeButton?.click();
       await Promise.resolve();
     });
 
     expect(onQuickEdit).toHaveBeenCalledTimes(1);
     expect(onFuture).toHaveBeenCalledWith("folder");
     expect(onResume).toHaveBeenCalledWith("s1");
-    expect(buttons.find((button) => button.textContent?.includes("已移动.jpg"))?.disabled).toBe(true);
+    expect((missingCard?.querySelector("button") as HTMLButtonElement | null)?.disabled).toBe(true);
   });
 
   it("最近会话失败时保留开始入口并允许重试", async () => {

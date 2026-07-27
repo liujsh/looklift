@@ -111,7 +111,8 @@ describe("PlatformShell 集成流程", () => {
 
     await act(async () => { store.activateTab("home"); });
     await act(async () => {
-      ([...container.querySelectorAll("button")].find((button) => button.textContent?.includes("继续 第二张.jpg")) as HTMLButtonElement).click();
+      const card = [...container.querySelectorAll(".session-card")].find((candidate) => candidate.textContent?.includes("第二张.jpg"));
+      (card?.querySelector(".session-go") as HTMLButtonElement).click();
       await Promise.resolve();
     });
     expect(store.getSnapshot().activeTabId).toBe("studio:session-2");
