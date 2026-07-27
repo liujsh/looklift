@@ -29,7 +29,14 @@ describe("HomePage", () => {
   });
 
   it("展示真实开始入口并只允许恢复存在的源文件", async () => {
-    const client = { recentSessions: vi.fn().mockResolvedValue(sessions) };
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:session-thumbnail"),
+      revokeObjectURL: vi.fn(),
+    });
+    const client = {
+      recentSessions: vi.fn().mockResolvedValue(sessions),
+      sessionThumbnail: vi.fn().mockResolvedValue(new Blob(["thumbnail"], { type: "image/jpeg" })),
+    };
     const onResume = vi.fn();
     const onQuickEdit = vi.fn();
     const onFuture = vi.fn();
@@ -39,6 +46,13 @@ describe("HomePage", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+
+    expect(client.sessionThumbnail).toHaveBeenCalledWith("s1", expect.any(AbortSignal));
+    expect(client.sessionThumbnail).not.toHaveBeenCalledWith("s2", expect.anything());
+    const availableThumb = [...container.querySelectorAll(".session-card")]
+      .find((card) => card.textContent?.includes("可恢复.jpg"))
+      ?.querySelector("img");
+    expect(availableThumb?.getAttribute("src")).toBe("blob:session-thumbnail");
 
     expect(container.textContent).toContain("今天想修哪组照片？");
     expect(container.textContent).toContain("添加文件夹");
@@ -73,7 +87,14 @@ describe("HomePage", () => {
       .mockResolvedValueOnce([]);
 
     await act(async () => {
-      root.render(<HomePage client={{ recentSessions }} onResume={vi.fn()} onQuickEdit={vi.fn()} onFuture={vi.fn()} />);
+      root.render(
+        <HomePage
+          client={{ recentSessions, sessionThumbnail: vi.fn().mockResolvedValue(new Blob()) }}
+          onResume={vi.fn()}
+          onQuickEdit={vi.fn()}
+          onFuture={vi.fn()}
+        />,
+      );
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -93,7 +114,10 @@ describe("HomePage", () => {
     await act(async () => {
       root.render(
         <HomePage
-          client={{ recentSessions: vi.fn().mockResolvedValue([]) }}
+          client={{
+            recentSessions: vi.fn().mockResolvedValue([]),
+            sessionThumbnail: vi.fn().mockResolvedValue(new Blob()),
+          }}
           onResume={vi.fn()}
           onQuickEdit={vi.fn()}
           quickEditBusy

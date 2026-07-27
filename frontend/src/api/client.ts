@@ -173,6 +173,10 @@ export class LookliftClient {
     return this.json(`/api/sessions/${encodeURIComponent(id)}`);
   }
 
+  sessionThumbnail(id: string, signal?: AbortSignal): Promise<Blob> {
+    return this.binary(`/api/sessions/${encodeURIComponent(id)}/thumbnail`, { signal });
+  }
+
   commitSession(id: string, payload: CommitSessionRequest): Promise<SessionSnapshot> {
     return this.json(`/api/sessions/${encodeURIComponent(id)}/commit`, {
       method: "POST",
