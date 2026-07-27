@@ -122,6 +122,14 @@ export type LibraryItem = {
   current_summary: string;
 };
 export type LibraryItemsPage = { items: LibraryItem[]; total: number; page: number; page_size: number };
+export type LibraryFolderEntry = { name: string; path: string; count: number; cover_item_id: string | null };
+export type LibraryFolderView = {
+  folders: LibraryFolderEntry[];
+  items: LibraryItem[];
+  total: number;
+  page: number;
+  page_size: number;
+};
 export type LibraryScanTask = {
   status: "running" | "done" | "cancelled" | "error";
   message: string | null;

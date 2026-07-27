@@ -799,6 +799,31 @@ def _get_library_items(ctx: dict) -> tuple[int, dict]:
     }
 
 
+def _get_library_folder(ctx: dict) -> tuple[int, dict]:
+    query = ctx.get("query", {})
+    folder = query.get("path") or None
+    try:
+        page = int(query.get("page", "1"))
+        page_size = int(query.get("page_size", "48"))
+        view = LibraryStore().browse_folder(folder, page=page, page_size=page_size)
+    except (TypeError, ValueError):
+        return 400, {"error": "分页参数无效：page 从 1 开始，page_size 范围为 1 到 100"}
+    try:
+        sessions = SessionStore().summaries_for_paths([item.path for item in view.items])
+    except (OSError, DatabaseRecoveryRequired):
+        sessions = {}
+    return 200, {
+        "folders": [
+            {"name": f.name, "path": f.path, "count": f.count, "cover_item_id": f.cover_item_id}
+            for f in view.folders
+        ],
+        "items": [_library_item_payload(item, sessions.get(item.path)) for item in view.items],
+        "total": view.total,
+        "page": view.page,
+        "page_size": view.page_size,
+    }
+
+
 def _library_item_payload(item, session) -> dict:
     payload = asdict(item)
     payload["tags"] = list(item.tags)
@@ -822,6 +847,23 @@ def _put_library_item_tags(ctx: dict) -> tuple[int, dict]:
     except KeyError:
         return 404, {"error": "图库项目不存在"}
     return 200, {"ok": True}
+
+
+def _get_library_item_thumbnail(ctx: dict) -> tuple[int, bytes, str] | tuple[int, dict]:
+    try:
+        item = LibraryStore().get_item(ctx["params"]["id"])
+    except KeyError:
+        return 404, {"error": "图库项目不存在"}
+    if not item.thumbnail_path:
+        return 404, {"error": "该图片没有可用缩略图"}
+    thumbnail = Path(item.thumbnail_path).resolve()
+    thumbnail_root = (config.library_db_path().parent / "thumbnails").resolve()
+    if not thumbnail.is_relative_to(thumbnail_root):
+        return 404, {"error": "缩略图路径无效，请刷新图库"}
+    try:
+        return 200, thumbnail.read_bytes(), "image/jpeg"
+    except OSError:
+        return 404, {"error": "缩略图文件不存在，请刷新图库"}
 
 
 def _reveal_library_item(ctx: dict) -> tuple[int, dict]:
@@ -862,6 +904,8 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/library/scans/<id>"): _get_library_scan,
     ("POST", "/api/library/scans/<id>/cancel"): _cancel_library_scan,
     ("GET", "/api/library/items"): _get_library_items,
+    ("GET", "/api/library/folder"): _get_library_folder,
+    ("GET", "/api/library/items/<id>/thumbnail"): _get_library_item_thumbnail,
     ("PUT", "/api/library/items/<id>/tags"): _put_library_item_tags,
     ("POST", "/api/library/items/<id>/reveal"): _reveal_library_item,
     ("POST", "/api/looks"): _post_looks,

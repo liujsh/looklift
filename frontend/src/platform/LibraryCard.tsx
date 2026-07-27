@@ -1,27 +1,29 @@
-import { convertFileSrc, isTauri } from "@tauri-apps/api/core";
+import { useEffect, useState } from "react";
 import type { LibraryItem } from "../api/types";
 
 type LibraryCardProps = {
   item: LibraryItem;
+  loadThumbnail(item: LibraryItem, signal: AbortSignal): Promise<Blob>;
   onOpen(item: LibraryItem): Promise<void>;
   onReveal(item: LibraryItem): Promise<void>;
   onTags(item: LibraryItem): Promise<void>;
 };
 
-export function LibraryCard({ item, onOpen, onReveal, onTags }: LibraryCardProps) {
+export function LibraryCard({ item, loadThumbnail, onOpen, onReveal, onTags }: LibraryCardProps) {
   const dimensions = item.width && item.height ? `${item.width} × ${item.height}` : "尺寸未知";
   const shooting = shootingInfo(item);
+  const thumbnailUrl = useThumbnail(item, loadThumbnail);
   return <article className="library-card" data-available={item.available}>
     <div className="library-thumbnail">
-      {item.thumbnail_path && isTauri()
-        ? <img src={convertFileSrc(item.thumbnail_path)} alt="" />
+      {thumbnailUrl
+        ? <img src={thumbnailUrl} alt="" />
         : <span>{item.file_format || "图片"}</span>}
     </div>
     <div className="library-card-body">
       <strong title={item.path}>{item.display_name}</strong>
       <span>{item.available ? `${item.file_format} · ${dimensions} · ${formatBytes(item.file_size)}` : "原文件已缺失"}</span>
       {shooting && <span>{shooting}</span>}
-      {item.current_version_id && <span>当前版本 · {item.current_summary || item.current_version_id}</span>}
+      {item.current_version_id && <span>当前版本 · {item.current_summary || "已建立 Studio 会话"}</span>}
       {item.export_count > 0 && <span>已导出 {item.export_count} 次</span>}
       <div className="library-tags">{item.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
     </div>
@@ -31,6 +33,31 @@ export function LibraryCard({ item, onOpen, onReveal, onTags }: LibraryCardProps
       <button type="button" onClick={() => void onTags(item)}>编辑标签</button>
     </footer>
   </article>;
+}
+
+function useThumbnail(
+  item: LibraryItem,
+  loadThumbnail: LibraryCardProps["loadThumbnail"],
+): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    setUrl(null);
+    if (!item.thumbnail_path) return;
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+    void loadThumbnail(item, controller.signal)
+      .then((blob) => {
+        if (controller.signal.aborted) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      })
+      .catch(() => undefined);
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [item.id, item.thumbnail_path, loadThumbnail]);
+  return url;
 }
 
 function shootingInfo(item: LibraryItem): string {

@@ -14,6 +14,7 @@ import type {
   ParamContract,
   PreviewRequest,
   ProviderConfig,
+  LibraryFolderView,
   LibraryItemsPage,
   LibraryRoot,
   LibraryScanTask,
@@ -131,11 +132,20 @@ export class LookliftClient {
     );
   }
 
+  libraryFolder(path: string | null, page = 1, pageSize = 48): Promise<LibraryFolderView> {
+    const pathQuery = path === null ? "" : `path=${encodeURIComponent(path)}&`;
+    return this.json(`/api/library/folder?${pathQuery}page=${page}&page_size=${pageSize}`);
+  }
+
   setLibraryTags(id: string, tags: string[]): Promise<{ ok: boolean }> {
     return this.json(`/api/library/items/${encodeURIComponent(id)}/tags`, {
       method: "PUT",
       body: JSON.stringify({ tags }),
     });
+  }
+
+  libraryThumbnail(id: string, signal?: AbortSignal): Promise<Blob> {
+    return this.binary(`/api/library/items/${encodeURIComponent(id)}/thumbnail`, { signal });
   }
 
   revealLibraryItem(id: string): Promise<{ ok: boolean }> {
