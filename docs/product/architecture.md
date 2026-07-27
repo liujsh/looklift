@@ -1,7 +1,7 @@
 # looklift 设计文档
 
 > 产品定位、用户故事、路线图见 [requirements.md](requirements.md)。本文档记录**已实现**的技术架构与关键设计决策。
-> 未实现迭代的详细设计写在 `docs/versions/`(每迭代一个版本目录,实现后要点回填本文档)。当前:[v2.3-A](../versions/v2.3-A/)。
+> 未实现迭代的详细设计写在 `docs/versions/`(每迭代一个版本目录,实现后要点回填本文档)。最近完成:[RAW 可行性门](../versions/raw-gate/)。
 
 ## 架构总览
 
@@ -37,6 +37,16 @@
   临时 AI 候选写入图库。
 - React 图库页只消费上述显式契约，负责网格、筛选、分页、标签和缺失状态；进入 Studio 时复用
   `SessionStore.create_or_resume`，已有正式会话按源文件路径恢复，没有时才创建初始版本。
+
+## RAW 可行性门架构实况
+
+- `looklift.raw_gate` 是独立的离线诊断入口，不进入 Studio 运行时；`python -m looklift.raw_gate`
+  接受作者提供的 manifest，只读本地 RAW 并输出原子替换的 JSON 报告和中文摘要。
+- rawpy 通过可选依赖组 `raw` 与函数内可选导入接入，缺失或 DLL 不可用时报告结构化 `rawpy_unavailable` NO-GO，
+  不让 GUI 在导入模块时崩溃。每个样本独立记录解码错误、RGB 形状/位深、方向、白平衡、耗时、
+  峰值内存和现有图像管线兼容性。
+- 决策要求样本/相机覆盖、全部样本成功、RGB/方向/白平衡契约、管线检查和性能测量同时通过；
+  失败时明确锁定 v2.3-B 的“内嵌 JPEG 预览 + XMP sidecar”降级路径。真实相机样本门禁仍由作者执行。
 
 ## v2.2 平台外壳架构实况
 
