@@ -111,7 +111,7 @@
 .section-heading button { border: 0; color: var(--color-muted); background: transparent; cursor: pointer; font-size: 13px; }
 .section-heading button:hover { color: var(--color-accent); }
 
-.session-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 18px; }
+.session-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; margin-top: 18px; }
 .session-card { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-paper-raised); box-shadow: var(--shadow-panel); transition: transform var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
 .session-card:hover { box-shadow: var(--shadow-panel), 0 18px 40px rgba(45, 37, 29, .13); transform: translateY(-3px); }
 .session-card[data-available="false"] { background: var(--color-paper-deep); }
