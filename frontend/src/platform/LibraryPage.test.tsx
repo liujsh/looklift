@@ -197,11 +197,15 @@ describe("LibraryPage", () => {
   });
 
   it("默认浏览模式展示文件夹卡，点击钻进并可用面包屑回退", async () => {
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:folder-cover"),
+      revokeObjectURL: vi.fn(),
+    });
     const libraryFolder = vi
       .fn()
       // 首页
       .mockResolvedValueOnce({
-        folders: [{ name: "2024", path: "C:/图库/2024", count: 3, cover_item_id: null }],
+        folders: [{ name: "2024", path: "C:/图库/2024", count: 3, cover_item_id: "item-1" }],
         items: [], total: 0, page: 1, page_size: 48,
       })
       // 钻进 2024
@@ -218,13 +222,16 @@ describe("LibraryPage", () => {
       libraryRoots: vi.fn().mockResolvedValue({ roots: [{ id: "r1", path: "C:/图库" }] }),
       libraryItems: vi.fn(),
       libraryFolder,
+      libraryThumbnail: vi.fn().mockResolvedValue(new Blob(["cover"], { type: "image/jpeg" })),
     };
 
     await act(async () => {
       root.render(<LibraryPage client={client as unknown as LookliftClient} onOpen={vi.fn()} />);
-      await Promise.resolve(); await Promise.resolve();
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
     });
     expect(libraryFolder).toHaveBeenLastCalledWith(null, 1, 48);
+    expect(client.libraryThumbnail).toHaveBeenCalledWith("item-1", expect.any(AbortSignal));
+    expect(container.querySelector(".library-folder-thumb img")?.getAttribute("src")).toBe("blob:folder-cover");
     expect(container.textContent).toContain("2024");
 
     await act(async () => {

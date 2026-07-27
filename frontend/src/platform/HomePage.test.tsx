@@ -26,6 +26,8 @@ describe("HomePage", () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     container.remove();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("展示真实开始入口并只允许恢复存在的源文件", async () => {

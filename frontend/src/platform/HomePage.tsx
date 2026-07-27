@@ -17,8 +17,7 @@ type HomePageProps = {
   onFuture(entry: FutureEntry): void;
 };
 
-// 暗房占位色调：会话摘要没有真实缩略图，先用暖色渐变 + 印相纸边框顶位，
-// 后续接「按路径出缩略图」接口后替换 .session-thumb 的背景。
+// 真实缩略图不可用时，按会话 ID 使用稳定色调占位。
 const THUMB_TONES = [
   "t-swan", "t-dragon", "t-bird", "t-magpie", "t-duck", "t-leaf", "t-dove", "t-teal",
 ] as const;

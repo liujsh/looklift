@@ -54,7 +54,7 @@ export function BrandLogo({ className }: BrandLogoProps) {
     <svg
       className={className ? `brand-logo ${className}` : "brand-logo"}
       viewBox="0 0 128 128"
-      aria-label="LookLift"
+      aria-hidden="true"
     >
       <rect width="128" height="128" rx="29" fill="#211e1a" />
       <path
