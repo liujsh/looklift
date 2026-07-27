@@ -1,0 +1,441 @@
+<title>LookLift 首页 · 原型</title>
+<style>
+  :root {
+    /* —— 沿用现有暖暗房 token,细化 —— */
+    --canvas: #d7d0c2;
+    --paper: #f2eee5;
+    --raised: #faf7f0;
+    --deep: #e9e2d6;
+    --ink: #211e1a;
+    --ink-soft: #514b44;
+    --muted: #7d746b;
+    --faint: #9f968c;
+    --line: #cec5b8;
+    --line-soft: #ddd5c9;
+    --accent: #b65d3d;
+    --accent-hover: #9f4d32;
+    --accent-soft: #ead6c9;
+    --success: #587b63;
+    --danger: #984a38;
+    /* 签名:暗房深色,用于印相纸边框 / 帧号 */
+    --darkroom: #2a2621;
+    --darkroom-line: #453f38;
+
+    --font-display: "Iowan Old Style", "Palatino Linotype", "Songti SC", Georgia, serif;
+    --font-body: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    --font-data: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+
+    /* —— 字号阶上调:告别 9/10px —— */
+    --t-micro: 11px;
+    --t-caption: 12px;
+    --t-ui: 13px;
+    --t-body: 15px;
+    --t-lead: 17px;
+    --t-title: 25px;
+    --t-hero: clamp(34px, 3.4vw, 46px);
+
+    --r-xs: 4px;
+    --r-sm: 8px;
+    --r-md: 12px;
+    --r-pill: 999px;
+    --shadow-card: 0 1px 2px rgba(45,37,29,.05), 0 10px 26px rgba(45,37,29,.07);
+    --shadow-card-hover: 0 2px 6px rgba(45,37,29,.08), 0 18px 40px rgba(45,37,29,.13);
+    --ease: cubic-bezier(.2,.75,.25,1);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --canvas: #14130f; --paper: #1e1c18; --raised: #262320; --deep: #171512;
+      --ink: #ece5d9; --ink-soft: #c7bfb2; --muted: #938c81; --faint: #6f685f;
+      --line: #37332d; --line-soft: #2c2925; --accent: #d07a55; --accent-hover: #e08a63;
+      --accent-soft: #3a2c23; --darkroom: #0e0d0b; --darkroom-line: #3a352e;
+      --shadow-card: 0 1px 2px rgba(0,0,0,.4), 0 10px 26px rgba(0,0,0,.45);
+      --shadow-card-hover: 0 2px 6px rgba(0,0,0,.5), 0 18px 40px rgba(0,0,0,.55);
+    }
+  }
+  :root[data-theme="light"] {
+    --canvas: #d7d0c2; --paper: #f2eee5; --raised: #faf7f0; --deep: #e9e2d6;
+    --ink: #211e1a; --ink-soft: #514b44; --muted: #7d746b; --faint: #9f968c;
+    --line: #cec5b8; --line-soft: #ddd5c9; --accent: #b65d3d; --accent-soft: #ead6c9;
+    --darkroom: #2a2621; --darkroom-line: #453f38;
+    --shadow-card: 0 1px 2px rgba(45,37,29,.05), 0 10px 26px rgba(45,37,29,.07);
+    --shadow-card-hover: 0 2px 6px rgba(45,37,29,.08), 0 18px 40px rgba(45,37,29,.13);
+  }
+  :root[data-theme="dark"] {
+    --canvas: #14130f; --paper: #1e1c18; --raised: #262320; --deep: #171512;
+    --ink: #ece5d9; --ink-soft: #c7bfb2; --muted: #938c81; --faint: #6f685f;
+    --line: #37332d; --line-soft: #2c2925; --accent: #d07a55; --accent-hover: #e08a63;
+    --accent-soft: #3a2c23; --darkroom: #0e0d0b; --darkroom-line: #3a352e;
+    --shadow-card: 0 1px 2px rgba(0,0,0,.4), 0 10px 26px rgba(0,0,0,.45);
+    --shadow-card-hover: 0 2px 6px rgba(0,0,0,.5), 0 18px 40px rgba(0,0,0,.55);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px 18px 48px; min-height: 100vh;
+    background:
+      radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, var(--accent) 6%, var(--canvas)), var(--canvas) 60%);
+    color: var(--ink); font-family: var(--font-body); font-size: var(--t-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* —— 桌面窗口外壳(仅原型演示用) —— */
+  .app {
+    max-width: 1240px; margin: 0 auto; border: 1px solid var(--line);
+    border-radius: var(--r-md); overflow: hidden; background: var(--paper);
+    box-shadow: 0 24px 70px rgba(30,24,18,.22);
+  }
+  .titlebar {
+    display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px;
+    background: var(--raised); border-bottom: 1px solid var(--line-soft);
+    color: var(--muted); font-size: var(--t-caption);
+  }
+  .titlebar .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+  .titlebar .spacer { flex: 1; }
+  .titlebar .win { width: 26px; text-align: center; color: var(--faint); }
+
+  .tabbar {
+    display: flex; align-items: center; gap: 6px; height: 46px; padding: 0 14px;
+    background: var(--raised); border-bottom: 1px solid var(--line);
+  }
+  .brand { font-family: var(--font-display); font-weight: 600; font-size: var(--t-lead); letter-spacing: .01em; margin-right: 10px; }
+  .tab {
+    display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px;
+    border: 1px solid transparent; border-radius: var(--r-sm); color: var(--ink-soft);
+    font-size: var(--t-ui); cursor: pointer;
+  }
+  .tab .x { color: var(--faint); }
+  .tab[aria-current="true"] { background: var(--paper); border-color: var(--line); box-shadow: inset 0 2px var(--accent); font-weight: 600; }
+  .tab.add { color: var(--muted); padding: 0 10px; }
+
+  .body { display: grid; grid-template-columns: 208px 1fr; min-height: 660px; }
+
+  /* —— 左侧导航栏 —— */
+  .rail { display: flex; flex-direction: column; gap: 3px; padding: 16px 10px; background: var(--raised); border-right: 1px solid var(--line); }
+  .rail-foot { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+  .rail .collapse { display: flex; align-items: center; gap: 11px; width: 100%; min-height: 36px; padding: 8px 11px; border: 0; border-radius: var(--r-sm); color: var(--faint); background: transparent; font: inherit; font-size: var(--t-ui); cursor: pointer; }
+  .rail .collapse .ic { width: 17px; text-align: center; }
+  .rail .collapse:hover { color: var(--ink-soft); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+  .rail a {
+    display: flex; align-items: center; gap: 11px; min-height: 38px; padding: 8px 11px;
+    border-radius: var(--r-sm); color: var(--muted); font-size: var(--t-ui); text-decoration: none; cursor: pointer;
+  }
+  .rail a .ic { width: 17px; text-align: center; opacity: .85; }
+  .rail a:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--ink-soft); }
+  .rail a[aria-current="true"] { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+
+  /* —— 主区域 —— */
+  .main { padding: 40px 44px 44px; overflow: auto; }
+  .eyebrow { font-family: var(--font-data); font-size: var(--t-caption); letter-spacing: .22em; text-transform: uppercase; color: var(--accent); }
+  .hero { max-width: 760px; }
+  .hero h1 { font-family: var(--font-display); font-weight: 500; font-size: var(--t-hero); line-height: 1.08; margin: 12px 0 10px; text-wrap: balance; letter-spacing: -.01em; }
+  .hero p.sub { color: var(--muted); font-size: var(--t-lead); line-height: 1.5; margin: 0; max-width: 52ch; }
+
+  /* —— 操作区:一个主 + 两个次 —— */
+  .actions { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 14px; margin: 30px 0 8px; }
+  .act {
+    display: flex; flex-direction: column; gap: 8px; padding: 18px 18px 16px; text-align: left; cursor: pointer;
+    border: 1px solid var(--line); border-radius: var(--r-md); background: var(--raised);
+    transition: border-color .16s var(--ease), transform .16s var(--ease), box-shadow .16s var(--ease);
+  }
+  .act:hover { transform: translateY(-2px); border-color: var(--accent); box-shadow: var(--shadow-card); }
+  .act .ic { width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent); font-size: 18px; }
+  .act h3 { margin: 4px 0 0; font-family: var(--font-display); font-weight: 600; font-size: var(--t-lead); }
+  .act p { margin: 0; color: var(--muted); font-size: var(--t-ui); line-height: 1.45; }
+  .act .kbd { font-family: var(--font-data); font-size: var(--t-micro); color: var(--faint); letter-spacing: .04em; }
+  .act.primary { background: var(--accent); border-color: var(--accent); color: var(--raised); }
+  .act.primary .ic { background: color-mix(in srgb, #000 14%, var(--accent)); color: var(--accent-soft); }
+  .act.primary h3 { color: #fff; }
+  .act.primary p, .act.primary .kbd { color: var(--accent-soft); }
+  .act.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+  /* —— 继续修图:contact sheet —— */
+  .recent-head { display: flex; align-items: baseline; justify-content: space-between; margin: 40px 0 4px; }
+  .recent-head h2 { font-family: var(--font-display); font-weight: 500; font-size: var(--t-title); margin: 6px 0 0; }
+  .recent-head .all { border: 0; background: none; color: var(--muted); font-size: var(--t-ui); cursor: pointer; }
+  .recent-head .all:hover { color: var(--accent); }
+
+  .sheet { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 18px; }
+  @media (max-width: 1040px) { .sheet { grid-template-columns: repeat(3, 1fr); } .actions { grid-template-columns: 1fr 1fr; } }
+
+  .frame {
+    display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r-sm);
+    background: var(--raised); overflow: hidden; box-shadow: var(--shadow-card);
+    transition: transform .16s var(--ease), box-shadow .16s var(--ease);
+  }
+  .frame:hover { transform: translateY(-3px); box-shadow: var(--shadow-card-hover); }
+
+  /* 印相纸:缩略图坐在暗房深底上,四角有齿孔,左上角帧号 */
+  .thumb-wrap { position: relative; padding: 9px 9px 0; background: var(--darkroom); }
+  .thumb { position: relative; aspect-ratio: 4 / 3; border-radius: 3px; overflow: hidden; box-shadow: 0 1px 0 rgba(255,255,255,.05); }
+  .thumb::after { /* 暗房颗粒 + 暗角 */
+    content: ""; position: absolute; inset: 0;
+    background:
+      radial-gradient(120% 120% at 50% 40%, transparent 55%, rgba(0,0,0,.34)),
+      repeating-linear-gradient(0deg, rgba(255,255,255,.02) 0 1px, transparent 1px 2px);
+    mix-blend-mode: multiply; pointer-events: none;
+  }
+  .code {
+    position: absolute; top: 13px; left: 13px; z-index: 2; padding: 1px 6px; border-radius: 3px;
+    font-family: var(--font-data); font-size: var(--t-micro); letter-spacing: .06em;
+    color: #f0e7da; background: rgba(20,17,13,.55); border: 1px solid rgba(240,231,218,.22);
+  }
+  .perf { position: absolute; bottom: 6px; left: 9px; right: 9px; z-index: 2; display: flex; justify-content: space-between; font-family: var(--font-data); font-size: var(--t-micro); color: rgba(245,238,228,.72); }
+  /* 齿孔 */
+  .sprocket { position: absolute; z-index: 3; width: 5px; height: 5px; border-radius: 1px; background: var(--paper); opacity: .5; }
+  .sprocket.tl { top: 3px; left: 3px; } .sprocket.tr { top: 3px; right: 3px; }
+
+  .frame .meta { display: flex; flex-direction: column; gap: 7px; padding: 12px 13px 13px; }
+  .frame .name { font-weight: 600; font-size: var(--t-ui); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .frame .note { color: var(--muted); font-size: var(--t-caption); line-height: 1.4; min-height: 2.6em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  time { font-family: var(--font-data); font-size: var(--t-micro); color: var(--faint); font-variant-numeric: tabular-nums; }
+
+  .pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: var(--r-pill); font-size: var(--t-micro); font-weight: 600; letter-spacing: .02em; }
+  .pill::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .pill.official { color: var(--success); background: color-mix(in srgb, var(--success) 14%, var(--raised)); }
+  .pill.draft { color: var(--accent); background: var(--accent-soft); }
+  .pill.missing { color: var(--muted); background: color-mix(in srgb, var(--muted) 13%, var(--raised)); }
+
+  .go { padding: 7px 14px; border: 0; border-radius: var(--r-pill); background: var(--accent); color: #fff; font-size: var(--t-caption); font-weight: 600; cursor: pointer; transition: background .14s; }
+  .go:hover { background: var(--accent-hover); }
+  .relocate { padding: 7px 12px; border: 1px solid var(--line); border-radius: var(--r-pill); background: transparent; color: var(--muted); font-size: var(--t-caption); cursor: pointer; }
+  .relocate:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* 缺失原文件:安静,不再是深灰重块 */
+  .frame.missing { background: var(--deep); }
+  .frame.missing .thumb-wrap { filter: grayscale(.75); opacity: .68; }
+
+  /* 各卡的照片色调(原型占位,真实版接缩略图) */
+  .t-swan { background: linear-gradient(160deg, #3a4a52, #14201f 70%); }
+  .t-dragon { background: linear-gradient(160deg, #6f8fa0, #2d4a54 75%); }
+  .t-bird { background: linear-gradient(160deg, #7fa9c4, #34617f 70%); }
+  .t-magpie { background: linear-gradient(155deg, #9fb2c6, #4a5f7c 72%); }
+  .t-duck { background: linear-gradient(160deg, #b79a6a, #5a4a30 72%); }
+  .t-leaf { background: linear-gradient(160deg, #8aa06a, #3f5230 72%); }
+  .t-dove { background: linear-gradient(160deg, #b8a892, #6a5c4a 72%); }
+  .t-teal { background: linear-gradient(160deg, #6aa39c, #2d5450 72%); }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-xs); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+  /* —— 统一线性图标集 —— */
+  .icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; display: block; }
+  .rail a .ic .icon, .rail .collapse .ic .icon { width: 18px; height: 18px; }
+  .act .ic .icon { width: 19px; height: 19px; }
+  .titlebar .win .icon { width: 12px; height: 12px; stroke-width: 1.4; margin: 0 auto; }
+  .tab .x .icon, .tab.add .icon { width: 13px; height: 13px; stroke-width: 1.7; }
+  .all .icon, .go-ic { width: 15px; height: 15px; display: inline-block; vertical-align: -2px; }
+  .brand { display: inline-flex; align-items: center; gap: 9px; }
+  .brand-logo { width: 27px; height: 27px; border-radius: 7px; display: block; box-shadow: 0 2px 7px rgba(30,24,18,.28); }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/></symbol>
+    <symbol id="i-library" viewBox="0 0 24 24"><rect x="7" y="4" width="13" height="13" rx="2"/><path d="M4 8v11a1 1 0 0 0 1 1h11"/><circle cx="11.5" cy="8.2" r="1.2"/><path d="M8 14.5l2.6-2.6 2 2 3-3.4 2.4 2.6"/></symbol>
+    <symbol id="i-template" viewBox="0 0 24 24"><path d="M12 3l8 4.5-8 4.5-8-4.5z"/><path d="M4 12l8 4.5 8-4.5"/><path d="M4 16.3l8 4.5 8-4.5"/></symbol>
+    <symbol id="i-skill" viewBox="0 0 24 24"><path d="M13 3L5 13.5h5l-1 7.5L18 10h-5z"/></symbol>
+    <symbol id="i-plugin" viewBox="0 0 24 24"><path d="M10 4a1.6 1.6 0 0 1 3.1 0c0 .9.6 1.1 1.2 1.1H16a1 1 0 0 1 1 1v1.7c0 .6.2 1.2 1.1 1.2a1.6 1.6 0 0 1 0 3.1c-.9 0-1.1.6-1.1 1.2V16a1 1 0 0 1-1 1h-1.7c-.6 0-1.2.2-1.2 1.1a1.6 1.6 0 0 1-3.1 0c0-.9-.6-1.1-1.2-1.1H6a1 1 0 0 1-1-1v-1.8c0-.6-.2-1.2-1.1-1.2a1.6 1.6 0 0 1 0-3.1c.9 0 1.1-.6 1.1-1.2V6a1 1 0 0 1 1-1h1.8c.6 0 1.2-.2 1.2-1.1z"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"/></symbol>
+    <symbol id="i-aperture" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3l4.6 8M21 12h-9.2M16.6 16.9L12 9M12 21l-4.6-8M3 12h9.2M7.4 7.1L12 15"/></symbol>
+    <symbol id="i-folder-plus" viewBox="0 0 24 24"><path d="M4 7a1 1 0 0 1 1-1h3.6l2 2H19a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M12 11.5v5M9.5 14h5"/></symbol>
+    <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 3v10.5"/><path d="M8 9.5l4 4 4-4"/><path d="M4 15v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+    <symbol id="i-relocate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3.5M12 18v3.5M2.5 12h3.5M18 12h3.5"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-collapse" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M10 4v16"/><path d="M16.5 9.5L14 12l2.5 2.5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-add" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-min" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-max" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+  <div class="titlebar">
+    <span class="dot"></span><span>looklift</span>
+    <span class="spacer"></span>
+    <span class="win"><svg class="icon"><use href="#i-min"/></svg></span>
+    <span class="win"><svg class="icon"><use href="#i-max"/></svg></span>
+    <span class="win"><svg class="icon"><use href="#i-close"/></svg></span>
+  </div>
+
+  <div class="tabbar">
+    <span class="brand"><svg class="brand-logo" viewBox="0 0 128 128" aria-label="LookLift"><rect width="128" height="128" rx="29" fill="#211e1a"/><path d="M38 27v56c0 13 7 20 20 20h8c16 0 24-9 29-21 4-10 8-17 16-21" fill="none" stroke="#f2eee5" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/><path d="M92 83c5-11 10-18 19-22" fill="none" stroke="#c96847" stroke-width="12" stroke-linecap="round"/></svg>LookLift</span>
+    <span class="tab" aria-current="true">首页</span>
+    <span class="tab">我的图库 <span class="x"><svg class="icon"><use href="#i-close"/></svg></span></span>
+    <span class="tab">大师模板 <span class="x"><svg class="icon"><use href="#i-close"/></svg></span></span>
+    <span class="tab add"><svg class="icon"><use href="#i-add"/></svg></span>
+  </div>
+
+  <div class="body">
+    <nav class="rail">
+      <a aria-current="true"><span class="ic"><svg class="icon"><use href="#i-home"/></svg></span> 首页</a>
+      <a><span class="ic"><svg class="icon"><use href="#i-library"/></svg></span> 我的图库</a>
+      <a><span class="ic"><svg class="icon"><use href="#i-template"/></svg></span> 大师模板</a>
+      <a><span class="ic"><svg class="icon"><use href="#i-skill"/></svg></span> 自动化技能</a>
+      <a><span class="ic"><svg class="icon"><use href="#i-plugin"/></svg></span> 插件</a>
+      <a><span class="ic"><svg class="icon"><use href="#i-settings"/></svg></span> 设置与帮助</a>
+      <div class="rail-foot">
+        <button class="collapse"><span class="ic"><svg class="icon"><use href="#i-collapse"/></svg></span> 收起侧栏</button>
+      </div>
+    </nav>
+
+    <main class="main">
+      <p class="eyebrow">LookLift Workspace</p>
+      <div class="hero">
+        <h1>今天想修哪组照片？</h1>
+        <p class="sub">从一张临时照片起手，或钻进已建索引的文件夹。原片始终留在原处——LookLift 只读、不动你的文件。</p>
+      </div>
+
+      <div class="actions">
+        <button class="act primary">
+          <span class="ic"><svg class="icon"><use href="#i-aperture"/></svg></span>
+          <h3>快速修图</h3>
+          <p>选一张照片直接进 Studio，不加入图库。</p>
+          <span class="kbd">拖入照片 · 或 ⌘O</span>
+        </button>
+        <button class="act">
+          <span class="ic"><svg class="icon"><use href="#i-folder-plus"/></svg></span>
+          <h3>添加文件夹</h3>
+          <p>只建立本地索引，不复制、不移动。</p>
+          <span class="kbd">v2.3-A</span>
+        </button>
+        <button class="act">
+          <span class="ic"><svg class="icon"><use href="#i-import"/></svg></span>
+          <h3>从设备导入</h3>
+          <p>安全复制并校验，再加入图库。</p>
+          <span class="kbd">v2.3-B</span>
+        </button>
+      </div>
+
+      <div class="recent-head">
+        <div>
+          <p class="eyebrow">Contact Sheet · 最近</p>
+          <h2>继续修图</h2>
+        </div>
+        <button class="all">查看全部 <svg class="icon go-ic"><use href="#i-arrow-right"/></svg></button>
+      </div>
+
+      <div class="sheet">
+        <article class="frame">
+          <div class="thumb-wrap">
+            <span class="sprocket tl"></span><span class="sprocket tr"></span>
+            <div class="thumb t-swan"></div>
+            <span class="code">A·01</span>
+            <span class="perf"><span>ƒ/5.6</span><span>1/400</span></span>
+          </div>
+          <div class="meta">
+            <span class="name">DSC_0954.jpg</span>
+            <span class="pill official">正式版本</span>
+            <p class="note">压暗背景水面，暖调点亮天鹅羽缘的胶片处理。</p>
+            <div class="row"><time>2026 / 07 / 24</time><button class="go">继续</button></div>
+          </div>
+        </article>
+
+        <article class="frame">
+          <div class="thumb-wrap">
+            <span class="sprocket tl"></span><span class="sprocket tr"></span>
+            <div class="thumb t-dragon"></div>
+            <span class="code">A·02</span>
+            <span class="perf"><span>ƒ/8</span><span>1/250</span></span>
+          </div>
+          <div class="meta">
+            <span class="name">DSC_1419.jpg</span>
+            <span class="pill official">正式版本</span>
+            <p class="note">以冷青阴影和温暖肤色形成清晰对比。</p>
+            <div class="row"><time>2026 / 07 / 24</time><button class="go">继续</button></div>
+          </div>
+        </article>
+
+        <article class="frame">
+          <div class="thumb-wrap">
+            <span class="sprocket tl"></span><span class="sprocket tr"></span>
+            <div class="thumb t-leaf"></div>
+            <span class="code">A·03</span>
+            <span class="perf"><span>ƒ/4</span><span>1/800</span></span>
+          </div>
+          <div class="meta">
+            <span class="name">DSC_1467.jpg</span>
+            <span class="pill draft">草稿</span>
+            <p class="note">抬起黑场、收拢高光并加入细颗粒。</p>
+            <div class="row"><time>2026 / 07 / 21</time><button class="go">继续</button></div>
+          </div>
+        </article>
+
+        <article class="frame">
+          <div class="thumb-wrap">
+            <span class="sprocket tl"></span><span class="sprocket tr"></span>
+            <div class="thumb t-bird"></div>
+            <span class="code">A·04</span>
+            <span class="perf"><span>ƒ/6.3</span><span>1/500</span></span>
+          </div>
+          <div class="meta">
+            <span class="name">DSC_1468.jpg</span>
+            <span class="pill official">正式版本</span>
+            <p class="note">低反差、高明度、轻微冷调的清透日系风格。</p>
+            <div class="row"><time>2026 / 07 / 18</time><button class="go">继续</button></div>
+          </div>
+        </article>
+
+        <article class="frame">
+          <div class="thumb-wrap">
+            <span class="sprocket tl"></span><span class="sprocket tr"></span>
+            <div class="thumb t-magpie"></div>
+            <span class="code">A·05</span>
+            <span class="perf"><span>ƒ/5.6</span><span>1/320</span></span>
+          </div>
+          <div class="meta">
+            <span class="name">DSC_0973.jpg</span>
+            <span class="pill draft">草稿</span>
+            <p class="note">蓝喜鹊的羽色分离与背景虚化增强。</p>
+            <div class="row"><time>2026 / 07 / 18</time><button class="go">继续</button></div>
+          </div>
+        </article>
+
+        <article class="frame">
+          <div class="thumb-wrap">
+            <span class="sprocket tl"></span><span class="sprocket tr"></span>
+            <div class="thumb t-teal"></div>
+            <span class="code">A·06</span>
+            <span class="perf"><span>ƒ/7.1</span><span>1/200</span></span>
+          </div>
+          <div class="meta">
+            <span class="name">DSC_0959.jpg</span>
+            <span class="pill official">正式版本</span>
+            <p class="note">蜻蜓翅膀的通透质感与水色统一。</p>
+            <div class="row"><time>2026 / 07 / 16</time><button class="go">继续</button></div>
+          </div>
+        </article>
+
+        <article class="frame missing">
+          <div class="thumb-wrap">
+            <span class="sprocket tl"></span><span class="sprocket tr"></span>
+            <div class="thumb t-duck"></div>
+            <span class="code">—</span>
+          </div>
+          <div class="meta">
+            <span class="name">DSC_1102.jpg</span>
+            <span class="pill missing">源文件不可用</span>
+            <p class="note">原文件已移动或删除，编辑记录仍保留。</p>
+            <div class="row"><time>2026 / 07 / 12</time><button class="relocate"><svg class="icon go-ic"><use href="#i-relocate"/></svg> 重新定位</button></div>
+          </div>
+        </article>
+
+        <article class="frame missing">
+          <div class="thumb-wrap">
+            <span class="sprocket tl"></span><span class="sprocket tr"></span>
+            <div class="thumb t-dove"></div>
+            <span class="code">—</span>
+          </div>
+          <div class="meta">
+            <span class="name">DSC_1088.jpg</span>
+            <span class="pill missing">源文件不可用</span>
+            <p class="note">原文件已移动或删除，编辑记录仍保留。</p>
+            <div class="row"><time>2026 / 07 / 10</time><button class="relocate"><svg class="icon go-ic"><use href="#i-relocate"/></svg> 重新定位</button></div>
+          </div>
+        </article>
+      </div>
+    </main>
+  </div>
+</div>
