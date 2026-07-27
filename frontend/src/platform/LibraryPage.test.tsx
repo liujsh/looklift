@@ -125,7 +125,7 @@ describe("LibraryPage", () => {
     });
 
     const disabled = [...container.querySelectorAll("button")]
-      .filter((button) => button.textContent?.includes("Studio") || button.textContent?.includes("定位文件"));
+      .filter((button) => ["进入 Studio", "定位文件"].includes(button.getAttribute("aria-label") ?? ""));
     expect(disabled).toHaveLength(2);
     expect(disabled.every((button) => button.disabled)).toBe(true);
   });
@@ -147,10 +147,11 @@ describe("LibraryPage", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    const buttons = [...container.querySelectorAll("button")];
+    const byLabel = (label: string) => [...container.querySelectorAll("button")]
+      .find((button) => button.getAttribute("aria-label") === label);
     await act(async () => {
-      buttons.find((button) => button.textContent?.includes("定位文件"))?.click();
-      buttons.find((button) => button.textContent?.includes("编辑标签"))?.click();
+      byLabel("定位文件")?.click();
+      byLabel("编辑标签")?.click();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -196,11 +197,15 @@ describe("LibraryPage", () => {
   });
 
   it("默认浏览模式展示文件夹卡，点击钻进并可用面包屑回退", async () => {
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:folder-cover"),
+      revokeObjectURL: vi.fn(),
+    });
     const libraryFolder = vi
       .fn()
       // 首页
       .mockResolvedValueOnce({
-        folders: [{ name: "2024", path: "C:/图库/2024", count: 3, cover_item_id: null }],
+        folders: [{ name: "2024", path: "C:/图库/2024", count: 3, cover_item_id: "item-1" }],
         items: [], total: 0, page: 1, page_size: 48,
       })
       // 钻进 2024
@@ -217,13 +222,16 @@ describe("LibraryPage", () => {
       libraryRoots: vi.fn().mockResolvedValue({ roots: [{ id: "r1", path: "C:/图库" }] }),
       libraryItems: vi.fn(),
       libraryFolder,
+      libraryThumbnail: vi.fn().mockResolvedValue(new Blob(["cover"], { type: "image/jpeg" })),
     };
 
     await act(async () => {
       root.render(<LibraryPage client={client as unknown as LookliftClient} onOpen={vi.fn()} />);
-      await Promise.resolve(); await Promise.resolve();
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
     });
     expect(libraryFolder).toHaveBeenLastCalledWith(null, 1, 48);
+    expect(client.libraryThumbnail).toHaveBeenCalledWith("item-1", expect.any(AbortSignal));
+    expect(container.querySelector(".library-folder-thumb img")?.getAttribute("src")).toBe("blob:folder-cover");
     expect(container.textContent).toContain("2024");
 
     await act(async () => {
@@ -288,9 +296,9 @@ describe("LibraryPage", () => {
       await Promise.resolve(); await Promise.resolve();
     });
 
-    const buttons = [...container.querySelectorAll("button")];
     await act(async () => {
-      buttons.find((button) => button.textContent?.includes("编辑标签"))?.click();
+      [...container.querySelectorAll("button")]
+        .find((button) => button.getAttribute("aria-label") === "编辑标签")?.click();
       await Promise.resolve(); await Promise.resolve();
     });
 

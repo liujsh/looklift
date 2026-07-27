@@ -849,6 +849,30 @@ def _put_library_item_tags(ctx: dict) -> tuple[int, dict]:
     return 200, {"ok": True}
 
 
+def _get_session_thumbnail(ctx: dict) -> tuple[int, bytes, str] | tuple[int, dict]:
+    from ..library_thumbnails import ThumbnailService
+
+    try:
+        snapshot = SessionStore().load(ctx["params"]["id"])
+    except (KeyError, OSError, DatabaseRecoveryRequired) as exc:
+        return _session_error(exc)
+    source = Path(snapshot.image_path)
+    if not source.is_file():
+        return 404, {"error": "原文件不可用，无法生成缩略图"}
+    thumbnails_dir = config.library_db_path().parent / "thumbnails"
+    result = ThumbnailService(thumbnails_dir).create(source)
+    if not result.available or result.path is None:
+        return 404, {"error": "无法生成缩略图"}
+    thumbnail = result.path.resolve()
+    thumbnail_root = thumbnails_dir.resolve()
+    if not thumbnail.is_relative_to(thumbnail_root):
+        return 404, {"error": "缩略图路径无效，请刷新图库"}
+    try:
+        return 200, thumbnail.read_bytes(), "image/jpeg"
+    except OSError:
+        return 404, {"error": "缩略图文件不存在，请刷新图库"}
+
+
 def _get_library_item_thumbnail(ctx: dict) -> tuple[int, bytes, str] | tuple[int, dict]:
     try:
         item = LibraryStore().get_item(ctx["params"]["id"])
@@ -897,6 +921,7 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/sessions/<id>"): _get_session,
     ("POST", "/api/sessions/<id>/commit"): _commit_session,
     ("POST", "/api/sessions/<id>/messages"): _record_session_messages,
+    ("GET", "/api/sessions/<id>/thumbnail"): _get_session_thumbnail,
     ("POST", "/api/library/roots"): _post_library_roots,
     ("GET", "/api/library/roots"): _get_library_roots,
     ("DELETE", "/api/library/roots/<id>"): _delete_library_root,

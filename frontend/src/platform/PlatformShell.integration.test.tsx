@@ -52,6 +52,7 @@ describe("PlatformShell 集成流程", () => {
         { id: "session-2", display_name: "第二张.jpg", updated_at: "2026-07-20T01:00:00Z", current_version_id: "session-2-v1", summary: "正式版本", source_available: true },
       ]),
       getSession: vi.fn().mockResolvedValue(secondSnapshot),
+      sessionThumbnail: vi.fn().mockResolvedValue(new Blob()),
       config: vi.fn().mockResolvedValue({ configured: true, provider: "mock" }),
       listLooks: vi.fn().mockResolvedValue([]), imageInfo: vi.fn().mockResolvedValue({}),
       preview: vi.fn().mockResolvedValue(new Blob(["preview"], { type: "image/jpeg" })),
@@ -111,7 +112,8 @@ describe("PlatformShell 集成流程", () => {
 
     await act(async () => { store.activateTab("home"); });
     await act(async () => {
-      ([...container.querySelectorAll("button")].find((button) => button.textContent?.includes("继续 第二张.jpg")) as HTMLButtonElement).click();
+      const card = [...container.querySelectorAll(".session-card")].find((candidate) => candidate.textContent?.includes("第二张.jpg"));
+      (card?.querySelector(".session-go") as HTMLButtonElement).click();
       await Promise.resolve();
     });
     expect(store.getSnapshot().activeTabId).toBe("studio:session-2");

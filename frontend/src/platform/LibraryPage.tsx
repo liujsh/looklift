@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { LookliftClient } from "../api/client";
 import type { LibraryFolderEntry, LibraryItem, LibraryRoot, LibraryScanTask } from "../api/types";
 import { LibraryCard } from "./LibraryCard";
+import { Icon } from "./icons";
 import { folderCrumbs } from "./libraryFolderPath";
 import { waitForLibraryScan } from "./libraryWorkflow";
 
@@ -231,28 +232,31 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
   return (
     <main className="library-page" aria-label="我的图库">
       <header className="library-heading">
-        <div><p className="pane-kicker">LIBRARY</p><h1>我的图库</h1></div>
+        <div>
+          <p className="pane-kicker">LIBRARY</p>
+          <h1>我的图库</h1>
+        </div>
         <p>只建立本地索引，不复制、移动或删除原文件。</p>
       </header>
 
       <section className="library-toolbar" aria-label="图库管理">
         <form onSubmit={add} data-form="add-root">
           <input value={path} onChange={(event) => setPath(event.target.value)} placeholder="输入本地文件夹路径" required />
-          <button type="button" onClick={() => void chooseRoot()}>选择文件夹</button>
-          <button type="submit" disabled={Boolean(scan)}>加入图库</button>
+          <button type="button" onClick={() => void chooseRoot()}><Icon name="folder" className="go-ic" />选择文件夹</button>
+          <button type="submit" className="primary" disabled={Boolean(scan)}><Icon name="folder-plus" className="go-ic" />加入图库</button>
         </form>
         <form onSubmit={search} data-form="search">
           <input value={keywordInput} onChange={(event) => setKeywordInput(event.target.value)} placeholder="搜索文件名或路径" />
           <input value={tagInput} onChange={(event) => setTagInput(event.target.value)} placeholder="标签" />
-          <button type="submit">搜索</button>
+          <button type="submit"><Icon name="search" className="go-ic" />搜索</button>
         </form>
       </section>
 
       {browsing && currentFolder === null && roots.length > 0 && <section className="library-roots" aria-label="索引文件夹">
         {roots.map((root) => <div key={root.id}>
-          <span title={root.path}>{root.path}</span>
-          <button type="button" disabled={Boolean(scan)} onClick={() => void runScan(root.id)}>刷新</button>
-          <button type="button" disabled={Boolean(scan)} onClick={() => void removeRoot(root.id)}>移除索引</button>
+          <span className="library-root-path" title={root.path}><Icon name="folder" className="go-ic" />{root.path}</span>
+          <button type="button" className="quiet" disabled={Boolean(scan)} onClick={() => void runScan(root.id)}><Icon name="refresh" className="go-ic" />刷新</button>
+          <button type="button" className="quiet" disabled={Boolean(scan)} onClick={() => void removeRoot(root.id)}><Icon name="trash" className="go-ic" />移除索引</button>
         </div>)}
       </section>}
 
@@ -278,16 +282,12 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
       </nav>}
 
       {browsing && folders.length > 0 && <section className="library-folders" aria-label="子文件夹">
-        {folders.map((folder) => <button
+        {folders.map((folder) => <FolderCard
           key={folder.path}
-          type="button"
-          className="library-folder-card"
-          data-folder={folder.path}
-          onClick={() => void openFolder(folder.path)}
-        >
-          <span className="library-folder-name" title={folder.path}>📁 {folder.name}</span>
-          <span className="library-folder-count">{folder.count} 张</span>
-        </button>)}
+          folder={folder}
+          client={client}
+          onOpen={() => void openFolder(folder.path)}
+        />)}
       </section>}
 
       {loading ? <p className="library-empty">正在读取图库…</p> : items.length === 0 && folders.length === 0 ? <p className="library-empty">没有符合条件的照片</p> : <div className="library-grid">
@@ -308,6 +308,54 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
       </footer>
     </main>
   );
+}
+
+type FolderCardProps = {
+  folder: LibraryFolderEntry;
+  client: LookliftClient;
+  onOpen(): void;
+};
+
+function FolderCard({ folder, client, onOpen }: FolderCardProps) {
+  const coverUrl = useFolderCover(folder.cover_item_id, client);
+  return (
+    <button type="button" className="library-folder-card" data-folder={folder.path} onClick={onOpen}>
+      <div className="library-folder-thumb-wrap">
+        <span className="sprocket tl" aria-hidden="true" />
+        <span className="sprocket tr" aria-hidden="true" />
+        <div className="library-folder-thumb">
+          {coverUrl ? <img src={coverUrl} alt="" /> : <span className="library-folder-thumb-fallback" aria-hidden="true" />}
+        </div>
+        <span className="library-folder-badge" aria-hidden="true"><Icon name="folder" /></span>
+      </div>
+      <div className="library-folder-meta">
+        <span className="library-folder-name" title={folder.path}>{folder.name}</span>
+        <span className="library-folder-count">{folder.count} 张</span>
+      </div>
+    </button>
+  );
+}
+
+function useFolderCover(coverId: string | null, client: LookliftClient): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    setUrl(null);
+    if (!coverId) return;
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+    void client.libraryThumbnail(coverId, controller.signal)
+      .then((blob) => {
+        if (controller.signal.aborted) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      })
+      .catch(() => undefined);
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [coverId, client]);
+  return url;
 }
 
 function message(reason: unknown, fallback: string): string {
