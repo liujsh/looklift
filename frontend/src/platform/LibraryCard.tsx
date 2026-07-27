@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { LibraryItem } from "../api/types";
+import { Icon } from "./icons";
 
 type LibraryCardProps = {
   item: LibraryItem;
@@ -33,10 +34,16 @@ export function LibraryCard({ item, loadThumbnail, onOpen, onReveal, onTags }: L
       {item.export_count > 0 && <span className="library-card-line">已导出 {item.export_count} 次</span>}
       {item.tags.length > 0 && <div className="library-tags">{item.tags.map((tag) => <span key={tag} className="pill tag">{tag}</span>)}</div>}
     </div>
-    <footer>
-      <button type="button" disabled={!item.available} onClick={() => void onOpen(item)}>进入 Studio</button>
-      <button type="button" aria-label="在资源管理器中显示" disabled={!item.available} onClick={() => void onReveal(item)}>定位文件</button>
-      <button type="button" className="quiet" onClick={() => void onTags(item)}>编辑标签</button>
+    <footer className="library-actions">
+      <button type="button" className="icon-btn primary" data-tip="进入 Studio" aria-label="进入 Studio" disabled={!item.available} onClick={() => void onOpen(item)}>
+        <Icon name="aperture" />
+      </button>
+      <button type="button" className="icon-btn" data-tip="定位文件" aria-label="定位文件" disabled={!item.available} onClick={() => void onReveal(item)}>
+        <Icon name="reveal" />
+      </button>
+      <button type="button" className="icon-btn" data-tip="编辑标签" aria-label="编辑标签" onClick={() => void onTags(item)}>
+        <Icon name="tag" />
+      </button>
     </footer>
   </article>;
 }
