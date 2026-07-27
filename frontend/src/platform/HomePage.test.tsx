@@ -29,7 +29,14 @@ describe("HomePage", () => {
   });
 
   it("展示真实开始入口并只允许恢复存在的源文件", async () => {
-    const client = { recentSessions: vi.fn().mockResolvedValue(sessions) };
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:session-thumbnail"),
+      revokeObjectURL: vi.fn(),
+    });
+    const client = {
+      recentSessions: vi.fn().mockResolvedValue(sessions),
+      sessionThumbnail: vi.fn().mockResolvedValue(new Blob(["thumbnail"], { type: "image/jpeg" })),
+    };
     const onResume = vi.fn();
     const onQuickEdit = vi.fn();
     const onFuture = vi.fn();
@@ -40,6 +47,13 @@ describe("HomePage", () => {
       await Promise.resolve();
     });
 
+    expect(client.sessionThumbnail).toHaveBeenCalledWith("s1", expect.any(AbortSignal));
+    expect(client.sessionThumbnail).not.toHaveBeenCalledWith("s2", expect.anything());
+    const availableThumb = [...container.querySelectorAll(".session-card")]
+      .find((card) => card.textContent?.includes("可恢复.jpg"))
+      ?.querySelector("img");
+    expect(availableThumb?.getAttribute("src")).toBe("blob:session-thumbnail");
+
     expect(container.textContent).toContain("今天想修哪组照片？");
     expect(container.textContent).toContain("添加文件夹");
     expect(container.textContent).toContain("从设备导入");
@@ -48,17 +62,23 @@ describe("HomePage", () => {
     expect(container.textContent).toContain("源文件不可用");
 
     const buttons = [...container.querySelectorAll("button")];
+    const cards = [...container.querySelectorAll(".session-card")];
+    const availableCard = cards.find((card) => card.textContent?.includes("可恢复.jpg"));
+    const missingCard = cards.find((card) => card.textContent?.includes("已移动.jpg"));
+    const resumeButton = availableCard?.querySelector(".session-go") as HTMLButtonElement | null;
+    expect(resumeButton?.textContent).toContain("继续");
+
     await act(async () => {
       buttons.find((button) => button.textContent?.includes("快速修图"))?.click();
       buttons.find((button) => button.textContent?.includes("添加文件夹"))?.click();
-      buttons.find((button) => button.textContent?.includes("继续 可恢复.jpg"))?.click();
+      resumeButton?.click();
       await Promise.resolve();
     });
 
     expect(onQuickEdit).toHaveBeenCalledTimes(1);
     expect(onFuture).toHaveBeenCalledWith("folder");
     expect(onResume).toHaveBeenCalledWith("s1");
-    expect(buttons.find((button) => button.textContent?.includes("已移动.jpg"))?.disabled).toBe(true);
+    expect((missingCard?.querySelector("button") as HTMLButtonElement | null)?.disabled).toBe(true);
   });
 
   it("最近会话失败时保留开始入口并允许重试", async () => {
@@ -67,7 +87,14 @@ describe("HomePage", () => {
       .mockResolvedValueOnce([]);
 
     await act(async () => {
-      root.render(<HomePage client={{ recentSessions }} onResume={vi.fn()} onQuickEdit={vi.fn()} onFuture={vi.fn()} />);
+      root.render(
+        <HomePage
+          client={{ recentSessions, sessionThumbnail: vi.fn().mockResolvedValue(new Blob()) }}
+          onResume={vi.fn()}
+          onQuickEdit={vi.fn()}
+          onFuture={vi.fn()}
+        />,
+      );
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -87,7 +114,10 @@ describe("HomePage", () => {
     await act(async () => {
       root.render(
         <HomePage
-          client={{ recentSessions: vi.fn().mockResolvedValue([]) }}
+          client={{
+            recentSessions: vi.fn().mockResolvedValue([]),
+            sessionThumbnail: vi.fn().mockResolvedValue(new Blob()),
+          }}
           onResume={vi.fn()}
           onQuickEdit={vi.fn()}
           quickEditBusy

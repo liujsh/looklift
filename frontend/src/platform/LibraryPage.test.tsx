@@ -125,7 +125,7 @@ describe("LibraryPage", () => {
     });
 
     const disabled = [...container.querySelectorAll("button")]
-      .filter((button) => button.textContent?.includes("Studio") || button.textContent?.includes("定位文件"));
+      .filter((button) => ["进入 Studio", "定位文件"].includes(button.getAttribute("aria-label") ?? ""));
     expect(disabled).toHaveLength(2);
     expect(disabled.every((button) => button.disabled)).toBe(true);
   });
@@ -147,10 +147,11 @@ describe("LibraryPage", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    const buttons = [...container.querySelectorAll("button")];
+    const byLabel = (label: string) => [...container.querySelectorAll("button")]
+      .find((button) => button.getAttribute("aria-label") === label);
     await act(async () => {
-      buttons.find((button) => button.textContent?.includes("定位文件"))?.click();
-      buttons.find((button) => button.textContent?.includes("编辑标签"))?.click();
+      byLabel("定位文件")?.click();
+      byLabel("编辑标签")?.click();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -288,9 +289,9 @@ describe("LibraryPage", () => {
       await Promise.resolve(); await Promise.resolve();
     });
 
-    const buttons = [...container.querySelectorAll("button")];
     await act(async () => {
-      buttons.find((button) => button.textContent?.includes("编辑标签"))?.click();
+      [...container.querySelectorAll("button")]
+        .find((button) => button.getAttribute("aria-label") === "编辑标签")?.click();
       await Promise.resolve(); await Promise.resolve();
     });
 

@@ -117,6 +117,47 @@ def test_session_io_error_does_not_leak_local_path(monkeypatch, tmp_path, sample
     assert "数据库" in body["error"]
 
 
+def test_session_thumbnail_route_returns_indexed_jpeg(tmp_path, monkeypatch, sample_analysis):
+    monkeypatch.setattr(api.config, "CONFIG_PATH", tmp_path / "profile" / "config.toml")
+    photo = tmp_path / "缩略图.jpg"
+    Image.new("RGB", (80, 40), "red").save(photo)
+    _, created = _call(
+        "POST", "/api/sessions", {"path": str(photo), "initial_analysis": sample_analysis}
+    )
+
+    status, data, content_type = _call(
+        "GET", "/api/sessions/<id>/thumbnail", id=created["id"]
+    )
+
+    assert status == 200
+    assert content_type == "image/jpeg"
+    assert data.startswith(b"\xff\xd8")
+
+
+def test_session_thumbnail_route_rejects_unknown_id(tmp_path, monkeypatch):
+    monkeypatch.setattr(api.config, "CONFIG_PATH", tmp_path / "profile" / "config.toml")
+
+    status, body = _call("GET", "/api/sessions/<id>/thumbnail", id="missing")
+
+    assert status == 404
+    assert "会话" in body["error"]
+
+
+def test_session_thumbnail_route_rejects_missing_source_file(tmp_path, monkeypatch, sample_analysis):
+    monkeypatch.setattr(api.config, "CONFIG_PATH", tmp_path / "profile" / "config.toml")
+    photo = tmp_path / "将被删除.jpg"
+    Image.new("RGB", (80, 40), "red").save(photo)
+    _, created = _call(
+        "POST", "/api/sessions", {"path": str(photo), "initial_analysis": sample_analysis}
+    )
+    photo.unlink()
+
+    status, body = _call("GET", "/api/sessions/<id>/thumbnail", id=created["id"])
+
+    assert status == 404
+    assert "原文件" in body["error"]
+
+
 def test_library_root_scan_and_search_routes(tmp_path, monkeypatch):
     monkeypatch.setattr(api.config, "CONFIG_PATH", tmp_path / "profile" / "config.toml")
     root = tmp_path / "图库"
