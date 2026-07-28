@@ -63,4 +63,47 @@ describe("TemplatePage", () => {
     expect(container.textContent).toContain("请先从图库或快速修图打开一张照片");
     expect((container.querySelector("button.template-apply") as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it("切换到我的模板时只显示用户模板", async () => {
+    const user: TemplateCard = { ...official, name: "我的青橙", source: "user", readonly: false };
+    const client = { listTemplates: vi.fn().mockResolvedValue([official, user]) };
+    await act(async () => {
+      root.render(<TemplatePage client={client as unknown as LookliftClient} canApply onApply={vi.fn()} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      (container.querySelectorAll(".template-source-tabs button")[1] as HTMLButtonElement).click();
+    });
+    expect(container.textContent).toContain("我的青橙");
+    expect(container.textContent).not.toContain("青橙经典");
+    expect(container.textContent).toContain("1 个模板");
+  });
+
+  it("模板读取失败时展示稳定错误", async () => {
+    const client = { listTemplates: vi.fn().mockRejectedValue(new Error("引擎不可用")) };
+    await act(async () => {
+      root.render(<TemplatePage client={client as unknown as LookliftClient} canApply onApply={vi.fn()} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("模板载入失败");
+    expect(container.textContent).toContain("引擎不可用");
+  });
+
+  it("套用失败时保留错误提示并恢复按钮", async () => {
+    const onApply = vi.fn().mockRejectedValue(new Error("请先打开照片"));
+    const client = { listTemplates: vi.fn().mockResolvedValue([official]) };
+    await act(async () => {
+      root.render(<TemplatePage client={client as unknown as LookliftClient} canApply onApply={onApply} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      (container.querySelector("button.template-apply") as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("请先打开照片");
+    expect((container.querySelector("button.template-apply") as HTMLButtonElement).disabled).toBe(false);
+  });
 });

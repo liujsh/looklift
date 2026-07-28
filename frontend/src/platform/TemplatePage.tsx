@@ -62,17 +62,18 @@ export function TemplatePage({ client, canApply, onApply }: TemplatePageProps) {
       <header className="template-page-heading">
         <div><p className="pane-kicker">WHITE-BOX LOOKS</p><h1>大师模板</h1></div>
         <p>从原创通用风格起步，展开参数理解每一步，再按照片继续微调。</p>
-        <nav aria-label="模板来源">
+        <nav className="template-source-tabs" aria-label="模板来源">
           <button type="button" aria-pressed={source === "built_in"} onClick={() => setSource("built_in")}>官方模板</button>
           <button type="button" aria-pressed={source === "user"} onClick={() => setSource("user")}>我的模板</button>
         </nav>
       </header>
       {!canApply && <p className="template-page-hint" role="status">请先从图库或快速修图打开一张照片，再直接套用模板。</p>}
+      <div className="template-page-toolbar"><span>{source === "built_in" ? "原创风格课" : "你的参数收藏"}</span><strong>{loading ? "载入中" : `${templates.filter((template) => template.source === source).length} 个模板`}</strong></div>
       <section className="template-grid" aria-label={source === "built_in" ? "官方模板" : "我的模板"}>
         {visible.map((template, index) => <article className="template-card" data-source={template.source} key={template.name}>
           <div className={`template-palette template-palette-${index % 3}`} aria-hidden="true"><span /><span /></div>
           <div className="template-card-body">
-            <p className="template-source">{template.source === "built_in" ? "LOOKLIFT 官方" : "我的收藏"}</p>
+            <div className="template-card-meta"><p className="template-source">{template.source === "built_in" ? "LOOKLIFT 官方" : "我的收藏"}</p><span>{template.readonly ? "只读" : "可编辑"}</span></div>
             <h2>{template.name}</h2>
             <p>{template.summary}</p>
             <div className="template-scenarios">{template.suitable_for.map((item) => <span key={item}>{item}</span>)}</div>
