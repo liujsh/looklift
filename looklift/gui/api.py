@@ -22,7 +22,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable
 
-from .. import ai_proxy, analyzer, chat, config, intensity, library_tasks, platform_files, report, xmp_writer
+from .. import ai_proxy, analyzer, chat, config, device_import, intensity, library_tasks, platform_files, report, xmp_writer
 from ..library_store import LibraryStore
 from ..render import contract as render_contract
 from ..session_store import DatabaseRecoveryRequired, SessionSnapshot, SessionStore
@@ -904,6 +904,46 @@ def _reveal_library_item(ctx: dict) -> tuple[int, dict]:
     return 200, {"ok": True}
 
 
+def _get_import_sources(ctx: dict) -> tuple[int, dict]:
+    return 200, {"sources": device_import.sources()}
+
+
+def _get_import_items(ctx: dict) -> tuple[int, dict]:
+    query = ctx.get("query", {})
+    source_id = query.get("source_id", "")
+    if not source_id:
+        return 400, {"error": "缺少 source_id 参数"}
+    try:
+        return 200, {"items": device_import.manifest(source_id, query.get("date", ""), query.get("unimported", "") in {"1", "true"})}
+    except KeyError:
+        return 404, {"error": "设备来源不存在"}
+
+
+def _post_import_start(ctx: dict) -> tuple[int, dict]:
+    body, error = _json_body(ctx)
+    if error:
+        return error
+    paths = body.get("paths")
+    if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
+        return 400, {"error": "paths 必须是文件路径数组"}
+    try:
+        return 202, {"task_id": device_import.start(paths, body.get("target"))}
+    except ValueError as exc:
+        return 400, {"error": str(exc)}
+
+
+def _get_import_task(ctx: dict) -> tuple[int, dict]:
+    task = device_import.get(ctx["params"]["id"])
+    return (404, {"error": "导入任务不存在"}) if task is None else (200, task)
+
+
+def _cancel_import_task(ctx: dict) -> tuple[int, dict]:
+    task_id = ctx["params"]["id"]
+    if device_import.cancel(task_id):
+        return 200, {"ok": True}
+    return (404, {"error": "导入任务不存在"}) if device_import.get(task_id) is None else (409, {"error": "导入任务已结束"})
+
+
 ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/ping"): _ping,
     ("GET", "/api/param-contract"): _param_contract,
@@ -933,6 +973,11 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/library/items/<id>/thumbnail"): _get_library_item_thumbnail,
     ("PUT", "/api/library/items/<id>/tags"): _put_library_item_tags,
     ("POST", "/api/library/items/<id>/reveal"): _reveal_library_item,
+    ("GET", "/api/import/sources"): _get_import_sources,
+    ("GET", "/api/import/items"): _get_import_items,
+    ("POST", "/api/import/start"): _post_import_start,
+    ("GET", "/api/import/tasks/<id>"): _get_import_task,
+    ("POST", "/api/import/tasks/<id>/cancel"): _cancel_import_task,
     ("POST", "/api/looks"): _post_looks,
     ("GET", "/api/looks"): _get_looks,
     ("GET", "/api/looks/<name>"): _get_look,

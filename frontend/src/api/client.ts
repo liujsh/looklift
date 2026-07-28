@@ -18,6 +18,7 @@ import type {
   LibraryItemsPage,
   LibraryRoot,
   LibraryScanTask,
+  ImportSource, ImportItem, ImportTask,
   RecordSessionMessagesRequest,
   SaveLookRequest,
   SidecarStatus,
@@ -125,6 +126,16 @@ export class LookliftClient {
   cancelLibraryScan(id: string): Promise<{ ok: boolean }> {
     return this.json(`/api/library/scans/${encodeURIComponent(id)}/cancel`, { method: "POST" });
   }
+
+  importSources(): Promise<{ sources: ImportSource[] }> { return this.json("/api/import/sources"); }
+  importItems(sourceId: string, date = "", unimported = false): Promise<{ items: ImportItem[] }> {
+    return this.json(`/api/import/items?source_id=${encodeURIComponent(sourceId)}&date=${encodeURIComponent(date)}&unimported=${unimported}`);
+  }
+  startImport(paths: string[], target?: string): Promise<{ task_id: string }> {
+    return this.json("/api/import/start", { method: "POST", body: JSON.stringify({ paths, target }) });
+  }
+  importTask(id: string): Promise<ImportTask> { return this.json(`/api/import/tasks/${encodeURIComponent(id)}`); }
+  cancelImport(id: string): Promise<{ ok: boolean }> { return this.json(`/api/import/tasks/${encodeURIComponent(id)}/cancel`, { method: "POST" }); }
 
   libraryItems(keyword = "", tag = "", page = 1, pageSize = 48): Promise<LibraryItemsPage> {
     return this.json(
