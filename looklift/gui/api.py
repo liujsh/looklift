@@ -22,7 +22,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable
 
-from .. import ai_proxy, analyzer, chat, config, intensity, library_tasks, platform_files, report, xmp_writer
+from .. import ai_proxy, analyzer, chat, config, device_import, intensity, library_tasks, platform_files, report, xmp_writer
 from ..library_store import LibraryStore
 from ..render import contract as render_contract
 from ..session_store import DatabaseRecoveryRequired, SessionSnapshot, SessionStore
@@ -804,6 +804,31 @@ def _get_library_items(ctx: dict) -> tuple[int, dict]:
     }
 
 
+def _get_library_folder(ctx: dict) -> tuple[int, dict]:
+    query = ctx.get("query", {})
+    folder = query.get("path") or None
+    try:
+        page = int(query.get("page", "1"))
+        page_size = int(query.get("page_size", "48"))
+        view = LibraryStore().browse_folder(folder, page=page, page_size=page_size)
+    except (TypeError, ValueError):
+        return 400, {"error": "分页参数无效：page 从 1 开始，page_size 范围为 1 到 100"}
+    try:
+        sessions = SessionStore().summaries_for_paths([item.path for item in view.items])
+    except (OSError, DatabaseRecoveryRequired):
+        sessions = {}
+    return 200, {
+        "folders": [
+            {"name": f.name, "path": f.path, "count": f.count, "cover_item_id": f.cover_item_id}
+            for f in view.folders
+        ],
+        "items": [_library_item_payload(item, sessions.get(item.path)) for item in view.items],
+        "total": view.total,
+        "page": view.page,
+        "page_size": view.page_size,
+    }
+
+
 def _library_item_payload(item, session) -> dict:
     payload = asdict(item)
     payload["tags"] = list(item.tags)
@@ -829,6 +854,47 @@ def _put_library_item_tags(ctx: dict) -> tuple[int, dict]:
     return 200, {"ok": True}
 
 
+def _get_session_thumbnail(ctx: dict) -> tuple[int, bytes, str] | tuple[int, dict]:
+    from ..library_thumbnails import ThumbnailService
+
+    try:
+        snapshot = SessionStore().load(ctx["params"]["id"])
+    except (KeyError, OSError, DatabaseRecoveryRequired) as exc:
+        return _session_error(exc)
+    source = Path(snapshot.image_path)
+    if not source.is_file():
+        return 404, {"error": "原文件不可用，无法生成缩略图"}
+    thumbnails_dir = config.library_db_path().parent / "thumbnails"
+    result = ThumbnailService(thumbnails_dir).create(source)
+    if not result.available or result.path is None:
+        return 404, {"error": "无法生成缩略图"}
+    thumbnail = result.path.resolve()
+    thumbnail_root = thumbnails_dir.resolve()
+    if not thumbnail.is_relative_to(thumbnail_root):
+        return 404, {"error": "缩略图路径无效，请刷新图库"}
+    try:
+        return 200, thumbnail.read_bytes(), "image/jpeg"
+    except OSError:
+        return 404, {"error": "缩略图文件不存在，请刷新图库"}
+
+
+def _get_library_item_thumbnail(ctx: dict) -> tuple[int, bytes, str] | tuple[int, dict]:
+    try:
+        item = LibraryStore().get_item(ctx["params"]["id"])
+    except KeyError:
+        return 404, {"error": "图库项目不存在"}
+    if not item.thumbnail_path:
+        return 404, {"error": "该图片没有可用缩略图"}
+    thumbnail = Path(item.thumbnail_path).resolve()
+    thumbnail_root = (config.library_db_path().parent / "thumbnails").resolve()
+    if not thumbnail.is_relative_to(thumbnail_root):
+        return 404, {"error": "缩略图路径无效，请刷新图库"}
+    try:
+        return 200, thumbnail.read_bytes(), "image/jpeg"
+    except OSError:
+        return 404, {"error": "缩略图文件不存在，请刷新图库"}
+
+
 def _reveal_library_item(ctx: dict) -> tuple[int, dict]:
     try:
         item = LibraryStore().get_item(ctx["params"]["id"])
@@ -841,6 +907,46 @@ def _reveal_library_item(ctx: dict) -> tuple[int, dict]:
     except OSError:
         return 500, {"error": "无法打开 Windows 资源管理器"}
     return 200, {"ok": True}
+
+
+def _get_import_sources(ctx: dict) -> tuple[int, dict]:
+    return 200, {"sources": device_import.sources()}
+
+
+def _get_import_items(ctx: dict) -> tuple[int, dict]:
+    query = ctx.get("query", {})
+    source_id = query.get("source_id", "")
+    if not source_id:
+        return 400, {"error": "缺少 source_id 参数"}
+    try:
+        return 200, {"items": device_import.manifest(source_id, query.get("date", ""), query.get("unimported", "") in {"1", "true"})}
+    except KeyError:
+        return 404, {"error": "设备来源不存在"}
+
+
+def _post_import_start(ctx: dict) -> tuple[int, dict]:
+    body, error = _json_body(ctx)
+    if error:
+        return error
+    paths = body.get("paths")
+    if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
+        return 400, {"error": "paths 必须是文件路径数组"}
+    try:
+        return 202, {"task_id": device_import.start(paths, body.get("target"))}
+    except ValueError as exc:
+        return 400, {"error": str(exc)}
+
+
+def _get_import_task(ctx: dict) -> tuple[int, dict]:
+    task = device_import.get(ctx["params"]["id"])
+    return (404, {"error": "导入任务不存在"}) if task is None else (200, task)
+
+
+def _cancel_import_task(ctx: dict) -> tuple[int, dict]:
+    task_id = ctx["params"]["id"]
+    if device_import.cancel(task_id):
+        return 200, {"ok": True}
+    return (404, {"error": "导入任务不存在"}) if device_import.get(task_id) is None else (409, {"error": "导入任务已结束"})
 
 
 ROUTES: dict[tuple[str, str], Handler] = {
@@ -860,6 +966,7 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/sessions/<id>"): _get_session,
     ("POST", "/api/sessions/<id>/commit"): _commit_session,
     ("POST", "/api/sessions/<id>/messages"): _record_session_messages,
+    ("GET", "/api/sessions/<id>/thumbnail"): _get_session_thumbnail,
     ("POST", "/api/library/roots"): _post_library_roots,
     ("GET", "/api/library/roots"): _get_library_roots,
     ("DELETE", "/api/library/roots/<id>"): _delete_library_root,
@@ -867,8 +974,15 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/library/scans/<id>"): _get_library_scan,
     ("POST", "/api/library/scans/<id>/cancel"): _cancel_library_scan,
     ("GET", "/api/library/items"): _get_library_items,
+    ("GET", "/api/library/folder"): _get_library_folder,
+    ("GET", "/api/library/items/<id>/thumbnail"): _get_library_item_thumbnail,
     ("PUT", "/api/library/items/<id>/tags"): _put_library_item_tags,
     ("POST", "/api/library/items/<id>/reveal"): _reveal_library_item,
+    ("GET", "/api/import/sources"): _get_import_sources,
+    ("GET", "/api/import/items"): _get_import_items,
+    ("POST", "/api/import/start"): _post_import_start,
+    ("GET", "/api/import/tasks/<id>"): _get_import_task,
+    ("POST", "/api/import/tasks/<id>/cancel"): _cancel_import_task,
     ("POST", "/api/looks"): _post_looks,
     ("GET", "/api/looks"): _get_looks,
     ("GET", "/api/templates"): _get_templates,

@@ -7,6 +7,7 @@ import { createStudioRuntime, type StudioRuntime } from "./studioRuntime";
 import { HomePage, type FutureEntry } from "./HomePage";
 import { NavigationRail } from "./NavigationRail";
 import { WorkspaceTabs } from "./WorkspaceTabs";
+import { IconSprite } from "./icons";
 import { ComingSoonPage } from "./ComingSoonPage";
 import { createNeutralAnalysis } from "../panel/contractModel";
 import { chooseBrowserImageFile, nativeImageChooser, runQuickEdit } from "./quickEdit";
@@ -15,6 +16,7 @@ import { SettingsPage } from "./SettingsPage";
 import { LibraryPage } from "./LibraryPage";
 import { TemplatePage } from "./TemplatePage";
 import { applyTemplateToStudio } from "./templateWorkflow";
+import { ImportPage } from "./ImportPage";
 
 type PlatformShellProps = {
   client: LookliftClient;
@@ -158,6 +160,7 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
 
   return (
     <main className="platform-shell" data-navigation-collapsed={navigationCollapsed}>
+      <IconSprite />
       <WorkspaceTabs
         tabs={platform.tabs}
         activeTabId={platform.activeTabId}
@@ -177,7 +180,7 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
       <section className="platform-content" inert={closeDialog ? true : undefined}>
         {shellError && <div className="platform-error" role="alert">{shellError}</div>}
         {activeTab.kind === "home" && <HomePage client={client} onResume={resume} onQuickEdit={quickEdit} quickEditBusy={quickEditBusy} onFuture={openFuture} />}
-        {activeTab.kind === "platform" && (activeTab.page === "settings" ? <SettingsPage client={client} /> : activeTab.page === "templates" ? <TemplatePage client={client} canApply={studioTabs.length > 0} onApply={applyTemplate} /> : activeTab.page === "library" ? <LibraryPage client={client} onOpen={async (path) => {
+        {activeTab.kind === "platform" && (activeTab.page === "settings" ? <SettingsPage client={client} /> : activeTab.page === "templates" ? <TemplatePage client={client} canApply={studioTabs.length > 0} onApply={applyTemplate} /> : activeTab.page === "import" ? <ImportPage client={client} /> : activeTab.page === "library" ? <LibraryPage client={client} onOpen={async (path) => {
           if (!contract) throw new Error("参数契约尚未就绪");
           openSnapshot(await client.createSession({ path, initial_analysis: createNeutralAnalysis(contract) }));
         }} /> : <ComingSoonPage page={activeTab.page} />)}

@@ -15,9 +15,11 @@ import type {
   ParamContract,
   PreviewRequest,
   ProviderConfig,
+  LibraryFolderView,
   LibraryItemsPage,
   LibraryRoot,
   LibraryScanTask,
+  ImportSource, ImportItem, ImportTask,
   RecordSessionMessagesRequest,
   SaveLookRequest,
   SidecarStatus,
@@ -126,10 +128,25 @@ export class LookliftClient {
     return this.json(`/api/library/scans/${encodeURIComponent(id)}/cancel`, { method: "POST" });
   }
 
+  importSources(): Promise<{ sources: ImportSource[] }> { return this.json("/api/import/sources"); }
+  importItems(sourceId: string, date = "", unimported = false): Promise<{ items: ImportItem[] }> {
+    return this.json(`/api/import/items?source_id=${encodeURIComponent(sourceId)}&date=${encodeURIComponent(date)}&unimported=${unimported}`);
+  }
+  startImport(paths: string[], target?: string): Promise<{ task_id: string }> {
+    return this.json("/api/import/start", { method: "POST", body: JSON.stringify({ paths, target }) });
+  }
+  importTask(id: string): Promise<ImportTask> { return this.json(`/api/import/tasks/${encodeURIComponent(id)}`); }
+  cancelImport(id: string): Promise<{ ok: boolean }> { return this.json(`/api/import/tasks/${encodeURIComponent(id)}/cancel`, { method: "POST" }); }
+
   libraryItems(keyword = "", tag = "", page = 1, pageSize = 48): Promise<LibraryItemsPage> {
     return this.json(
       `/api/library/items?keyword=${encodeURIComponent(keyword)}&tag=${encodeURIComponent(tag)}&page=${page}&page_size=${pageSize}`,
     );
+  }
+
+  libraryFolder(path: string | null, page = 1, pageSize = 48): Promise<LibraryFolderView> {
+    const pathQuery = path === null ? "" : `path=${encodeURIComponent(path)}&`;
+    return this.json(`/api/library/folder?${pathQuery}page=${page}&page_size=${pageSize}`);
   }
 
   setLibraryTags(id: string, tags: string[]): Promise<{ ok: boolean }> {
@@ -137,6 +154,10 @@ export class LookliftClient {
       method: "PUT",
       body: JSON.stringify({ tags }),
     });
+  }
+
+  libraryThumbnail(id: string, signal?: AbortSignal): Promise<Blob> {
+    return this.binary(`/api/library/items/${encodeURIComponent(id)}/thumbnail`, { signal });
   }
 
   revealLibraryItem(id: string): Promise<{ ok: boolean }> {
@@ -162,6 +183,10 @@ export class LookliftClient {
 
   getSession(id: string): Promise<SessionSnapshot> {
     return this.json(`/api/sessions/${encodeURIComponent(id)}`);
+  }
+
+  sessionThumbnail(id: string, signal?: AbortSignal): Promise<Blob> {
+    return this.binary(`/api/sessions/${encodeURIComponent(id)}/thumbnail`, { signal });
   }
 
   commitSession(id: string, payload: CommitSessionRequest): Promise<SessionSnapshot> {

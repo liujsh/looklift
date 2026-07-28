@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 import uuid
@@ -57,6 +58,23 @@ class ScanResult:
 
 @dataclass(frozen=True)
 class LibraryPage:
+    items: tuple[LibraryItem, ...]
+    total: int
+    page: int
+    page_size: int
+
+
+@dataclass(frozen=True)
+class FolderEntry:
+    name: str
+    path: str
+    count: int
+    cover_item_id: str | None
+
+
+@dataclass(frozen=True)
+class FolderView:
+    folders: tuple[FolderEntry, ...]
     items: tuple[LibraryItem, ...]
     total: int
     page: int
@@ -187,6 +205,60 @@ class LibraryStore:
             raise KeyError(item_id)
         return items[0]
 
+    def browse_folder(self, folder: str | None, *, page: int = 1, page_size: int = 48) -> FolderView:
+        if isinstance(page, bool) or not isinstance(page, int) or page < 1:
+            raise ValueError("page 必须是正整数")
+        if isinstance(page_size, bool) or not isinstance(page_size, int) or not 1 <= page_size <= 100:
+            raise ValueError("page_size 必须是 1 到 100 的整数")
+        with self._connect() as connection:
+            roots = connection.execute("SELECT id, path FROM library_roots ORDER BY path COLLATE NOCASE").fetchall()
+            if folder is None:
+                folders = tuple(self._root_folder_entry(connection, row) for row in roots)
+                return FolderView(folders, (), 0, page, page_size)
+            base = Path(folder)
+            if not any(base == Path(r["path"]) or base.is_relative_to(Path(r["path"])) for r in roots):
+                return FolderView((), (), 0, page, page_size)
+            rows = connection.execute(
+                "SELECT id, path, thumbnail_path FROM library_items WHERE path LIKE ? ESCAPE '\\'",
+                (self._like_prefix(base),),
+            ).fetchall()
+        return self._folder_view_from_rows(base, rows, page, page_size)
+
+    @staticmethod
+    def _like_prefix(base: Path) -> str:
+        prefix = str(base) + os.sep
+        escaped = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        return escaped + "%"
+
+    def _root_folder_entry(self, connection, row) -> FolderEntry:
+        items = connection.execute(
+            "SELECT id, thumbnail_path FROM library_items WHERE root_id = ?", (row["id"],)
+        ).fetchall()
+        cover = next((i["id"] for i in items if i["thumbnail_path"]), items[0]["id"] if items else None)
+        return FolderEntry(Path(row["path"]).name, row["path"], len(items), cover)
+
+    def _folder_view_from_rows(self, base: Path, rows, page: int, page_size: int) -> FolderView:
+        direct_files: list[str] = []
+        groups: dict[str, dict] = {}
+        for row in rows:
+            rel = Path(row["path"]).relative_to(base)
+            if len(rel.parts) == 1:
+                direct_files.append(row["id"])
+                continue
+            segment = rel.parts[0]
+            group = groups.setdefault(segment, {"count": 0, "cover": None, "cover_has_thumb": False})
+            group["count"] += 1
+            if group["cover"] is None or (row["thumbnail_path"] and not group["cover_has_thumb"]):
+                group["cover"] = row["id"]
+                group["cover_has_thumb"] = bool(row["thumbnail_path"])
+        folders = tuple(
+            FolderEntry(name, str(base / name), data["count"], data["cover"])
+            for name, data in sorted(groups.items(), key=lambda kv: kv[0].casefold())
+        )
+        total = len(direct_files)
+        items = self._query_items("", "", limit=page_size, offset=(page - 1) * page_size, item_ids=direct_files)
+        return FolderView(folders, items, total, page, page_size)
+
     def record_operation(self, item_id: str, kind: str, summary: str) -> None:
         if kind not in {"sidecar_export", "preset_export"}:
             raise ValueError("不支持的图库操作类型")
@@ -206,11 +278,17 @@ class LibraryStore:
         self.record_operation(row["id"], kind, summary)
         return True
 
-    def _query_items(self, keyword: str, tag: str, *, limit: int | None, offset: int, item_id: str | None = None) -> tuple[LibraryItem, ...]:
+    def _query_items(self, keyword: str, tag: str, *, limit: int | None, offset: int,
+                     item_id: str | None = None, item_ids: list[str] | None = None) -> tuple[LibraryItem, ...]:
         clauses, values = self._filters(keyword, tag)
         if item_id is not None:
             clauses.append("items.id = ?")
             values.append(item_id)
+        if item_ids is not None:
+            if not item_ids:
+                return ()
+            clauses.append(f"items.id IN ({','.join('?' for _ in item_ids)})")
+            values.extend(item_ids)
         sql = f"""SELECT items.*,
             (SELECT COUNT(*) FROM library_operations AS operations WHERE operations.item_id=items.id AND operations.kind LIKE '%export') AS export_count,
             (SELECT MAX(created_at) FROM library_operations AS operations WHERE operations.item_id=items.id AND operations.kind LIKE '%export') AS last_export_at

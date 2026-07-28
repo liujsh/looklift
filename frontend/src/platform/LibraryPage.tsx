@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { LookliftClient } from "../api/client";
-import type { LibraryItem, LibraryRoot, LibraryScanTask } from "../api/types";
+import type { LibraryFolderEntry, LibraryItem, LibraryRoot, LibraryScanTask } from "../api/types";
 import { LibraryCard } from "./LibraryCard";
+import { Icon } from "./icons";
+import { folderCrumbs } from "./libraryFolderPath";
 import { waitForLibraryScan } from "./libraryWorkflow";
 
 const PAGE_SIZE = 48;
@@ -20,6 +22,8 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
   const [keywordInput, setKeywordInput] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [filters, setFilters] = useState({ keyword: "", tag: "" });
+  const [currentFolder, setCurrentFolder] = useState<string | null>(null);
+  const [folders, setFolders] = useState<LibraryFolderEntry[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -29,6 +33,10 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
   const pollController = useRef<AbortController | null>(null);
   const activeScanId = useRef<string | null>(null);
   const scanRunning = useRef(false);
+  const loadThumbnail = useCallback(
+    (target: LibraryItem, signal: AbortSignal) => client.libraryThumbnail(target.id, signal),
+    [client],
+  );
 
   const loadItems = async (nextPage: number, nextFilters = filters) => {
     const result = await client.libraryItems(
@@ -42,11 +50,23 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
     setPage(result.page);
   };
 
+  const browsing = !filters.keyword && !filters.tag;
+
+  const loadFolder = async (folder: string | null, nextPage = 1) => {
+    const view = await client.libraryFolder(folder, nextPage, PAGE_SIZE);
+    setFolders(view.folders);
+    setItems(view.items);
+    setTotal(view.total);
+    setPage(view.page);
+    setCurrentFolder(folder);
+  };
+
   const refresh = async (nextPage = page, nextFilters = filters) => {
     setError("");
+    const browsingNow = !nextFilters.keyword && !nextFilters.tag;
     const [rootResult] = await Promise.all([
       client.libraryRoots(),
-      loadItems(nextPage, nextFilters),
+      browsingNow ? loadFolder(currentFolder, nextPage) : loadItems(nextPage, nextFilters),
     ]);
     setRoots(rootResult.roots);
   };
@@ -142,9 +162,22 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
     const nextFilters = { keyword: keywordInput.trim(), tag: tagInput.trim() };
     setFilters(nextFilters);
     try {
-      await loadItems(1, nextFilters);
+      if (!nextFilters.keyword && !nextFilters.tag) {
+        await loadFolder(currentFolder, 1);
+      } else {
+        setFolders([]);
+        await loadItems(1, nextFilters);
+      }
     } catch (reason) {
       setError(message(reason, "图库搜索失败"));
+    }
+  };
+
+  const openFolder = async (folder: string | null) => {
+    try {
+      await loadFolder(folder, 1);
+    } catch (reason) {
+      setError(message(reason, "图库读取失败"));
     }
   };
 
@@ -154,7 +187,8 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
     try {
       await client.setLibraryTags(item.id, next.split(","));
       setStatus("标签已保存");
-      await loadItems(page);
+      if (browsing) await loadFolder(currentFolder, page);
+      else await loadItems(page);
     } catch (reason) {
       setError(message(reason, "标签保存失败"));
     }
@@ -189,7 +223,8 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const changePage = async (nextPage: number) => {
     try {
-      await loadItems(nextPage);
+      if (browsing) await loadFolder(currentFolder, nextPage);
+      else await loadItems(nextPage);
     } catch (reason) {
       setError(message(reason, "图库翻页失败"));
     }
@@ -197,28 +232,31 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
   return (
     <main className="library-page" aria-label="我的图库">
       <header className="library-heading">
-        <div><p className="pane-kicker">LIBRARY</p><h1>我的图库</h1></div>
+        <div>
+          <p className="pane-kicker">LIBRARY</p>
+          <h1>我的图库</h1>
+        </div>
         <p>只建立本地索引，不复制、移动或删除原文件。</p>
       </header>
 
       <section className="library-toolbar" aria-label="图库管理">
         <form onSubmit={add} data-form="add-root">
           <input value={path} onChange={(event) => setPath(event.target.value)} placeholder="输入本地文件夹路径" required />
-          <button type="button" onClick={() => void chooseRoot()}>选择文件夹</button>
-          <button type="submit" disabled={Boolean(scan)}>加入图库</button>
+          <button type="button" onClick={() => void chooseRoot()}><Icon name="folder" className="go-ic" />选择文件夹</button>
+          <button type="submit" className="primary" disabled={Boolean(scan)}><Icon name="folder-plus" className="go-ic" />加入图库</button>
         </form>
         <form onSubmit={search} data-form="search">
           <input value={keywordInput} onChange={(event) => setKeywordInput(event.target.value)} placeholder="搜索文件名或路径" />
           <input value={tagInput} onChange={(event) => setTagInput(event.target.value)} placeholder="标签" />
-          <button type="submit">搜索</button>
+          <button type="submit"><Icon name="search" className="go-ic" />搜索</button>
         </form>
       </section>
 
-      {roots.length > 0 && <section className="library-roots" aria-label="索引文件夹">
+      {browsing && currentFolder === null && roots.length > 0 && <section className="library-roots" aria-label="索引文件夹">
         {roots.map((root) => <div key={root.id}>
-          <span title={root.path}>{root.path}</span>
-          <button type="button" disabled={Boolean(scan)} onClick={() => void runScan(root.id)}>刷新</button>
-          <button type="button" disabled={Boolean(scan)} onClick={() => void removeRoot(root.id)}>移除索引</button>
+          <span className="library-root-path" title={root.path}><Icon name="folder" className="go-ic" />{root.path}</span>
+          <button type="button" className="quiet" disabled={Boolean(scan)} onClick={() => void runScan(root.id)}><Icon name="refresh" className="go-ic" />刷新</button>
+          <button type="button" className="quiet" disabled={Boolean(scan)} onClick={() => void removeRoot(root.id)}><Icon name="trash" className="go-ic" />移除索引</button>
         </div>)}
       </section>}
 
@@ -229,8 +267,38 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
       {error && <div className="library-message error" role="alert">{error}</div>}
       {status && <div className="library-message" role="status">{status}</div>}
 
-      {loading ? <p className="library-empty">正在读取图库…</p> : items.length === 0 ? <p className="library-empty">没有符合条件的照片</p> : <div className="library-grid">
-        {items.map((item) => <LibraryCard key={item.id} item={item} onOpen={openStudio} onReveal={reveal} onTags={saveTags} />)}
+      {browsing && <nav className="library-breadcrumb" aria-label="文件夹路径">
+        {folderCrumbs(currentFolder, roots).map((crumb, index, all) => {
+          const isLast = index === all.length - 1;
+          return isLast
+            ? <span key={crumb.path ?? "home"} aria-current="page">{crumb.label}</span>
+            : <button
+                key={crumb.path ?? "home"}
+                type="button"
+                data-crumb={crumb.path === null ? "home" : crumb.path}
+                onClick={() => void openFolder(crumb.path)}
+              >{crumb.label}</button>;
+        })}
+      </nav>}
+
+      {browsing && folders.length > 0 && <section className="library-folders" aria-label="子文件夹">
+        {folders.map((folder) => <FolderCard
+          key={folder.path}
+          folder={folder}
+          client={client}
+          onOpen={() => void openFolder(folder.path)}
+        />)}
+      </section>}
+
+      {loading ? <p className="library-empty">正在读取图库…</p> : items.length === 0 && folders.length === 0 ? <p className="library-empty">没有符合条件的照片</p> : <div className="library-grid">
+        {items.map((item) => <LibraryCard
+          key={item.id}
+          item={item}
+          loadThumbnail={loadThumbnail}
+          onOpen={openStudio}
+          onReveal={reveal}
+          onTags={saveTags}
+        />)}
       </div>}
 
       <footer className="library-pagination">
@@ -240,6 +308,54 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
       </footer>
     </main>
   );
+}
+
+type FolderCardProps = {
+  folder: LibraryFolderEntry;
+  client: LookliftClient;
+  onOpen(): void;
+};
+
+function FolderCard({ folder, client, onOpen }: FolderCardProps) {
+  const coverUrl = useFolderCover(folder.cover_item_id, client);
+  return (
+    <button type="button" className="library-folder-card" data-folder={folder.path} onClick={onOpen}>
+      <div className="library-folder-thumb-wrap">
+        <span className="sprocket tl" aria-hidden="true" />
+        <span className="sprocket tr" aria-hidden="true" />
+        <div className="library-folder-thumb">
+          {coverUrl ? <img src={coverUrl} alt="" /> : <span className="library-folder-thumb-fallback" aria-hidden="true" />}
+        </div>
+        <span className="library-folder-badge" aria-hidden="true"><Icon name="folder" /></span>
+      </div>
+      <div className="library-folder-meta">
+        <span className="library-folder-name" title={folder.path}>{folder.name}</span>
+        <span className="library-folder-count">{folder.count} 张</span>
+      </div>
+    </button>
+  );
+}
+
+function useFolderCover(coverId: string | null, client: LookliftClient): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    setUrl(null);
+    if (!coverId) return;
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+    void client.libraryThumbnail(coverId, controller.signal)
+      .then((blob) => {
+        if (controller.signal.aborted) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      })
+      .catch(() => undefined);
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [coverId, client]);
+  return url;
 }
 
 function message(reason: unknown, fallback: string): string {

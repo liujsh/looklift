@@ -1,12 +1,13 @@
 import sqlite3
 import threading
+from pathlib import Path
 
 from PIL import Image
 
 import pytest
 
 from looklift.library_schema import LibraryDatabaseVersionError
-from looklift.library_store import LibraryStore, ScanCancelled, ThumbnailService
+from looklift.library_store import FolderEntry, FolderView, LibraryStore, ScanCancelled, ThumbnailService
 
 
 def test_scan_root_is_idempotent_and_marks_missing_files(tmp_path):
@@ -191,3 +192,64 @@ def test_raw_uses_decodable_embedded_preview_before_placeholder(tmp_path):
 
     assert result.available is True
     assert result.path is not None and result.path.is_file()
+
+
+def _seed(tmp_path):
+    root = tmp_path / "照片"
+    (root / "2024" / "云南" / "大理").mkdir(parents=True)
+    (root / "2024" / "云南" / "丽江").mkdir(parents=True)
+    (root / "散图").mkdir(parents=True)
+    (root / "2024" / "云南" / "大理" / "a.jpg").write_bytes(b"jpeg")
+    (root / "2024" / "云南" / "大理" / "b.jpg").write_bytes(b"jpeg")
+    (root / "2024" / "云南" / "丽江" / "c.jpg").write_bytes(b"jpeg")
+    (root / "散图" / "d.jpg").write_bytes(b"jpeg")
+    (root / "顶层.jpg").write_bytes(b"jpeg")
+    store = LibraryStore(tmp_path / "library.db")
+    added = store.add_root(root)
+    store.scan_root(added.id)
+    return store, str(root)
+
+
+def test_browse_folder_home_lists_roots_with_counts(tmp_path):
+    store, root = _seed(tmp_path)
+    view = store.browse_folder(None)
+    assert [(f.name, f.count) for f in view.folders] == [("照片", 5)]
+    assert view.folders[0].path == root
+    assert view.folders[0].cover_item_id is not None
+    assert view.items == ()
+    assert view.total == 0
+
+
+def test_browse_folder_drills_into_subfolders_and_direct_files(tmp_path):
+    store, root = _seed(tmp_path)
+    view = store.browse_folder(root)
+    # 顶层：子文件夹 2024(3)+散图(1)，本层直接文件 顶层.jpg
+    assert sorted((f.name, f.count) for f in view.folders) == [("2024", 3), ("散图", 1)]
+    assert [i.display_name for i in view.items] == ["顶层.jpg"]
+    assert view.total == 1
+    # 再钻两层到大理，两张直接文件、无子文件夹
+    dali = next(f for f in store.browse_folder(str(Path(root) / "2024" / "云南")).folders if f.name == "大理")
+    leaf = store.browse_folder(dali.path)
+    assert leaf.folders == ()
+    assert [i.display_name for i in leaf.items] == ["a.jpg", "b.jpg"]
+
+
+def test_browse_folder_paginates_direct_files_only(tmp_path):
+    root = tmp_path / "照片"
+    root.mkdir()
+    for name in ("1.jpg", "2.jpg", "3.jpg"):
+        (root / name).write_bytes(b"jpeg")
+    store = LibraryStore(tmp_path / "library.db")
+    added = store.add_root(root)
+    store.scan_root(added.id)
+    page1 = store.browse_folder(str(root), page=1, page_size=2)
+    assert [i.display_name for i in page1.items] == ["1.jpg", "2.jpg"]
+    assert page1.total == 3
+    page2 = store.browse_folder(str(root), page=2, page_size=2)
+    assert [i.display_name for i in page2.items] == ["3.jpg"]
+
+
+def test_browse_folder_rejects_path_outside_roots(tmp_path):
+    store, _ = _seed(tmp_path)
+    view = store.browse_folder(str(tmp_path / "库外目录"))
+    assert view == FolderView((), (), 0, 1, 48)

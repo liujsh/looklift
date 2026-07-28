@@ -122,6 +122,14 @@ export type LibraryItem = {
   current_summary: string;
 };
 export type LibraryItemsPage = { items: LibraryItem[]; total: number; page: number; page_size: number };
+export type LibraryFolderEntry = { name: string; path: string; count: number; cover_item_id: string | null };
+export type LibraryFolderView = {
+  folders: LibraryFolderEntry[];
+  items: LibraryItem[];
+  total: number;
+  page: number;
+  page_size: number;
+};
 export type LibraryScanTask = {
   status: "running" | "done" | "cancelled" | "error";
   message: string | null;
@@ -130,6 +138,9 @@ export type LibraryScanTask = {
   scanned: number;
   current: string | null;
 };
+export type ImportSource = { id: string; name: string; path: string; kind: string };
+export type ImportItem = { path: string; name: string; size: number; modified: string; format: string; fingerprint: string; duplicate: boolean };
+export type ImportTask = { status: "running" | "done" | "cancelled" | "error"; message: string | null; total: number; completed: number; skipped: number; failed: { path: string; error: string }[]; paths: string[]; scan_task_id?: string };
 
 export type ChatMessage = {
   role: "user" | "assistant";

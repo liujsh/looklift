@@ -57,6 +57,29 @@
   按作者本轮指示，T5 的全量 Python/前端测试、production build 和约 5000 条数据人工验收
   均未执行，任务保持未勾选。
 
+## v2.3-A 真机手测回归修复（2026-07-24）
+
+- 真机发现缩略图使用未启用的 Tauri 本地文件协议，改为经带启动令牌的 sidecar 二进制接口读取，
+  并限制只能访问应用缩略图目录。
+- 标签保存与移除索引分别使用 PUT、DELETE，但 HTTP server 未实现对应方法，CORS 预检也只放行
+  GET/POST；现已补齐真实分发与预检方法。
+- 图库项目与正式会话路径的只读核对确认关联数据存在；空版本摘要不再展示随机版本 ID，统一显示
+  “已建立 Studio 会话”。
+- 定向验证：GUI server／图库 API `41 passed`，前端相关测试 `17 passed`，TypeScript 检查与
+  Ruff 通过；真实 Tauri 复验需重建并暂存 sidecar 后执行。
+
+## RAW 可行性门 T1–T5 完成（2026-07-27）
+
+- 新增 `looklift.raw_gate` 离线探针与 `python -m looklift.raw_gate` 入口：manifest、逐样本
+  解码隔离、RGB/位深/方向/白平衡检查、性能/内存测量、JSON 报告和中文 GO/NO-GO 摘要。
+- rawpy 采用可选导入；缺失或 DLL 不可用会输出结构化 `rawpy_unavailable`，失败时明确建议
+  v2.3-B 使用内嵌 JPEG 预览 + XMP sidecar，不把 rawpy 硬依赖带入 GUI。
+- 真实门禁使用 8 种相机、24–61MP 的 CC0 RAW；全部成功解码为 `uint16 RGB` 并进入 float32
+  渲染边界，解码耗时 1.17–6.02 秒，进程峰值内存最高 1.04 GB，方向和色彩人工检查通过。
+- 真机发现 Pillow 会误拒绝三通道 `uint16`，探针改为归一化 float32 代理并走生产数组管线；
+  同时修正失败原因优先级和非 Windows `ru_maxrss` 单位。最终结论 **GO**，v2.3-B 采用 RAW
+  全解码路径。验证：RAW 门测试 `8 passed`，全量 Python `502 passed, 1 skipped`，Ruff 通过。
+
 ## v2.2 平台外壳自动化收口（2026-07-20）
 
 - 新增最近正式会话只读投影、固定首页、全局导航、顶部标签与未来能力说明页；快速修图在
