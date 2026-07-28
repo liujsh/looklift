@@ -23,10 +23,12 @@ def test_import_copies_atomically(tmp_path, monkeypatch):
     source.write_bytes(b"raw-bytes")
     monkeypatch.setenv("LOOKLIFT_LIBRARY_DB", str(tmp_path / "library.db"))
     task_id = device_import.start([str(source)], str(tmp_path / "dest"))
-    for _ in range(100):
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
         task = device_import.get(task_id)
         if task and task["status"] != "running":
             break
         time.sleep(0.01)
+    assert task is not None, "导入任务未创建状态"
     assert task["status"] == "done"
     assert Path(task["paths"][0]).read_bytes() == b"raw-bytes"
