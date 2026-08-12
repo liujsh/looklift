@@ -8,8 +8,9 @@ from typing import Any
 from . import lookstore
 
 _DEFAULT_LESSONS = Path(__file__).resolve().parents[1] / "data" / "template_lessons.json"
-_USER_PRINCIPLE = "这是你的白盒参数组合，可展开关键参数继续学习和修改。"
+_USER_PRINCIPLE = "这是你保存的风格效果，可查看关键调整，并继续按照片细致修改。"
 _KEY_LIMIT = 6
+_CATEGORIES = {"portrait", "nature", "movie", "black_white", "night", "travel"}
 
 
 def _read_lessons(path: Path) -> dict[str, dict[str, Any]]:
@@ -66,6 +67,11 @@ def _strings(value: Any) -> list[str]:
     return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
 
 
+def _category(value: Any) -> str:
+    """只接受目录契约里的一级分类，未知值安全回退为未分类。"""
+    return value if isinstance(value, str) and value in _CATEGORIES else "uncategorized"
+
+
 def list_cards(
     looks_dir: Path | None,
     builtins_dir: Path | None = None,
@@ -85,6 +91,7 @@ def list_cards(
             "name": entry["name"],
             "source": entry["source"],
             "readonly": entry["readonly"],
+            "category": _category(lesson.get("category")) if official else "uncategorized",
             "summary": analysis.get("summary") if isinstance(analysis.get("summary"), str) else "",
             "suitable_for": _strings(lesson.get("suitable_for")) if official else ["按当前照片继续微调"],
             "principles": _strings(lesson.get("principles")) if official else [_USER_PRINCIPLE],

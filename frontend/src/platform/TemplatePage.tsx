@@ -1,99 +1,122 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { LookliftClient } from "../api/client";
-import type { TemplateCard } from "../api/types";
+import type { ParamContract, TemplateCard } from "../api/types";
+import { countTemplates, filterTemplates, type TemplateCategoryFilter, visibleTemplateCategories } from "./templateCatalog";
+import { TemplateContactCard } from "./TemplateContactCard";
+import { TemplateDetailPage, type TemplateCurrentPhoto } from "./TemplateDetailPage";
+import "./template-page.css";
+
+export { templateParameterLabel } from "./templateCatalog";
 
 type TemplatePageProps = {
   client: LookliftClient;
+  contract?: ParamContract;
   canApply: boolean;
+  currentPhoto?: TemplateCurrentPhoto | null;
   onApply(name: string): Promise<void> | void;
 };
 
-const PARAMETER_LABELS: Record<string, string> = {
-  temperature_shift: "色温", exposure: "曝光", contrast: "对比度", highlights: "高光",
-  shadows: "阴影", whites: "白色色阶", blacks: "黑色色阶", vibrance: "自然饱和度",
-  saturation: "饱和度", hue: "色相", vignette_amount: "暗角", grain_amount: "颗粒",
-};
-
-export function templateParameterLabel(path: string): string {
-  const parts = path.split(".");
-  const leaf = parts[parts.length - 1] ?? path;
-  const section = parts.length > 2 ? `${parts[parts.length - 2]} · ` : "";
-  return `${section}${PARAMETER_LABELS[leaf] ?? leaf}`;
-}
-
-function signed(value: number): string {
-  return value > 0 ? `+${value}` : String(value);
-}
-
-export function TemplatePage({ client, canApply, onApply }: TemplatePageProps) {
-  const [source, setSource] = useState<"built_in" | "user">("built_in");
+export function TemplatePage({ client, contract, canApply, currentPhoto = null, onApply }: TemplatePageProps) {
+  const [source, setSource] = useState<TemplateCard["source"]>("built_in");
+  const [category, setCategory] = useState<TemplateCategoryFilter>("all");
+  const [query, setQuery] = useState("");
   const [templates, setTemplates] = useState<readonly TemplateCard[]>([]);
+  const [selectedName, setSelectedName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [applying, setApplying] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadError(null);
     void client.listTemplates()
       .then((items) => { if (!cancelled) setTemplates(items); })
-      .catch((reason) => { if (!cancelled) setError(`模板载入失败：${reason instanceof Error ? reason.message : String(reason)}`); })
+      .catch((reason) => { if (!cancelled) setLoadError(`模板载入失败：${reason instanceof Error ? reason.message : String(reason)}`); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [client]);
 
-  const visible = templates.filter((template) => template.source === source);
-  const apply = async (template: TemplateCard) => {
-    setApplying(template.name);
-    setError(null);
+  const visible = useMemo(
+    () => filterTemplates(templates, { source, category, query }),
+    [category, query, source, templates],
+  );
+  const categories = useMemo(() => visibleTemplateCategories(templates, source), [source, templates]);
+
+  const selected = templates.find((item) => item.name === selectedName) ?? null;
+  const chooseSource = (next: TemplateCard["source"]) => {
+    setSource(next);
+    setCategory("all");
+    setStatus(null);
+    setActionError(null);
+  };
+  const chooseTemplate = (template: TemplateCard) => {
+    setSelectedName(template.name);
+    setStatus(null);
+    setActionError(null);
+  };
+  const applySelected = async () => {
+    if (!selected || applying) return;
+    setApplying(true);
+    setStatus(null);
+    setActionError(null);
     try {
-      await onApply(template.name);
-      setStatus(`已在 Studio 套用：${template.name}`);
+      await onApply(selected.name);
+      setStatus(`已应用到当前照片：${selected.name}`);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setActionError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      setApplying(null);
+      setApplying(false);
     }
   };
 
+  if (selected) {
+    return <TemplateDetailPage
+      client={client}
+      contract={contract}
+      template={selected}
+      currentPhoto={currentPhoto}
+      canApply={canApply}
+      applying={applying}
+      status={status}
+      error={actionError}
+      onBack={() => setSelectedName(null)}
+      onApply={() => void applySelected()}
+    />;
+  }
+
   return (
-    <main className="template-page" aria-label="大师模板">
-      <header className="template-page-heading">
-        <div><p className="pane-kicker">WHITE-BOX LOOKS</p><h1>大师模板</h1></div>
-        <p>从原创通用风格起步，展开参数理解每一步，再按照片继续微调。</p>
-        <nav className="template-source-tabs" aria-label="模板来源">
-          <button type="button" aria-pressed={source === "built_in"} onClick={() => setSource("built_in")}>官方模板</button>
-          <button type="button" aria-pressed={source === "user"} onClick={() => setSource("user")}>我的模板</button>
-        </nav>
-      </header>
-      {!canApply && <p className="template-page-hint" role="status">请先从图库或快速修图打开一张照片，再直接套用模板。</p>}
-      <div className="template-page-toolbar"><span>{source === "built_in" ? "原创风格课" : "你的参数收藏"}</span><strong>{loading ? "载入中" : `${templates.filter((template) => template.source === source).length} 个模板`}</strong></div>
-      <section className="template-grid" aria-label={source === "built_in" ? "官方模板" : "我的模板"}>
-        {visible.map((template, index) => <article className="template-card" data-source={template.source} key={template.name}>
-          <div className={`template-palette template-palette-${index % 3}`} aria-hidden="true"><span /><span /></div>
-          <div className="template-card-body">
-            <div className="template-card-meta"><p className="template-source">{template.source === "built_in" ? "LOOKLIFT 官方" : "我的收藏"}</p><span>{template.readonly ? "只读" : "可编辑"}</span></div>
-            <h2>{template.name}</h2>
-            <p>{template.summary}</p>
-            <div className="template-scenarios">{template.suitable_for.map((item) => <span key={item}>{item}</span>)}</div>
-            <details>
-              <summary>查看白盒参数课</summary>
-              {template.principles.map((item) => <p key={item}>{item}</p>)}
-              {template.key_parameters.length > 0 && <dl>{template.key_parameters.map((item) => <div key={item.path}>
-                <dt>{templateParameterLabel(item.path)}</dt><dd>{signed(item.value)}</dd>
-              </div>)}</dl>}
-              {template.steps.length > 0 && <ol>{template.steps.map((step) => <li key={step}>{step}</li>)}</ol>}
-            </details>
-            <button className="template-apply" type="button" disabled={!canApply || applying !== null} onClick={() => void apply(template)}>
-              {applying === template.name ? "正在套用…" : "直接套用到 Studio"}
-            </button>
+    <main className="template-library-page" aria-label="大师模板">
+      <section className="template-browse-pane">
+        <header className="template-browse-header">
+          <div className="template-title-line"><h1>大师模板</h1><p>浏览预设、看懂参数，再应用到当前照片。</p><span />
+            <small className={currentPhoto ? "is-on" : ""}><i />{currentPhoto ? `当前照片：${currentPhoto.title}` : "未打开照片"}</small>
           </div>
-        </article>)}
-        {!loading && visible.length === 0 && <p className="template-empty">{source === "user" ? "还没有用户模板；可在 Studio 收藏当前参数。" : "暂无官方模板"}</p>}
+          <div className="template-filter-line">
+            <nav className="template-source-switch" aria-label="模板来源">
+              <button type="button" data-source="built_in" aria-pressed={source === "built_in"} onClick={() => chooseSource("built_in")}>官方模板</button>
+              <button type="button" data-source="user" aria-pressed={source === "user"} onClick={() => chooseSource("user")}>我的模板</button>
+            </nav>
+            <label className="template-search"><span aria-hidden="true">⌕</span><input aria-label="搜索模板" type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="搜索名称、摘要、分类或场景" />
+              {query && <button type="button" aria-label="清除搜索" onClick={() => setQuery("")}>×</button>}
+            </label>
+            <strong>{loading ? "载入中" : query ? `命中 ${visible.length} 个` : `${visible.length} 个模板`}</strong>
+          </div>
+          <nav className="template-category-nav" aria-label="模板分类">
+            {categories.map((item) => <button type="button" key={item.id} data-category={item.id} aria-pressed={category === item.id} onClick={() => setCategory(item.id)}>{item.label}<span>{countTemplates(templates, source, item.id)}</span></button>)}
+          </nav>
+        </header>
+
+        <div className="template-catalog-scroll">
+          {loading ? <div className="template-catalog-grid" aria-label="正在载入模板">{Array.from({ length: 4 }, (_, index) => <div className="template-card-skeleton" key={index} />)}</div>
+            : loadError ? <div className="template-catalog-message" role="alert"><h2>模板载入失败</h2><p>{loadError}</p></div>
+            : visible.length > 0 ? <section className="template-catalog-grid" aria-label="模板列表">{visible.map((template) => <TemplateContactCard key={template.name} template={template} selected={false} onSelect={() => chooseTemplate(template)} />)}</section>
+            : <div className="template-catalog-message"><h2>{query ? "没有匹配的模板" : "这个分类还是空的"}</h2><p>{query ? `“${query}”在当前来源与分类下没有命中。` : source === "user" ? "在修图页保存喜欢的效果后，它会带着完整白盒参数出现在这里。" : "该分类下暂时没有官方模板。"}</p>{query && <button type="button" onClick={() => setQuery("")}>清除搜索</button>}</div>}
+        </div>
       </section>
-      {loading && <p className="template-page-status">正在载入模板…</p>}
-      {error ? <p className="template-page-status template-page-error" role="alert">{error}</p> : status && <p className="template-page-status">{status}</p>}
+
     </main>
   );
 }

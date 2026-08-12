@@ -100,7 +100,7 @@ describe("ChatPane", () => {
     expect(buildTemplatePrompt("提亮人物")).toBe("提亮人物");
     const prompt = buildTemplatePrompt("提亮人物", {
       template: {
-        name: "柔和胶片", summary: "低反差暖调", source: "built_in", readonly: true,
+        name: "柔和胶片", summary: "低反差暖调", source: "built_in", readonly: true, category: "portrait",
         suitable_for: [], principles: [], steps: [], key_parameters: [],
       },
       analysis: { basic: { contrast: -12 } } as never,

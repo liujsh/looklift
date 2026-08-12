@@ -260,6 +260,7 @@ def test_get_templates_exposes_official_teaching_without_parameter_duplication(r
     teal_orange = next(card for card in cards if card["name"] == "青橙经典")
     assert teal_orange["source"] == "built_in"
     assert teal_orange["readonly"] is True
+    assert teal_orange["category"] == "movie"
     assert teal_orange["suitable_for"]
     assert teal_orange["principles"]
     assert teal_orange["steps"]

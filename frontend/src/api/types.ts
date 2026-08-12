@@ -232,11 +232,14 @@ export type LookSummary = {
   readonly: boolean;
 };
 
+export type TemplateCategory = "portrait" | "nature" | "movie" | "black_white" | "night" | "travel" | "uncategorized";
+
 export type TemplateCard = {
   name: string;
   summary: string;
   source: "built_in" | "user";
   readonly: boolean;
+  category: TemplateCategory;
   suitable_for: string[];
   principles: string[];
   steps: string[];

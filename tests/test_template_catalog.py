@@ -26,6 +26,7 @@ def test_catalog_combines_official_lesson_without_copying_parameter_values(tmp_p
     metadata = tmp_path / "lessons.json"
     metadata.write_text(json.dumps({
         "青橙经典": {
+            "category": "movie",
             "suitable_for": ["旅行", "城市夜景"],
             "principles": ["用冷暖互补建立画面层次"],
             "key_paths": ["basic.highlights", "basic.contrast"],
@@ -38,6 +39,7 @@ def test_catalog_combines_official_lesson_without_copying_parameter_values(tmp_p
         "name": "青橙经典",
         "source": "built_in",
         "readonly": True,
+        "category": "movie",
         "summary": "冷暖分离",
         "suitable_for": ["旅行", "城市夜景"],
         "principles": ["用冷暖互补建立画面层次"],
@@ -67,8 +69,9 @@ def test_catalog_derives_safe_user_lesson_and_skips_corrupt_look(tmp_path):
     assert card["name"] == "我的风格"
     assert card["source"] == "user"
     assert card["readonly"] is False
+    assert card["category"] == "uncategorized"
     assert card["suitable_for"] == ["按当前照片继续微调"]
-    assert card["principles"] == ["这是你的白盒参数组合，可展开关键参数继续学习和修改。"]
+    assert card["principles"] == ["这是你保存的风格效果，可查看关键调整，并继续按照片细致修改。"]
     assert card["steps"] == ["降低整体饱和度"]
     assert card["key_parameters"] == [
         {"path": "basic.saturation", "value": -16},

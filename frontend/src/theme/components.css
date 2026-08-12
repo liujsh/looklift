@@ -297,9 +297,15 @@
   .window-width-warning span { color: var(--color-stage-muted); }
 }
 .template-page {
-  min-height: 100%;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   padding: 38px clamp(24px, 4vw, 64px) 64px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  color: var(--color-stage-text);
   background: radial-gradient(circle at 82% 5%, color-mix(in srgb, var(--color-accent) 10%, transparent), transparent 32%), var(--color-stage);
 }
 
@@ -312,25 +318,27 @@
 }
 
 .template-page-heading h1 { margin: 4px 0 0; font-size: clamp(32px, 4vw, 54px); }
-.template-page-heading > p { max-width: 620px; color: var(--color-muted); line-height: 1.7; }
+.template-page-heading > p { max-width: 620px; color: var(--color-stage-muted); line-height: 1.7; }
 .template-source-tabs { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--color-line); border-radius: 999px; background: var(--color-paper); }
 .template-source-tabs button { border: 0; border-radius: 999px; background: transparent; }
 .template-source-tabs button[aria-pressed="true"] { background: var(--color-accent); color: var(--color-paper); box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 24%, transparent); }
-.template-page-hint, .template-page-status { color: var(--color-muted); }
+.template-page-hint, .template-page-status { color: var(--color-stage-muted); }
 .template-page-error { color: var(--color-danger); }
-.template-page-toolbar { display: flex; justify-content: space-between; align-items: center; margin: 24px 0 12px; color: var(--color-muted); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
-.template-page-toolbar strong { color: var(--color-ink); font-size: 12px; font-weight: 650; letter-spacing: 0; text-transform: none; }
+.template-page-toolbar { display: flex; justify-content: space-between; align-items: center; margin: 24px 0 12px; color: var(--color-stage-muted); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.template-page-toolbar strong { color: var(--color-stage-text); font-size: 12px; font-weight: 650; letter-spacing: 0; text-transform: none; }
 
 .template-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 420px));
   gap: 14px;
+  align-items: start;
 }
 
 .template-card {
   overflow: hidden;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-sm);
+  color: var(--color-ink);
   background: color-mix(in srgb, var(--color-paper-raised) 94%, transparent);
   box-shadow: var(--shadow-panel);
   transition: transform .18s ease, box-shadow .18s ease;
@@ -353,9 +361,16 @@
 .template-scenarios { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0; }
 .template-scenarios span { padding: 5px 9px; border-radius: 999px; background: var(--color-paper); color: var(--color-muted); font-size: 12px; }
 .template-card details { padding: 12px 0; border-block: 1px solid var(--color-line); }
-.template-card summary { cursor: pointer; font-weight: 650; }
-.template-card details p, .template-card details li { color: var(--color-muted); line-height: 1.55; }
-.template-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+.template-card summary { cursor: pointer; color: var(--color-ink); font-weight: 650; }
+.template-card summary::marker { color: var(--color-accent); }
+.template-lesson { display: grid; gap: 18px; padding-top: 14px; }
+.template-lesson section + section { padding-top: 16px; border-top: 1px solid var(--color-line); }
+.template-lesson h3 { margin: 0 0 8px; color: var(--color-ink); font-size: 12px; letter-spacing: .08em; }
+.template-lesson p { margin: 0; }
+.template-lesson p + p { margin-top: 10px; }
+.template-card details p, .template-card details li { color: var(--color-muted); line-height: 1.6; }
+.template-card details ol { margin: 0; padding-left: 22px; }
+.template-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin: 0; }
 .template-card dl div { display: flex; justify-content: space-between; gap: 12px; }
 .template-card dt { color: var(--color-muted); }
 .template-card dd { margin: 0; color: var(--color-accent); font-variant-numeric: tabular-nums; }
