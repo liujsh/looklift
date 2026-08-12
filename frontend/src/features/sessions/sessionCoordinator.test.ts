@@ -90,7 +90,7 @@ describe("sessionCoordinator", () => {
       commitSession: vi.fn().mockResolvedValue(snapshot(analysis(1))),
     };
     const coordinator = createSessionCoordinator(client, store, "s1");
-    await coordinator.commitFormal(analysis(1), "manual");
+    await expect(coordinator.commitFormal(analysis(1), "manual")).resolves.toEqual(snapshot(analysis(1)));
     await coordinator.commitFormal(analysis(2), "library");
     await coordinator.commitFormal(analysis(3), "analysis");
     expect(client.commitSession.mock.calls.map((call) => call[1])).toMatchObject([
