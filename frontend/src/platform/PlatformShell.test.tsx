@@ -126,4 +126,54 @@ describe("PlatformShell", () => {
     await act(async () => root.unmount());
     container.remove();
   });
+
+  it("模板页预览并套用到最近激活而非最后创建的 Studio", async () => {
+    const firstSnapshot = session();
+    const secondSnapshot = { ...session(), id: "session-2", image_path: "C:/照片/b.jpg" };
+    const templateAnalysis = { ...analysis(), summary: "青橙模板" };
+    const interactiveClient = {
+      recentSessions: vi.fn().mockResolvedValue([]),
+      config: vi.fn().mockResolvedValue({ configured: false, provider: "auto" }),
+      listLooks: vi.fn().mockResolvedValue([]), imageInfo: vi.fn().mockResolvedValue({}),
+      preview: vi.fn().mockResolvedValue(new Blob(["preview"])),
+      listTemplates: vi.fn().mockResolvedValue([{
+        name: "青橙经典", summary: "冷暖分离", source: "built_in", readonly: true,
+        category: "movie", suitable_for: [], principles: [], steps: [], key_parameters: [],
+      }]),
+      getLook: vi.fn().mockResolvedValue(templateAnalysis),
+      commitSession: vi.fn(async (id: string) => ({
+        ...(id === "session-1" ? firstSnapshot : secondSnapshot), current_analysis: templateAnalysis,
+      })),
+    } as unknown as LookliftClient;
+    const store = createPlatformStore();
+    store.openStudio(createStudioRuntime(interactiveClient, firstSnapshot));
+    store.openStudio(createStudioRuntime(interactiveClient, secondSnapshot));
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<PlatformShell client={interactiveClient} store={store} />);
+      await Promise.resolve();
+    });
+    await act(async () => { store.activateTab("studio:session-1"); });
+    await act(async () => { store.openPlatform("templates", "大师模板"); await Promise.resolve(); await Promise.resolve(); });
+    expect(container.textContent).toContain("当前照片：a.jpg");
+
+    await act(async () => {
+      (container.querySelector(".template-contact-card") as HTMLButtonElement).click();
+      await Promise.resolve(); await Promise.resolve();
+    });
+    await act(async () => {
+      (container.querySelector('button[aria-label="应用到当前照片"]') as HTMLButtonElement).click();
+      await Promise.resolve(); await Promise.resolve();
+    });
+
+    expect(interactiveClient.commitSession).toHaveBeenCalledWith(
+      "session-1", expect.objectContaining({ source: "library" }),
+    );
+    expect(store.getSnapshot().activeTabId).toBe("studio:session-1");
+    await act(async () => root.unmount());
+    container.remove();
+  });
 });

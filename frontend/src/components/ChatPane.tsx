@@ -1,4 +1,6 @@
 import { useSyncExternalStore, useState } from "react";
+import type { LookliftClient } from "../api/client";
+import type { Analysis, TemplateCard } from "../api/types";
 import type { ChatWorkflow } from "../features/chat/chatWorkflow";
 import type { SessionCoordinator } from "../features/sessions/sessionCoordinator";
 import type { RenderStatus } from "../store/editorStore";
@@ -11,12 +13,27 @@ type ChatPaneProps = {
   coordinator?: SessionCoordinator | null;
   providerLabel?: string;
   renderStatus?: RenderStatus;
+  client?: LookliftClient;
 };
 
-export async function submitChatInput(value: string, workflow: ChatWorkflow) {
+export type TemplatePromptAttachment = { template: TemplateCard; analysis: Analysis };
+
+export function buildTemplatePrompt(message: string, attachment?: TemplatePromptAttachment | null): string {
+  if (!attachment) return message;
+  return [
+    `用户要求：${message}`,
+    `参考模板：${attachment.template.name}（${attachment.template.summary}）`,
+    `模板白盒参数：${JSON.stringify(attachment.analysis)}`,
+    "请结合当前照片自适应这些参数，不要机械覆盖；只修改现有白盒参数契约允许的字段。",
+  ].join("\n");
+}
+
+export async function submitChatInput(
+  value: string, workflow: ChatWorkflow, attachment?: TemplatePromptAttachment | null,
+) {
   const message = value.trim();
   if (!message) return null;
-  return workflow.send(message);
+  return workflow.send(buildTemplatePrompt(message, attachment));
 }
 
 const EMPTY = Object.freeze({
@@ -31,12 +48,17 @@ export function ChatPane({
   coordinator,
   providerLabel = "当前配置",
   renderStatus = "ready",
+  client,
 }: ChatPaneProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [input, setInput] = useState("");
   const [includeMetadata, setIncludeMetadata] = useState(true);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [templates, setTemplates] = useState<readonly TemplateCard[]>([]);
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const [attachment, setAttachment] = useState<TemplatePromptAttachment | null>(null);
   const state = useSyncExternalStore(
     workflow?.subscribe ?? emptySubscribe,
     workflow?.getSnapshot ?? (() => EMPTY),
@@ -50,6 +72,27 @@ export function ChatPane({
     try { await action(); } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : String(reason));
     } finally { setActionBusy(false); }
+  };
+  const toggleTemplatePicker = async () => {
+    const next = !templatePickerOpen;
+    setTemplatePickerOpen(next);
+    if (!next || !client || templates.length > 0 || templateLoading) return;
+    setTemplateLoading(true);
+    setActionError(null);
+    try { setTemplates(await client.listTemplates()); } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : String(reason));
+    } finally { setTemplateLoading(false); }
+  };
+  const selectTemplate = async (template: TemplateCard) => {
+    if (!client) return;
+    setTemplateLoading(true);
+    setActionError(null);
+    try {
+      setAttachment({ template, analysis: await client.getLook(template.name) });
+      setTemplatePickerOpen(false);
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : String(reason));
+    } finally { setTemplateLoading(false); }
   };
 
   return (
@@ -124,12 +167,24 @@ export function ChatPane({
           const value = input;
           setInput("");
           void act(async () => {
-            const result = await submitChatInput(value, workflow);
+            const result = await submitChatInput(value, workflow, attachment);
+            if (result) setAttachment(null);
             void result;
           });
         }}>
-          <button type="button" aria-label="添加附件或模板" title="添加照片、模板或自动化技能">+</button>
-          <textarea value={input} onChange={(event) => setInput(event.currentTarget.value)} placeholder="描述想要的颜色、光线或氛围" rows={2} disabled={!workflow || state.phase === "requesting"} />
+          {attachment && <div className="chat-template-chip">
+            <span>模板 · {attachment.template.name}</span>
+            <button type="button" aria-label="移除模板附件" onClick={() => setAttachment(null)}>×</button>
+          </div>}
+          {templatePickerOpen && <div className="chat-template-picker" role="dialog" aria-label="选择模板附件">
+            <strong>选择模板作为 AI 参考</strong>
+            {templates.map((template) => <button type="button" key={template.name} onClick={() => void selectTemplate(template)}>
+              <span>{template.name}</span><small>{template.summary}</small>
+            </button>)}
+            {templateLoading && <span>正在载入模板…</span>}
+          </div>}
+          <button type="button" aria-label="添加附件或模板" title="添加模板" disabled={!client} onClick={() => void toggleTemplatePicker()}>+</button>
+          <textarea value={input} onChange={(event) => setInput(event.currentTarget.value)} placeholder="说说你想怎么调整" rows={2} disabled={!workflow || state.phase === "requesting"} />
           <button type="submit" className="send" disabled={!workflow || !input.trim() || state.phase === "requesting"}>发送</button>
         </form>
       </>}

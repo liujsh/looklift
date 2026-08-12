@@ -26,7 +26,7 @@ from .. import ai_proxy, analyzer, chat, config, device_import, intensity, libra
 from ..library_store import LibraryStore
 from ..render import contract as render_contract
 from ..session_store import DatabaseRecoveryRequired, SessionSnapshot, SessionStore
-from . import lookstore
+from . import lookstore, template_catalog
 from . import tasks
 from . import upload
 
@@ -346,6 +346,11 @@ def _get_looks(ctx: dict) -> tuple[int, dict]:
     不用破坏性改响应的顶层类型。列表遍历/损坏 json 容错在 `lookstore.py`。
     """
     return 200, {"looks": lookstore.list_entries(config.looks_dir())}
+
+
+def _get_templates(ctx: dict) -> tuple[int, dict]:
+    """`GET /api/templates`：平台模板卡片和教学信息的只读投影。"""
+    return 200, {"templates": template_catalog.list_cards(config.looks_dir())}
 
 
 def _get_look(ctx: dict) -> tuple[int, dict]:
@@ -980,6 +985,7 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("POST", "/api/import/tasks/<id>/cancel"): _cancel_import_task,
     ("POST", "/api/looks"): _post_looks,
     ("GET", "/api/looks"): _get_looks,
+    ("GET", "/api/templates"): _get_templates,
     ("GET", "/api/looks/<name>"): _get_look,
     ("POST", "/api/looks/<name>/export"): _export_look,
     ("GET", "/report/<name>"): _report,

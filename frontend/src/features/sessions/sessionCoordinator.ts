@@ -20,7 +20,7 @@ export type SessionCoordinator = {
   discardPending(): Promise<void>;
   continueManual(): Promise<readonly ChatMessage[]>;
   recordMessages(exchange: readonly ChatMessage[]): Promise<void>;
-  commitFormal(analysis: Analysis, source: "manual" | "library" | "analysis"): Promise<void>;
+  commitFormal(analysis: Analysis, source: "manual" | "library" | "analysis"): Promise<SessionSnapshot>;
   getSessionId(): string | null;
 };
 
@@ -106,7 +106,7 @@ export function createSessionCoordinator(
     async commitFormal(analysis, source) {
       if (!client.commitSession) throw new Error("会话保存服务不可用");
       const targetSession = requireSession();
-      await enqueue(() => client.commitSession!(targetSession, { exchange: [], analysis, source }));
+      return enqueue(() => client.commitSession!(targetSession, { exchange: [], analysis, source }));
     },
     getSessionId: () => sessionId,
   };

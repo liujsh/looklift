@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { LookliftClient } from "../api/client";
 import type { ParamContract, SessionSnapshot } from "../api/types";
 import { EditorShell } from "../app/EditorShell";
@@ -14,7 +14,10 @@ import { chooseBrowserImageFile, nativeImageChooser, runQuickEdit } from "./quic
 import { CloseStudioDialog, type CloseDialogPhase } from "./CloseStudioDialog";
 import { SettingsPage } from "./SettingsPage";
 import { LibraryPage } from "./LibraryPage";
+import { TemplatePage } from "./TemplatePage";
+import { applyTemplateToStudio, canApplyTemplateToStudio } from "./templateWorkflow";
 import { ImportPage } from "./ImportPage";
+import type { EditorState } from "../store/editorStore";
 
 type PlatformShellProps = {
   client: LookliftClient;
@@ -32,6 +35,13 @@ const PLATFORM_TITLES: Record<PlatformPage, string> = {
   plugins: "插件",
   settings: "设置与帮助",
 };
+const EMPTY_EDITOR_SNAPSHOT: EditorState = Object.freeze({
+  imagePath: null, analysis: null, displayAnalysis: null, pendingPreview: null,
+  activeAiRequestId: null, factor: 1,
+  render: Object.freeze({ status: "idle", error: null }),
+  versions: Object.freeze([]), redoVersions: Object.freeze([]),
+});
+const emptyEditorSubscribe = () => () => undefined;
 
 type CloseDialogState = {
   tabId: string;
@@ -53,6 +63,7 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
   const [quickEditBusy, setQuickEditBusy] = useState(false);
   const quickEditRunning = useRef(false);
   const [closeDialog, setCloseDialog] = useState<CloseDialogState | null>(null);
+  const [recentStudioTabIds, setRecentStudioTabIds] = useState<readonly string[]>([]);
   const closeActionRunning = useRef(false);
   const activeTab = platform.tabs.find((tab) => tab.id === platform.activeTabId) ?? platform.tabs[0];
 
@@ -62,6 +73,31 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
     const existing = store.findStudio(snapshot.id);
     if (existing) store.activateTab(existing.id);
     else store.openStudio(createStudioRuntime(client, snapshot));
+  };
+  const studioTabs = platform.tabs.filter((tab) => tab.kind === "studio");
+  useEffect(() => {
+    if (activeTab.kind === "studio") {
+      setRecentStudioTabIds((current) => [...current.filter((id) => id !== activeTab.id), activeTab.id]);
+    }
+  }, [activeTab]);
+  const recentStudio = [...recentStudioTabIds].reverse()
+    .map((id) => studioTabs.find((tab) => tab.id === id))
+    .find((tab) => tab !== undefined) ?? studioTabs[studioTabs.length - 1];
+  const recentRuntime = recentStudio?.kind === "studio" ? recentStudio.runtime as StudioRuntime : null;
+  const recentEditor = useSyncExternalStore(
+    recentRuntime?.store.subscribe ?? emptyEditorSubscribe,
+    recentRuntime?.store.getSnapshot ?? (() => EMPTY_EDITOR_SNAPSHOT),
+    recentRuntime?.store.getSnapshot ?? (() => EMPTY_EDITOR_SNAPSHOT),
+  );
+  const currentTemplatePhoto = recentStudio?.kind === "studio"
+    ? { path: recentRuntime!.imagePath, title: recentRuntime!.title }
+    : null;
+  const applyTemplate = async (name: string) => {
+    const tab = store.getSnapshot().tabs.find((candidate) => candidate.id === recentStudio?.id);
+    if (!tab || tab.kind !== "studio") throw new Error("请先打开一张照片");
+    const runtime = tab.runtime as StudioRuntime;
+    await applyTemplateToStudio(client, runtime, name);
+    store.activateTab(tab.id);
   };
   const resume = async (sessionId: string) => {
     setShellError(null);
@@ -170,7 +206,7 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
       <section className="platform-content" inert={closeDialog ? true : undefined}>
         {shellError && <div className="platform-error" role="alert">{shellError}</div>}
         {activeTab.kind === "home" && <HomePage client={client} onResume={resume} onQuickEdit={quickEdit} quickEditBusy={quickEditBusy} onFuture={openFuture} />}
-        {activeTab.kind === "platform" && (activeTab.page === "settings" ? <SettingsPage client={client} /> : activeTab.page === "import" ? <ImportPage client={client} /> : activeTab.page === "library" ? <LibraryPage client={client} onOpen={async (path) => {
+        {activeTab.kind === "platform" && (activeTab.page === "settings" ? <SettingsPage client={client} /> : activeTab.page === "templates" ? <TemplatePage client={client} contract={contract} canApply={Boolean(recentRuntime && recentEditor.activeAiRequestId === null && recentEditor.pendingPreview === null && canApplyTemplateToStudio(recentRuntime))} currentPhoto={currentTemplatePhoto} onApply={applyTemplate} /> : activeTab.page === "import" ? <ImportPage client={client} /> : activeTab.page === "library" ? <LibraryPage client={client} onOpen={async (path) => {
           if (!contract) throw new Error("参数契约尚未就绪");
           openSnapshot(await client.createSession({ path, initial_analysis: createNeutralAnalysis(contract) }));
         }} /> : <ComingSoonPage page={activeTab.page} />)}

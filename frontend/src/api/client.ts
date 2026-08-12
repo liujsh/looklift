@@ -11,6 +11,7 @@ import type {
   JsonObject,
   ImageInfo,
   LookSummary,
+  TemplateCard,
   ParamContract,
   PreviewRequest,
   ProviderConfig,
@@ -214,6 +215,11 @@ export class LookliftClient {
   async listLooks(): Promise<LookSummary[]> {
     const result = await this.json<{ looks: LookSummary[] }>("/api/looks");
     return result.looks;
+  }
+
+  async listTemplates(): Promise<TemplateCard[]> {
+    const result = await this.json<{ templates: TemplateCard[] }>("/api/templates");
+    return result.templates;
   }
 
   getLook(name: string): Promise<Analysis> {

@@ -14,6 +14,7 @@ export function IconSprite() {
         <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 3v10.5" /><path d="M8 9.5l4 4 4-4" /><path d="M4 15v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></symbol>
         <symbol id="i-relocate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M12 2.5v3.5M12 18v3.5M2.5 12h3.5M18 12h3.5" /></symbol>
         <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" /></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7" /></symbol>
         <symbol id="i-collapse" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M10 4v16" /><path d="M16.5 9.5L14 12l2.5 2.5" /></symbol>
         <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></symbol>
         <symbol id="i-add" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
@@ -33,6 +34,7 @@ export function IconSprite() {
 export type IconName =
   | "home" | "library" | "template" | "skill" | "plugin" | "settings"
   | "aperture" | "folder-plus" | "import" | "relocate" | "arrow-right"
+  | "check"
   | "collapse" | "close" | "add" | "min" | "max"
   | "search" | "folder" | "refresh" | "trash" | "reveal" | "tag";
 
