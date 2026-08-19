@@ -3,10 +3,10 @@
 ## v2.6-A：Domain Pack 与 API Harness Spike
 
 - [ ] 固定 `PHOTO_EDITING.md`、StyleProfile、`SKILL.md`、Reference 与 Template 元数据协议。
-- [ ] 实现 Context Compiler 的来源、优先级、预算、快照和 Hash 契约测试。
+- [x] 实现 Context Compiler 的来源、优先级、预算、快照和 Hash 契约测试。
 - [ ] 对 `pydantic-ai-slim` 完成许可、Windows/Tauri 打包、Anthropic、OpenAI-compatible、Ollama、图片、工具、流和取消门。
 - [ ] 可行性门失败时才用同一用例评估 `pi-agent-core`，确定唯一内嵌 Harness。
-- [ ] 建立 Fake Harness 和统一 Adapter 最小接口，不接 UI。
+- [x] 建立 Fake Harness 和统一 Adapter 最小接口，不接 UI。
 
 ## v2.6-B：最小候选 Agent Loop
 
