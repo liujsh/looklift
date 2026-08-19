@@ -39,4 +39,5 @@ looklift = [
     "data/*.json",
     "data/looks/*.json",
     "data/domain/*.md",
+    "data/skills/**/*.md",
 ]
