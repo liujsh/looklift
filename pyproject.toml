@@ -33,4 +33,10 @@ raw = ["rawpy>=0.27,<0.28"]
 packages = ["looklift", "looklift.gui", "looklift.render", "looklift.render.operators"]
 
 [tool.setuptools.package-data]
-looklift = ["gui/static/**", "render/data/*.icc", "data/*.json", "data/looks/*.json"]
+looklift = [
+    "gui/static/**",
+    "render/data/*.icc",
+    "data/*.json",
+    "data/looks/*.json",
+    "data/domain/*.md",
+]
