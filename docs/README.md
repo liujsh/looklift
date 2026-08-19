@@ -28,7 +28,9 @@ docs/
 │  ├─ legacy-tasks.md
 │  └─ legacy-spec-process.md
 └─ research/
-   └─ competitors.md
+   ├─ competitors.md
+   ├─ agent-native-review.md
+   └─ opendesign-agent-runtime-analysis.md
 ```
 
 早期只有一份综合规格的版本允许保留 `spec.md`，不强行为了形式拆成三份空洞文档。一个版本存在多个实施计划时，统一放入该版本的 `plans/` 子目录并使用能说明目的的文件名。
@@ -47,7 +49,7 @@ docs/
 | `history/dev-log.md` | 跨版本开发事实、坑和人工待办 | 未来版本需求正文 |
 | `history/legacy-tasks.md` | 旧根任务文件的只读历史 | 当前迭代状态 |
 | `history/legacy-spec-process.md` | 旧 spec 规范和早期决策记录 | 当前文档规则 |
-| `research/competitors.md` | 竞品与外部资料研究 | 已确认的产品契约 |
+| `research/*.md` | 竞品、面试审视与外部资料研究 | 已确认的产品契约 |
 
 ## 4. 当前版本索引
 
@@ -68,13 +70,10 @@ docs/
 | RAW 可行性门 | 已完成，2026-07-27 GO | v2.3-B 采用 RAW 全解码路径 |
 | v2.3-B | 已完成，2026-07-28 合入 main | 设备发现、筛选、校验复制与图库刷新 |
 | v2.4 | 自动化实现完成，待人工验收 | 官方/用户模板、直接套用、AI 附件与参数教学 |
-
-尚未进入规格阶段的后续版本只存在于产品路线图和平台总体设计中。当前版本接近收口时，才建立下一版本目录和三文档。
-
-| v2.3-A | 规格已建立，开发中 | 本地文件夹图库 |
 | v2.5 | 自动化实现完成，待人工验收 | 显式可预览、可取消和可恢复的白盒批量成片 |
+| v2.6 | Brainstorm 收口、规格已重写，待实现 | 薄 Domain Runtime、CLI/API 双路径、摄影 Skill/Template 与领域评测 |
 
-尚未进入规格阶段的版本只存在于产品路线图和平台总体设计中。当前版本接近收口时，才建立下一版本目录和三文档。
+尚未进入规格阶段的后续版本只存在于产品路线图和平台总体设计中。v2.7 受控插件需等待 v2.6 Tool、Domain Pack 与权限边界稳定后再建立规格。
 
 ## 5. 迁移映射
 
