@@ -14,6 +14,13 @@ CLI；先用少量深 Skill 建评测，再扩数量。任何阶段都不得绕�
 
 阶段门：Domain Pack 不能稳定复现，或 API Harness 不能把真实候选图片送回模型时，不进入 B。
 
+### 2026-08-20 可行性门结果
+
+`pydantic-ai-slim 2.32.x` 通过离线 FunctionModel、Mock HTTP 与 Windows PyInstaller 探针：Anthropic、
+OpenAI-compatible/Ollama 可构造并序列化 JPEG 代理图，富图片 Tool Result 能进入下一次模型请求，类型化流和协作式
+取消可用。冻结探针需显式复制 `genai-prices`、`pydantic-ai-slim` 和 `pydantic-graph` 发行元数据；基于 sidecar 已有
+NumPy/Pillow 依赖的 onedir 增量为 21.74 MiB，低于 60 MiB 门限。结论为 GO，不评估或并存 Pi。
+
 ## v2.6-B：API 最小闭环
 
 1. 先固定 Tool 请求/响应、稳定错误、Run/Attempt/Lease 和 Candidate Revision 测试。
