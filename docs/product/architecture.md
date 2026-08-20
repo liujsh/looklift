@@ -469,3 +469,37 @@ Tauri 原生窗口
   Tauri bundler 生成 NSIS 安装包。
 - `packaging/smoke_release.py` 在临时用户目录连续预热冻结引擎，启动随机 localhost 端口，
   校验内置模板只读、用户库可写、XMP 可导出，并回收 sidecar；全程不访问外网或 AI。
+
+---
+
+## v2.6-A/B 新增设计
+
+> 原规格：[v2.6/](../versions/v2.6/)；这里只记录已实现且已自动验证的最小 API 候选闭环。
+
+### 27. Domain Pack 与统一 Adapter
+
+- `domain_pack.py` 按固定优先级和预算编译领域契约、StyleProfile、单个 Skill、必要 Reference、可选 Template
+  元数据和本轮目标，并生成内容 Hash；快照可在原始来源变化后复现同一 Attempt 输入。
+- `agent_adapter.py` 把 Harness 收敛为 `start/cancel/dispose` 和八种有限事件。模型只接收编译文本与无 EXIF
+  JPEG 代理图，不接收 Run、Attempt、Lease、正式版本 ID、原图路径或数据库信息。
+- API 路径使用 `pydantic-ai-slim 2.32.x`；Anthropic、OpenAI-compatible 和 Ollama 只共享构造与事件适配层，
+  一个 Attempt 内不自动切换 Provider。Fake/FunctionModel 测试全程离线。
+
+### 28. 受控候选 Runtime
+
+```
+Domain Pack + 代理图 → Pydantic AI Agent
+                         │ render_candidate（白盒 Patch）
+                         ▼
+Run/Attempt/Lease 守卫 → 唯一渲染引擎 → JPEG + 参数差异 + 指标
+                         │ 真实结果回灌，可再修改
+                         ▼
+finish_candidate（模型终态）→ 内存候选，等待未来 UI 人工确认
+```
+
+- `agent_tool_contract.py` 是候选工具类型入口；标量路径和范围仍来自 `render.contract`，越界操作严格拒绝，
+  不静默截断。Template 相对正式基线叠加，只能在首个成功候选决定一次。
+- `CandidateRuntime` 默认最多渲染三次，保存不可变单线 Revision；每次渲染前和原子落候选时均复核权威状态，
+  取消、Lease/Attempt 或正式基线变化使晚到结果成为 `cancelled/stale`。
+- `render_candidate` 的富 Tool Result 同时包含结构化结果和真实 JPEG；`finish_candidate` 仅接受最新候选、
+  无修改或明确能力不足三类终态。Finish 不保存、导出或修改正式版本。

@@ -33,6 +33,23 @@
 - [ ] **v2.4 模板与教学人工验收**：用真实照片核对三份官方模板观感与教学文案；从模板页
   直接套用后确认画布、参数面板和会话版本同步；在 AI 输入框附加模板，确认 provider 返回的是
   针对当前照片的自适应参数而非机械覆盖。自动化不调用真实 provider。
+- [ ] **v2.6-A/B API Agent 人工 Spike**：用真实 API 和真实照片验证首候选观感、依据 JPEG
+  反馈继续精修和正确停止；确认代理图无 EXIF、取消在 1 秒内终止且候选不进入正式版本。当前只完成
+  离线 FunctionModel/Mock HTTP 与冻结自动化，不接 UI、SQLite、本地 CLI 或正式保存入口。
+
+## v2.6-A/B Domain Pack 与最小 API 候选闭环（2026-08-20）
+
+- Pydantic AI 可行性门通过：三类 Provider 离线序列化、JPEG Tool Result 回灌、类型化流、取消与
+  Windows PyInstaller 探针均通过；相对已有 NumPy/Pillow sidecar 增量 21.74 MiB，低于 60 MiB 门限。
+- Domain Pack 编译器固定来源优先级、预算降级、Hash 和快照恢复；内置修图领域契约与自然人像 Skill
+  已版本化，但尚未通过真实模型消融，因此不把 Skill 效果写成已验证结论。
+- 受控 Runtime 串通白盒 Patch → 唯一引擎 → JPEG/差异/指标反馈 → 可选再修改 → 三类结构化终态。
+  候选只存在内存，不会保存、导出或修改正式版本；Run/Attempt/Lease、预算、取消晚到和基线冲突有离线测试。
+- API Adapter 归一八类单调事件，重复 Attempt 被拒绝；Provider 错误转稳定文案且不自动跨供应商切换。
+  自动化完成不等于 v2.6 发布，CLI、UI、恢复、三领域 Skill/Eval 与真实照片验收仍在 C–E 阶段。
+- 收口证据：Python 全量 `595 passed, 1 skipped`；本批 Python 文件 Ruff 通过。更新后的真实 sidecar onedir
+  冻结构建成功，冷/热预热、随机 localhost API、3 份内置模板、临时用户预设导出和进程回收 smoke 全部通过。
+  全仓 Ruff 仍有 25 个既有问题，位于本批未修改的设备导入、GUI API 和图库测试文件，未借本批越界清理。
 
 ## v2.4 模板与教学自动化收口（2026-07-23）
 

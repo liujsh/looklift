@@ -2,20 +2,22 @@
 
 ## v2.6-A：Domain Pack 与 API Harness Spike
 
-- [ ] 固定 `PHOTO_EDITING.md`、StyleProfile、`SKILL.md`、Reference 与 Template 元数据协议。
+- [x] 固定 `PHOTO_EDITING.md`、StyleProfile、`SKILL.md`、Reference 与 Template 元数据协议。
 - [x] 实现 Context Compiler 的来源、优先级、预算、快照和 Hash 契约测试。
 - [x] 对 `pydantic-ai-slim` 完成许可、Windows/Tauri 打包、Anthropic、OpenAI-compatible、Ollama、图片、工具、流和取消门。
-- [ ] 可行性门失败时才用同一用例评估 `pi-agent-core`，确定唯一内嵌 Harness。
+- [x] 可行性门通过后锁定 Pydantic AI 为唯一内嵌 Harness，不评估或并存 Pi。
 - [x] 建立 Fake Harness 和统一 Adapter 最小接口，不接 UI。
 
 ## v2.6-B：最小候选 Agent Loop
 
-- [ ] 从现有参数契约生成 `render_candidate` 请求/响应 Schema 和 Pydantic Tool Binding。
-- [ ] 复用 Template 强度、Patch 校验和唯一引擎，建立不可变单线 Candidate Revision。
-- [ ] 将候选预览图、参数差异、基础指标、错误和剩余预算作为多模态 Tool Result 回灌模型。
-- [ ] 实现 `finish_candidate` 三种模型终态和独立用户确认边界。
-- [ ] 建立 Run/Attempt/Lease、取消、晚到和基线冲突的离线测试。
-- [ ] 用 API Harness 串通 Domain Pack → 候选 → 反馈 → 可选再修改 → 结构化结束。
+- [x] 从现有参数契约生成 `render_candidate` 请求/响应 Schema 和 Pydantic Tool Binding。
+- [x] 复用 Template 强度、Patch 校验和唯一引擎，建立不可变单线 Candidate Revision。
+- [x] 将候选预览图、参数差异、基础指标、错误和剩余预算作为多模态 Tool Result 回灌模型。
+- [x] 实现 `finish_candidate` 三种模型终态和独立用户确认边界。
+- [x] 建立 Run/Attempt/Lease、取消、晚到和基线冲突的离线测试。
+- [x] 用 API Harness 串通 Domain Pack → 候选 → 反馈 → 可选再修改 → 结构化结束。
+
+自动化闭环已完成；真实 API、真实照片和主观效果验收仍属于后续显式人工 Spike，不据此宣称 v2.6 已发布。
 
 ## v2.6-C：本地 CLI Adapter
 

@@ -30,6 +30,14 @@ NumPy/Pillow 依赖的 onedir 增量为 21.74 MiB，低于 60 MiB 门限。结�
 
 阶段门：失败、取消和重启前置模拟不能证明正式版本不变时，不接 CLI。
 
+### 2026-08-20 最小闭环结果
+
+已实现内存 `CandidateRuntime`、不可变单线 Revision、相对 Template、严格参数 Patch、真实 JPEG 与基础指标回灌，
+并通过 Pydantic AI 的 `render_candidate` 工具和结构化 `finish_candidate` 输出串通零修改、一轮候选和两轮修正。
+Run/Attempt/Lease、预算、取消晚到、基线变化和重复终态均由离线测试覆盖；Adapter 对外只发归一事件，Provider
+失败不泄漏原始载荷，也不跨 Provider 自动切换。当前完成的是不接 UI、SQLite 和本地 CLI 的 B 阶段自动化范围；
+真实模型/照片观感仍待人工 Spike，正式版本入口未接入，因此候选不能保存或导出。
+
 ## v2.6-C：CLI Adapter
 
 1. 先用 Fake CLI 固定进程、stdio/事件、取消和终态，再实现 Workspace 与 Scoped MCP。
