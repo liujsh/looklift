@@ -47,13 +47,17 @@ Run/Attempt/Lease、预算、取消晚到、基线变化和重复终态均由离
 
 阶段门：CLI 不能看到真实候选，或无法关闭内建高权限工具并限制业务工具权限时，不宣称正式 CLI Agent 支持。
 
-### 2026-08-20 CLI 基础与 Pi candidate 结果
+### 2026-08-20 CLI 基础与 Pi 验收结果
 
 已完成随机隔离 Workspace、环境白名单、一次性 Scoped Token、双工具 Gateway、localhost 扩展传输和 Fake CLI/Pi
 进程契约。Pi 0.84.x 可显式关闭内建工具、资源发现、项目上下文、会话持久化、遥测与版本检查，只加载 LookLift
-随包只读扩展；扩展从同一 Pydantic Schema 注册两个工具，候选事实仍由 Python Runtime 产生。Fake Pi 已按其原生
-JSON 事件串通图片反馈、结构化终态、取消和进程回收。当前等级为 `candidate`：尚未用真实 Pi 模型/订阅验证图片
-Tool Result 和主观修正，不能勾选正式 CLI 支持或跨 Harness 人工验收。
+随包只读扩展；扩展从同一 Pydantic Schema 注册两个工具，候选事实仍由 Python Runtime 产生。生产通道使用 Pi RPC：
+它在扩展加载前接管 stdout，初始安全代理图经 RPC 图片输入，最长 8 MiB 的受限事件行可容纳图片回显；Windows npm
+包装器可替换为直接 `node + cli.js` 命令前缀，确保终止的是实际进程而非外壳。
+
+真实 Pi 0.84.1 + OpenRouter Gemini 2.5 Flash Lite 已完成 Domain Pack → 一次候选 → JPEG/指标反馈 →
+`candidate_ready`，参数只将 `basic.shadows` 从 0 调至 0.08；取消 Attempt 在 `run_started` 后 0.028 秒结束，无候选、无正式
+副作用。Pi 因此达到 v2.6-C 的正式 Adapter 支持标准；单张照片主观观感、API 真实模型、Skill 消融与 UI 仍属后续门。
 
 ## v2.6-D：领域内容与评测
 

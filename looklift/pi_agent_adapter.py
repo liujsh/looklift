@@ -9,11 +9,17 @@ from typing import Any
 
 from .agent_adapter import AgentEvent, AgentEventKind, AgentRunInput
 from .candidate_runtime import CandidateRuntime
-from .cli_jsonl_protocol import read_cli_event
+from .cli_jsonl_protocol import CLI_EVENT_STREAM_LIMIT, CliProtocolError, read_cli_event
 from .cli_process import reap_cli_process
 from .cli_workspace import CliWorkspace, CliWorkspaceManager
 from .pi_cli_profile import PiLaunchSpec
-from .pi_json_protocol import pi_text_delta, pi_tool_identity, pi_usage_payload
+from .pi_json_protocol import (
+    pi_prompt_command,
+    pi_text_delta,
+    pi_tool_identity,
+    pi_usage_payload,
+    send_pi_rpc_command,
+)
 from .scoped_tool_gateway import ScopedToolGateway
 from .scoped_tool_http import ScopedToolHttpServer
 
@@ -82,6 +88,7 @@ class PiAgentAdapter:
 
         workspace: CliWorkspace | None = None
         token: str | None = None
+        process: asyncio.subprocess.Process | None = None
         server_acquired = False
         try:
             runtime = self._runtime_resolver(run_input)
@@ -101,13 +108,17 @@ class PiAgentAdapter:
                 *launch.command,
                 cwd=workspace.path,
                 env=dict(launch.environment),
-                stdin=asyncio.subprocess.DEVNULL,
+                stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
+                limit=CLI_EVENT_STREAM_LIMIT,
             )
+            await send_pi_rpc_command(process, pi_prompt_command(run_input))
         except Exception:
             if token is not None:
                 self._tool_gateway.revoke(token)
+            if process is not None:
+                await reap_cli_process(process, self._cancel_grace_seconds)
             if workspace is not None:
                 self._workspace_manager.dispose(workspace)
             if server_acquired:
@@ -134,8 +145,10 @@ class PiAgentAdapter:
         )
 
         terminal = False
+        source: dict[str, Any] | None = None
         try:
             while True:
+                source = None
                 source = await read_cli_event(process)
                 if source is None:
                     if active.cancelled:
@@ -196,10 +209,18 @@ class PiAgentAdapter:
                     )
                     terminal = True
                     break
-        except (ValueError, AssertionError):
+        except (ValueError, AssertionError) as exc:
+            payload = {
+                "code": "cli_protocol_failed",
+                "message": "Pi CLI 返回了无效事件",
+            }
+            if source is not None and isinstance(source.get("type"), str):
+                payload["event_type"] = source["type"]
+            if isinstance(exc, CliProtocolError):
+                payload["protocol_category"] = exc.category
             yield event(
                 AgentEventKind.RUN_FAILED,
-                {"code": "cli_protocol_failed", "message": "Pi CLI 返回了无效事件"},
+                payload,
             )
             terminal = True
         except Exception:

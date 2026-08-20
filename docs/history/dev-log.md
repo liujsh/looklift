@@ -51,7 +51,7 @@
   冻结构建成功，冷/热预热、随机 localhost API、3 份内置模板、临时用户预设导出和进程回收 smoke 全部通过。
   全仓 Ruff 仍有 25 个既有问题，位于本批未修改的设备导入、GUI API 和图库测试文件，未借本批越界清理。
 
-## v2.6-C CLI 基础与 Pi candidate（2026-08-20）
+## v2.6-C CLI 基础与 Pi Adapter（2026-08-20）
 
 - 实测本机 Pi 0.84.1：支持 JSON/RPC 事件、`--no-builtin-tools`、单扩展加载、无 Session 和资源发现禁用；同时其
   随包文档明确不内置 MCP。规格据此把传输收敛为 Scoped Tool Gateway：有原生 MCP 就用 MCP，Pi 使用随应用只读
@@ -59,9 +59,15 @@
 - Fake CLI/Pi 自动化覆盖随机 Workspace、敏感环境清理、双工具白名单、Token 过期/撤销、真实 localhost HTTP、JPEG
   图片结果、原生事件归一、协议错误脱敏、取消和强制进程回收。Pi 启动封套还关闭遥测与版本检查，避免模型服务之外
   的隐式数据接收方。
-- **待人工**：使用真实 Pi 订阅/模型确认初始代理图和候选 JPEG 都进入模型上下文、模型能依据反馈修正或停止、取消
-  一秒内结束；通过前 Pi 仅为 `candidate`，简历不能写“已完成 CLI/API 双 Harness”。
-- 收口证据：Python 全量 `616 passed, 1 skipped`，本批 Ruff 与 Pi Extension Node 语法检查通过；更新后的 Windows
+- 真实 Pi 0.84.1 + OpenRouter Gemini 2.5 Flash Lite 已确认初始安全代理图进入模型上下文。一次运行调用
+  `render_candidate`，取得 JPEG、亮度与裁切指标后以 `candidate_ready` 停止；实际 Patch 仅把
+  `basic.shadows: 0 → 0.08`。另一次运行在 `run_started` 后取消，0.028 秒退出、无候选、无正式副作用。
+- 真实门暴露并修复两项只在 Windows/图片输入出现的问题：npm `.cmd` 只回收外壳，现支持直接 `node + cli.js` 命令
+  前缀；RPC 会回显 base64 图片事件，stdout 从默认 64 KiB 改为 8 MiB 硬上限。第一次失败遗留的精确临时 Attempt 目录
+  已删除，后续 Workspace 均自动回收。
+- Pi 达到 v2.6-C 正式 Adapter 支持标准，但真实 API、单张照片主观观感、Skill 消融、UI 与重启恢复仍未完成；当前仍
+  不能写“v2.6 已发布”或“完整双 Harness 产品落地”。
+- 收口证据：Python 全量 `620 passed, 1 skipped`，本批 Ruff 与 Pi Extension Node 语法检查通过；更新后的 Windows
   sidecar 冻结构建成功，随包包含只读 `pi-looklift-tools.js`，冷/热预热和既有发布 smoke 全部通过；本机 Pi 0.84.1
   的 `--offline --help` 也能加载该扩展封套且不调用模型。
 

@@ -7,7 +7,16 @@ import json
 from typing import Any
 
 
-_MAX_EVENT_BYTES = 256 * 1024
+CLI_EVENT_STREAM_LIMIT = 8 * 1024 * 1024
+_MAX_EVENT_BYTES = CLI_EVENT_STREAM_LIMIT - 1
+
+
+class CliProtocolError(ValueError):
+    """携带不含原始行内容的 JSONL 失败分类。"""
+
+    def __init__(self, category: str) -> None:
+        super().__init__("CLI JSONL 协议无效")
+        self.category = category
 
 
 async def read_cli_event(
@@ -20,10 +29,26 @@ async def read_cli_event(
         return None
     if len(line) > _MAX_EVENT_BYTES:
         raise ValueError("CLI 事件过大")
-    value = json.loads(line)
+    try:
+        value = json.loads(line)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise CliProtocolError(_classify_non_json(line)) from exc
     if not isinstance(value, dict):
         raise ValueError("CLI 事件必须是对象")
     return value
+
+
+def _classify_non_json(line: bytes) -> str:
+    text = line.decode("utf-8", errors="replace").strip().casefold()
+    if text.startswith("loaded extension") or text.startswith("[extension"):
+        return "startup_log"
+    if text.startswith("warning") or text.startswith("warn"):
+        return "warning_log"
+    if text.startswith("error") or text.startswith("failed"):
+        return "error_log"
+    if text.startswith("{") or text.startswith("["):
+        return "malformed_json"
+    return "non_json"
 
 
 def parse_tool_call(source: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:

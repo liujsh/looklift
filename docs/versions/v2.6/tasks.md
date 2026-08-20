@@ -22,13 +22,20 @@
 ## v2.6-C：本地 CLI Adapter
 
 - [x] 建立隔离 Workspace、Domain Pack 暂存、环境清理和一次性 Scoped Tool Token。
-- [ ] 接入第一条已有基础最好的本地 CLI，固定探测、权限、图片反馈、事件、取消和进程回收。
+- [x] 接入第一条已有基础最好的本地 CLI，固定探测、权限、图片反馈、事件、取消和进程回收。
 - [x] CLI 与 API 共用 Tool Schema、候选实现和终态，不复制业务逻辑。
-- [ ] 用 Fake CLI 完成 Adapter Conformance Tests，再做真实 CLI 人工集成验收。
-- [ ] 明确正式、实验性和不支持 CLI 的能力矩阵及 UI 风险说明。
+- [x] 用 Fake CLI 完成 Adapter Conformance Tests，再做真实 CLI 人工集成验收。
+- [x] 明确正式、实验性和不支持 CLI 的能力矩阵及 UI 风险说明。
 
-Pi 0.84.x 的 Fake 进程与原生 JSON 事件自动化已通过；真实模型、订阅认证和图片 Tool Result 仍待显式人工集成，
-因此当前只列为 `candidate`，上面三项包含人工门的任务保持未完成。
+| CLI 类别 | 当前等级 | 依据与 UI 风险 |
+|---|---|---|
+| Pi 0.84.x | 正式 Adapter 支持 | RPC 图片与事件、双工具只读扩展、真实候选反馈和 0.028 秒取消均已验证；UI 仍须显示外部 Pi/Provider 是实际数据接收方 |
+| Claude/Codex/OpenCode | 实验性/未接入 | 尚无同等最小权限、图片 Tool Result、事件与取消证据，不复用 Pi 结论 |
+| 无法关闭文件/Shell/代码工具或无图片反馈的 CLI | 不支持 | 不出现在正式 Runtime 选项中，避免把高权限外部程序伪装成受控修图 Agent |
+
+真实 Pi 使用 OpenRouter Gemini 2.5 Flash Lite 完成一次单候选闭环：模型收到安全代理图，调用
+`render_candidate` 后依据真实 JPEG/指标调用 `finish_candidate`；另一次 Attempt 在 `run_started` 后取消，0.028 秒退出且
+未创建候选。该证据只证明 CLI Runtime 链路，不等于单张照片主观观感、Skill 消融或 v2.6 产品发布验收。
 
 ## v2.6-D：首批 Skill、Template 与 Evals
 

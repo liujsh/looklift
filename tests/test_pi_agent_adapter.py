@@ -151,4 +151,5 @@ def test_pi_adapter_sanitizes_malformed_output(
     assert events[-1].payload == {
         "code": "cli_protocol_failed",
         "message": "Pi CLI 返回了无效事件",
+        "protocol_category": "non_json",
     }

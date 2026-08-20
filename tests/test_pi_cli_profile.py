@@ -10,7 +10,12 @@ import pytest
 from looklift.agent_adapter import AgentImage, AgentRunInput
 from looklift.cli_workspace import CliWorkspaceManager
 from looklift.domain_pack_types import CompiledDomainPack
-from looklift.pi_cli_profile import prepare_pi_launch, probe_pi
+from looklift.pi_cli_profile import (
+    build_pi_launch_resolver,
+    prepare_pi_launch,
+    probe_pi,
+    resolve_pi_command,
+)
 
 
 def _run_input() -> AgentRunInput:
@@ -30,7 +35,7 @@ def _run_input() -> AgentRunInput:
     )
 
 
-def test_probe_marks_supported_version_as_candidate() -> None:
+def test_probe_marks_verified_version_as_supported() -> None:
     def runner(_command):
         return subprocess.CompletedProcess([], 0, stdout="0.84.1\n", stderr="")
 
@@ -38,7 +43,7 @@ def test_probe_marks_supported_version_as_candidate() -> None:
 
     assert result.available is True
     assert result.version == (0, 84, 1)
-    assert result.tier == "candidate"
+    assert result.tier == "supported"
 
 
 def test_probe_rejects_missing_or_old_pi() -> None:
@@ -79,8 +84,10 @@ def test_prepare_pi_launch_disables_all_unselected_capabilities(tmp_path: Path) 
         "--no-context-files",
     ):
         assert flag in launch.command
-    assert "@DOMAIN_PACK.md" in launch.command
-    assert "@proxy.jpg" in launch.command
+    mode_index = launch.command.index("--mode") + 1
+    assert launch.command[mode_index] == "rpc"
+    assert "@DOMAIN_PACK.md" not in launch.command
+    assert "@proxy.jpg" not in launch.command
     assert "run-pi" not in " ".join(launch.command)
     assert "attempt-pi" not in " ".join(launch.command)
     assert launch.environment["LOOKLIFT_TOOL_TOKEN"] == "opaque-token"
@@ -88,6 +95,68 @@ def test_prepare_pi_launch_disables_all_unselected_capabilities(tmp_path: Path) 
     assert launch.environment["PI_SKIP_VERSION_CHECK"] == "1"
     assert "OPENAI_API_KEY" not in launch.environment
     assert (workspace.path / "tool-schema.json").is_file()
+
+
+def test_packaged_launch_resolver_uses_readonly_extension_and_current_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = CliWorkspaceManager(tmp_path / "workspace").create(_run_input())
+    monkeypatch.setenv("PATH", "pi-tools")
+    monkeypatch.setenv("OPENAI_API_KEY", "must-drop")
+
+    launch = build_pi_launch_resolver(executable="pi")(
+        _run_input(),
+        workspace,
+        "http://127.0.0.1:43123",
+        "opaque-token",
+    )
+
+    extension_index = launch.command.index("--extension") + 1
+    extension = Path(launch.command[extension_index])
+    assert extension.name == "pi-looklift-tools.js"
+    assert extension.is_file()
+    assert not extension.is_relative_to(workspace.path)
+    assert launch.environment["PATH"] == "pi-tools"
+    assert "OPENAI_API_KEY" not in launch.environment
+
+
+def test_launch_resolver_accepts_direct_node_command_prefix(tmp_path: Path) -> None:
+    workspace = CliWorkspaceManager(tmp_path / "workspace").create(_run_input())
+    resolver = build_pi_launch_resolver(
+        executable=("node", "C:/readonly/pi/dist/cli.js")
+    )
+
+    launch = resolver(
+        _run_input(),
+        workspace,
+        "http://127.0.0.1:43123",
+        "opaque-token",
+    )
+
+    assert launch.command[:2] == ("node", "C:/readonly/pi/dist/cli.js")
+
+
+def test_resolve_pi_command_bypasses_windows_npm_wrapper(tmp_path: Path) -> None:
+    root = tmp_path / "node"
+    shim = root / "pi.cmd"
+    node = root / "node.exe"
+    cli = (
+        root
+        / "node_modules"
+        / "@earendil-works"
+        / "pi-coding-agent"
+        / "dist"
+        / "cli.js"
+    )
+    cli.parent.mkdir(parents=True)
+    shim.write_text("npm shim", encoding="utf-8")
+    node.write_bytes(b"node")
+    cli.write_text("pi", encoding="utf-8")
+
+    command = resolve_pi_command(str(shim), platform="nt")
+
+    assert command == (str(node), str(cli))
 
 
 def test_prepare_pi_launch_rejects_extension_in_writable_workspace(
