@@ -50,6 +50,8 @@ class RunAuthority(Protocol):
         commit: Callable[[], _T],
     ) -> tuple[str | None, _T | None]: ...
 
+    def cancel(self, binding: RunBinding | None = None) -> None: ...
+
 
 class InMemoryRunAuthority:
     """v2.6-B 的内存权威；持久化和重启恢复留给 v2.6-E。"""
@@ -85,9 +87,10 @@ class InMemoryRunAuthority:
             error = self._validate_unlocked(binding)
             return (error, None) if error is not None else (None, commit())
 
-    def cancel(self) -> None:
+    def cancel(self, binding: RunBinding | None = None) -> None:
         with self._lock:
-            self._cancelled = True
+            if binding is None or self._validate_unlocked(binding) is None:
+                self._cancelled = True
 
     def rotate_lease(self, lease: str) -> None:
         with self._lock:

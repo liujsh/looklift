@@ -62,6 +62,10 @@ class CandidateRuntime:
     def finished(self) -> FinishCandidateResult | None:
         return self._finished
 
+    def cancel(self) -> None:
+        """先撤销领域 Lease 权威，Harness 中止即使晚到也不能落候选。"""
+        self._authority.cancel(self.binding)
+
     def render_candidate(self, request: RenderCandidateInput) -> RenderCandidateResult:
         with self._lock:
             return self._render_candidate(request)

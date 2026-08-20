@@ -4,7 +4,7 @@
 from pathlib import Path
 
 import pyvips
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, copy_metadata
 
 
 project_root = Path(SPECPATH).parent
@@ -13,13 +13,20 @@ vips_binaries = [
     (str(site_packages / "_libvips.pyd"), "."),
     (str(site_packages / "libvips-42-*.dll"), "."),
 ]
+agent_metadata = []
+for distribution in ("genai-prices", "pydantic-ai-slim", "pydantic-graph"):
+    agent_metadata += copy_metadata(distribution)
 
 a = Analysis(
     [str(project_root / "packaging" / "engine_sidecar.py")],
     pathex=[str(project_root)],
     binaries=vips_binaries,
-    datas=collect_data_files("looklift"),
-    hiddenimports=["_libvips"],
+    datas=collect_data_files("looklift") + agent_metadata,
+    hiddenimports=[
+        "_libvips",
+        "looklift.pydantic_agent_adapter",
+        "looklift.pydantic_models",
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
