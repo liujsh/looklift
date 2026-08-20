@@ -26,6 +26,8 @@ a = Analysis(
         "_libvips",
         "looklift.pydantic_agent_adapter",
         "looklift.pydantic_models",
+        "looklift.pi_agent_adapter",
+        "looklift.pi_cli_profile",
     ],
     hookspath=[],
     hooksconfig={},
