@@ -26,13 +26,13 @@ Harness 负责模型调用、消息上下文、工具循环、流式输出和当
 
 ### 本地 CLI
 
-Claude/Codex/OpenCode/Pi 等 CLI 使用自身 Harness。Adapter 只描述探测、启动参数、上下文交付、MCP 注入、事件
+Claude/Codex/OpenCode/Pi 等 CLI 使用自身 Harness。Adapter 只描述探测、启动参数、上下文交付、受限工具注入、事件
 解析、取消和可选 Session Resume，不再包一层模型—工具循环。
 
 正式支持的 CLI 必须能：
 
 - 接收组合后的 Domain Pack 和安全代理图；
-- 调用 Scoped MCP Tool；
+- 调用 Scoped Tool Gateway；有原生 MCP 时使用 MCP，没有原生 MCP 但能关闭内建工具时可使用随应用只读、经审计的扩展桥；
 - 消费 MCP 图片结果或隔离 Workspace 中的候选图片；
 - 输出可归一化的运行和终态事件；
 - 使用自身 Sandbox/Permission 限制工作目录和内建工具；
@@ -170,8 +170,13 @@ CLI 每次 Attempt 使用独立 Workspace，只包含编译后的领域文件、
 外部 Provider 继续只接收最长边 2048px、无 EXIF 的代理图。API key 只进入对应 Provider 客户端；CLI 使用自己的
 认证，LookLift 不把 API key 注入 CLI 环境。日志不保存图片 Base64、密钥、完整环境、原始路径或隐藏思维链。
 
-一次性 MCP Token 绑定 Run、Attempt、工具权限和过期时间，只暴露 `render_candidate` 与 `finish_candidate`；运行
+一次性 Scoped Tool Token 绑定 Run、Attempt、工具权限和过期时间，只暴露 `render_candidate` 与 `finish_candidate`；运行
 完成、取消、超时、基线变化或 Attempt 替换时立即失效。
+
+传输层不是业务真相源：CLI 原生支持 MCP 时优先注入临时 MCP Server；像 Pi 这类明确不内置 MCP、但支持
+`--no-builtin-tools` 和自定义 Tool Extension 的 Harness，可加载 LookLift 随包只读扩展，把同一 Pydantic Schema 和
+Scoped Token 转发给 Gateway。扩展不得位于可写 Workspace、不得注册第三个工具，也不得复制参数校验或候选逻辑。
+无法关闭文件、Shell、代码执行等内建工具的 CLI 只能标为实验性。
 
 ## 取消、恢复与冲突
 

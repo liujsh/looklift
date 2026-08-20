@@ -40,12 +40,20 @@ Run/Attempt/Lease、预算、取消晚到、基线变化和重复终态均由离
 
 ## v2.6-C：CLI Adapter
 
-1. 先用 Fake CLI 固定进程、stdio/事件、取消和终态，再实现 Workspace 与 Scoped MCP。
+1. 先用 Fake CLI 固定进程、stdio/事件、取消和终态，再实现 Workspace 与 Scoped Tool Gateway。
 2. 第一条真实 CLI 只开放两个 Tool，验证权限模式和候选图片反馈；无法满足最小权限则降为实验性。
 3. 用同一 Adapter Conformance Suite 比较 CLI/API 的契约语义，不要求生成相同参数。
 4. 完成强杀、超时、Token 撤销、进程回收和敏感环境检查。
 
-阶段门：CLI 不能看到真实候选，或无法限制其业务工具权限时，不宣称正式 CLI Agent 支持。
+阶段门：CLI 不能看到真实候选，或无法关闭内建高权限工具并限制业务工具权限时，不宣称正式 CLI Agent 支持。
+
+### 2026-08-20 CLI 基础与 Pi candidate 结果
+
+已完成随机隔离 Workspace、环境白名单、一次性 Scoped Token、双工具 Gateway、localhost 扩展传输和 Fake CLI/Pi
+进程契约。Pi 0.84.x 可显式关闭内建工具、资源发现、项目上下文、会话持久化、遥测与版本检查，只加载 LookLift
+随包只读扩展；扩展从同一 Pydantic Schema 注册两个工具，候选事实仍由 Python Runtime 产生。Fake Pi 已按其原生
+JSON 事件串通图片反馈、结构化终态、取消和进程回收。当前等级为 `candidate`：尚未用真实 Pi 模型/订阅验证图片
+Tool Result 和主观修正，不能勾选正式 CLI 支持或跨 Harness 人工验收。
 
 ## v2.6-D：领域内容与评测
 

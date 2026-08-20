@@ -503,3 +503,13 @@ finish_candidate（模型终态）→ 内存候选，等待未来 UI 人工确�
   取消、Lease/Attempt 或正式基线变化使晚到结果成为 `cancelled/stale`。
 - `render_candidate` 的富 Tool Result 同时包含结构化结果和真实 JPEG；`finish_candidate` 仅接受最新候选、
   无修改或明确能力不足三类终态。Finish 不保存、导出或修改正式版本。
+
+### 29. CLI 隔离与 Pi candidate
+
+- 每个 CLI Attempt 使用随机 Workspace，只写编译后的 `DOMAIN_PACK.md`、代理图、传输无关 Tool Schema 和候选预览；
+  目录名不含 Run/Attempt，环境按白名单重建并移除 Provider API Key、数据库和 LookLift 私有变量。
+- `ScopedToolGateway` 以随机、可过期和可撤销 Token 私有绑定 `CandidateRuntime`，只接受 `render_candidate` 与
+  `finish_candidate`。CLI 传入的参数不含运行身份、真实路径和正式版本；终态成功、取消或进程结束都会撤销 Token。
+- Pi 使用其原生 JSON 事件和随应用只读 JavaScript Extension；启动参数关闭内建工具、其他 Extension、Skill、Prompt、
+  Theme、项目上下文和 Session。Extension 经随机 localhost HTTP 端口调用同一 Gateway，并把 JPEG 作为图片 Tool Result。
+- 当前只有 Fake Pi 自动化证据，真实 Pi 模型与订阅认证未验收，故能力等级是 `candidate` 而非正式支持。

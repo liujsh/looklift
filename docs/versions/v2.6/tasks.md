@@ -21,11 +21,14 @@
 
 ## v2.6-C：本地 CLI Adapter
 
-- [ ] 建立隔离 Workspace、Domain Pack 暂存、环境清理和一次性 Scoped MCP Token。
+- [x] 建立隔离 Workspace、Domain Pack 暂存、环境清理和一次性 Scoped Tool Token。
 - [ ] 接入第一条已有基础最好的本地 CLI，固定探测、权限、图片反馈、事件、取消和进程回收。
-- [ ] CLI 与 API 共用 Tool Schema、候选实现和终态，不复制业务逻辑。
+- [x] CLI 与 API 共用 Tool Schema、候选实现和终态，不复制业务逻辑。
 - [ ] 用 Fake CLI 完成 Adapter Conformance Tests，再做真实 CLI 人工集成验收。
 - [ ] 明确正式、实验性和不支持 CLI 的能力矩阵及 UI 风险说明。
+
+Pi 0.84.x 的 Fake 进程与原生 JSON 事件自动化已通过；真实模型、订阅认证和图片 Tool Result 仍待显式人工集成，
+因此当前只列为 `candidate`，上面三项包含人工门的任务保持未完成。
 
 ## v2.6-D：首批 Skill、Template 与 Evals
 

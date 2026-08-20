@@ -26,7 +26,7 @@ Harness。两条路径接收同一份修图 Domain Pack、调用同一候选工�
 
 - [ ] Runtime 能把相同版本的领域契约、StyleProfile、Skill、Template、References 和运行上下文编译为可追踪 Domain Pack。
 - [ ] 本地 CLI 使用自身 Harness；API 使用唯一内嵌 Harness。两者共享候选工具 Schema、参数校验、终态和用户确认语义。
-- [ ] 至少一条 API 路径和一条本地 CLI 路径能查看安全代理图、调用候选工具、获得真实候选预览并完成运行。
+- [ ] 至少一条 API 路径和一条本地 CLI 路径能查看安全代理图、通过 Scoped Tool Gateway 调用候选工具、获得真实候选预览并完成运行。
 - [ ] Agent 可以根据候选图与确定性指标再次修改；Runtime 不强制固定的观察—渲染—评估工具顺序。
 - [ ] 首版机器动作收敛为 `render_candidate`，结构化终止收敛为 `finish_candidate`；提交、导出和批量执行不作为 Agent Tool。
 - [ ] `render_candidate` 复用现有白盒 Patch ABI、模板强度算法、参数契约和唯一渲染引擎，不产生第二套调色实现。
@@ -34,7 +34,7 @@ Harness。两条路径接收同一份修图 Domain Pack、调用同一候选工�
 - [ ] 首版每次最多一个主 Skill 和一个可选 Template；Skill、Template、References 均不能授予工具权限。
 - [ ] StyleProfile 只保存用户明确确认的固定维度偏好；本轮明确目标优先于 StyleProfile、Skill 和 Template。
 - [ ] 外部模型继续只接收最长边 2048px、无 EXIF 的代理图；CLI Workspace 不含原图、真实图库路径、密钥和数据库。
-- [ ] 不满足图片反馈、结构化事件或最小权限要求的 CLI 不列为正式支持 Runtime。
+- [ ] 不满足图片反馈、结构化事件、内建工具禁用或最小权限要求的 CLI 不列为正式支持 Runtime。
 - [ ] 同一评测集同时覆盖任务结果、Skill/Template 增益、真实反馈利用、安全、取消恢复、延迟和成本。
 
 ## 首批领域内容
