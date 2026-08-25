@@ -10,6 +10,10 @@ const interrupted: AgentRunManifest = {
   run_id: "run-a", status: "interrupted", baseline_hash: "a".repeat(64), photo_hash: "b".repeat(64),
   attempt_id: "attempt-1", last_sequence: 4, last_candidate_revision: "candidate-1", stale_reason: null,
   runtime_id: "pydantic-api", provider: "anthropic", model: "claude-test", domain_pack_hash: "c".repeat(64), session_id: "session-a",
+  context_sources: [
+    { id: "rule-natural", version: 2, hash: "d".repeat(64), status: "used" },
+    { id: "reference-catalog", version: 1, hash: "e".repeat(64), status: "omitted", reason: "预算不足" },
+  ],
 };
 
 describe("AgentRunsPage", () => {
@@ -44,6 +48,8 @@ describe("AgentRunsPage", () => {
     const select = container.querySelector("select")!;
     select.value = "pi-cli";
     await act(async () => select.dispatchEvent(new Event("change", { bubbles: true })));
+    expect(container.textContent).toContain("rule-natural");
+    expect(container.textContent).toContain("预算不足");
     const button = [...container.querySelectorAll("button")].find((item) => item.textContent === "新建 Attempt")!;
     await act(async () => button.click());
     await vi.waitFor(() => expect(resumeAgentRun).toHaveBeenCalled());

@@ -339,6 +339,7 @@ export type AgentRunManifest = {
   model: string | null;
   domain_pack_hash: string | null;
   session_id: string | null;
+  context_sources: Array<{ id: string; version: number; hash: string; status: "used" | "omitted"; reason?: string }>;
 };
 
 export type ContextEntryType = "profile" | "rule" | "fact" | "preference" | "project" | "reference" | "feedback";

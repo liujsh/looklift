@@ -561,3 +561,5 @@ Connector Manifest 固定协议、数据接收方和能力；外部事实先进�
 跨 Agent、Connector 和 Context 的写入统一由持久化 `ProposalService` 管理，状态固定为 preview、confirmed、rejected、applied、expired 或 conflict。确认与应用分离，`base_hash` 冲突不会覆盖正式内容，重复确认、拒绝和应用保持幂等；Proposal 保留 Source Packet ID，不把来源正文写进日志。
 
 冻结给 Harness 的 Context 快照只包含 enabled 且 confirmed 的条目，并在不改写本地原文的前提下清除 Home/原图路径、密钥和 EXIF 明细。Global Rule、Memory 与 Project Context 进入 Domain Pack 时转义分区边界，不能伪造 Tool Contract。Python API 提供配置、条目、规则和 Proposal Query/Command；React 设置页展示来源、版本、确认状态、Hash、项目上下文及提案审核，不接触存储路径。
+
+运行详情的 `RunManifest` 额外冻结脱敏 `context_sources` 摘要，只包含来源 ID、版本、内容 Hash、使用/省略状态和省略原因；旧 Manifest 缺少该字段时按空摘要兼容。恢复页据此展示本次上下文依据，不返回上下文正文、原图路径或密钥。

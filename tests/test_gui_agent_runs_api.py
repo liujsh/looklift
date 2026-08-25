@@ -31,6 +31,7 @@ def test_agent_run_recovery_api_lists_details_and_starts_new_attempt(tmp_path, m
         attempt_id="attempt-1",
         runtime_id="pydantic-api",
         session_id=session.id,
+        context_sources=({"id": "rule-natural", "version": 2, "hash": "a" * 64, "status": "used"},),
     )
     repository.store("run-a").reconcile(manifest, baseline_hash=manifest.baseline_hash)
 
@@ -41,6 +42,7 @@ def test_agent_run_recovery_api_lists_details_and_starts_new_attempt(tmp_path, m
     status, detail = api.ROUTES[("GET", "/api/agent/runs/<id>")](_ctx())
     assert status == 200
     assert detail["run_id"] == "run-a"
+    assert detail["context_sources"][0]["id"] == "rule-natural"
 
     status, resumed = api.ROUTES[("POST", "/api/agent/runs/<id>/resume")](
         _ctx(body={"attempt_id": "attempt-2", "runtime_id": "pi-cli"})

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+import json
 
 from looklift.run_manifest import (
     ManifestError,
@@ -96,3 +97,23 @@ def test_completed_run_cannot_be_resumed(tmp_path):
             attempt_id="attempt-2",
             baseline_hash=manifest.baseline_hash,
         )
+
+
+def test_manifest_persists_redacted_context_source_summary(tmp_path):
+    repository = RunManifestRepository(tmp_path)
+    sources = (
+        {"id": "rule-natural", "version": 2, "hash": "a" * 64, "status": "used"},
+        {"id": "reference-catalog", "version": 1, "hash": "b" * 64, "status": "omitted", "reason": "预算不足"},
+    )
+    repository.create(
+        "run-context",
+        baseline_hash=hash_text("baseline"),
+        photo_hash=hash_text("photo"),
+        attempt_id="attempt-1",
+        context_sources=sources,
+    )
+
+    restored = repository.load("run-context")
+
+    assert restored.context_sources == sources
+    assert "C:\\" not in json.dumps(restored.context_sources, ensure_ascii=False)
