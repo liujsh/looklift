@@ -1,0 +1,4 @@
+interface:
+  display_name: "抽象摄影编辑"
+  short_description: "规划抽象摄影与编辑风格的白盒修图流程"
+  default_prompt: "为这组照片制定抽象摄影编辑计划"

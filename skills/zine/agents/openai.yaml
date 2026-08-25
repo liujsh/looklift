@@ -1,0 +1,4 @@
+interface:
+  display_name: "Zine 策划"
+  short_description: "规划 Zine 摄影项目的主题叙事、页面结构与版式"
+  default_prompt: "为这组照片制定 Zine 页面和输出计划"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skill 编辑器"
+  short_description: "通过对话创建和检查可复用的 Agent Skill"
+  default_prompt: "帮我设计或修改一个可加载的 Skill"
