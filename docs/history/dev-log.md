@@ -381,6 +381,13 @@
 - 运行详情页补充“本次上下文”面板，帮助用户核对 Agent 实际依据和被省略的 Reference。
 - 定向证据：后端 `7 passed`，前端 AgentRuns `2 passed`，TypeScript 与 Ruff 通过。浏览器控制工具在当前会话不可用，实际截图验收仍待人工完成。
 
+## 2026-08-25：版本化离线 Eval Runner
+
+- Eval 数据集固定版本 `v2.6-D-2026-08-25`，20 个 Case 输出 Case 元数据、事件轨迹、失败分类、候选/工具计数和安全不变量。
+- 新增六组 Skill/Template/反馈消融配置；所有结果保持正式版本不变、晚到隔离和敏感数据检查。
+- 报告分离 `offline_contract`、`fake_harness`、`real_model_ablation`、`human_pairwise` 阶段；真实 Provider 与人工 Pairwise 永远标记为待人工完成。
+- 定向证据：Eval 测试 `8 passed`，受影响文件 Ruff 通过；真实模型与人工评测未进入默认 CI。
+
 ## 2026-08-25：插件页与最小能力授权
 
 - Registry 增加脱敏 Manifest 列表投影；内置 `catalog-tools` 作为真实只读目录项，不伪造社区安装数据。

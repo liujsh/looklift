@@ -548,6 +548,10 @@ Connector Manifest 固定协议、数据接收方和能力；外部事实先进�
 
 `CandidateVerifier` 直接消费 CandidateRuntime 冻结的 changes、preview 和 metrics，不重新渲染或创建 Revision。Contract/Domain/Capability 硬失败阻止进入复核，裁切阈值产生可审阅软警告；每次结果包含覆盖候选差异、指标和预览摘要的 evidence hash。`UserReviewGate` 只冻结用户确认意图并复核正式基线，不承担正式版本提交。
 
+### 版本化离线 Eval Runner
+
+`agent_eval.py` 固定数据集版本 `v2.6-D-2026-08-25` 与 20 个确定性 Case。每次结果保存完整事件轨迹、失败分类、候选/工具计数、取消和晚到隔离状态、正式版本不变、候选版本单调、敏感数据检查及消融配置。`run_ablation_matrix()` 提供 Skill、Template、反馈三维对照；`build_eval_report()` 输出包含 Case 元数据、汇总、失败分类和四阶段门禁的 JSON 结构。真实模型消融和人工 Pairwise 没有数据时固定为 `pending_manual`，不生成产品通过结论。
+
 ### Run Manifest Repository 与恢复 API
 
 每个 Run 使用独立 JSONL 事实日志和原子快照，Repository 以安全 Run ID 管理列表、详情和恢复。应用创建本地服务时执行一次启动收敛，将未完成状态标为 interrupted；普通查询不改变运行状态。`GET /api/agent/runs/recoverable` 和详情 API 暴露脱敏事实，恢复命令只在基线一致且状态为 interrupted/failed 时创建新 Attempt，可显式切换 Runtime，但不会自动启动模型调用。
