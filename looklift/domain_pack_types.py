@@ -53,6 +53,7 @@ class DomainPackRequest:
     tool_contract: VersionedJson
     user_goal: str
     run_context: Mapping[str, Any]
+    permission_contract: VersionedJson | None = None
     style_profile: StyleProfile | None = None
     skill: VersionedText | None = None
     template: VersionedJson | None = None

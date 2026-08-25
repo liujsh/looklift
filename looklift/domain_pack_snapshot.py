@@ -95,6 +95,9 @@ def _request_to_dict(request: DomainPackRequest) -> dict[str, Any]:
         "system_contract": _text_to_dict(request.system_contract),
         "domain_contract": _text_to_dict(request.domain_contract),
         "tool_contract": _json_to_dict(request.tool_contract),
+        "permission_contract": _json_to_dict(request.permission_contract)
+        if request.permission_contract is not None
+        else None,
         "user_goal": request.user_goal,
         "run_context": request.run_context,
         "style_profile": _style_to_dict(request.style_profile),
@@ -103,6 +106,9 @@ def _request_to_dict(request: DomainPackRequest) -> dict[str, Any]:
         if request.template is not None
         else None,
         "references": [_text_to_dict(item) for item in request.references],
+        "global_rules": [_text_to_dict(item) for item in request.global_rules],
+        "memory": [_text_to_dict(item) for item in request.memory],
+        "project_context": [_text_to_dict(item) for item in request.project_context],
     }
 
 
@@ -111,6 +117,7 @@ def _request_from_dict(value: Any) -> DomainPackRequest:
     style_value = data.get("style_profile")
     skill_value = data.get("skill")
     template_value = data.get("template")
+    permission_value = data.get("permission_contract")
     references_value = data.get("references", [])
     if not isinstance(references_value, list):
         raise DomainPackSnapshotError("references 必须是数组")
@@ -119,6 +126,9 @@ def _request_from_dict(value: Any) -> DomainPackRequest:
         system_contract=_text_from_dict(data["system_contract"]),
         domain_contract=_text_from_dict(data["domain_contract"]),
         tool_contract=_json_from_dict(data["tool_contract"]),
+        permission_contract=_json_from_dict(permission_value)
+        if permission_value is not None
+        else None,
         user_goal=_string(data.get("user_goal"), "user_goal"),
         run_context=run_context,
         style_profile=_style_from_dict(style_value)
@@ -129,7 +139,16 @@ def _request_from_dict(value: Any) -> DomainPackRequest:
         if template_value is not None
         else None,
         references=tuple(_text_from_dict(item) for item in references_value),
+        global_rules=_text_array(data.get("global_rules", []), "global_rules"),
+        memory=_text_array(data.get("memory", []), "memory"),
+        project_context=_text_array(data.get("project_context", []), "project_context"),
     )
+
+
+def _text_array(value: Any, label: str) -> tuple[VersionedText, ...]:
+    if not isinstance(value, list):
+        raise DomainPackSnapshotError(f"{label} 必须是数组")
+    return tuple(_text_from_dict(item) for item in value)
 
 
 def _text_to_dict(document: VersionedText) -> dict[str, Any]:

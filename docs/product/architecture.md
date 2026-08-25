@@ -526,3 +526,24 @@ finish_candidate（模型终态）→ 内存候选，等待未来 UI 人工确�
 - `agent_eval.py` 固定 12 个效果 Case 与 8 个工程/安全 Case，使用确定性代理图和 Fake Harness 运行；结果记录终态、
   候选/工具调用数、失败码、正式副作用和敏感数据泄漏。消融配置已可表达 Skill、Template 与真实反馈对照，
   但真实模型结果和人工 Pairwise 仍不进入默认 CI。
+### Context Compiler 2.0 与运行事实接线
+
+`DomainPackRequest` 已支持冻结的 Capability/Permission、全局规则、Memory 和 Project Context 来源；编译顺序将权限与 Tool Contract 固定在领域和用户内容之前，所有来源进入稳定 Hash 与可恢复快照。`RunManifestStore.append_agent_event` 消费统一 `AgentEvent`，拒绝跨 Run/Attempt 事件，并在新 Attempt 开始时重置事件序号，避免 Harness 原生会话成为状态真相源。
+
+### 声明式 Runtime 探测
+
+`RuntimeDefinition` 已统一 API、CLI、Fake 的输入传输、流格式、Resume、MCP、能力和权限描述；`RuntimeDetectionEngine` 对注册项执行并行、限时、故障隔离的探测，输出脱敏的可用性、认证、版本和模型结果，单个 Runtime 失败不会阻断其他结果。
+
+`RuntimeLifecycleEngine` 根据用户明确选择的 Definition 创建 Adapter，校验所需能力与事件身份/序号，统一附加 Runtime 能力快照并负责取消和回收。内置目录声明 Pydantic API、Pi CLI 和 Fake 三种 Runtime；`GET /api/runtimes` 只暴露选择器所需的安全字段，不返回命令、端点、环境或凭据。
+
+### Plugin Registry、Scoped Token 与 Skill staging
+
+Plugin Manifest 校验稳定语义版本、内容 SHA-256、类型、模式和能力红线；Registry 保留所有历史版本，卸载只禁用当前选择，不删除历史运行引用。`ScopedTokenStore` 将 Grant 绑定项目、版本和 Attempt，撤销主体后现有令牌立即失效。Skill staging 只接受 `SKILL.md` 和一层 Markdown Reference，将规范化内容冻结到项目私有 Hash 目录并阻断路径穿越。
+
+### Connector Source Packet 与 Provider Gateway
+
+Connector Manifest 固定协议、数据接收方和能力；外部事实先进入带来源摘要的 `SourcePacketStore`，再调用共享 Proposal Service 生成带 provenance 的提案。`ProviderGateway` 不接受文件路径，只接收内存 JPEG，并在发送前校验授权接收方、2048px 上限、真实 JPEG 格式和 EXIF 为空，输出既有 `AgentImage` 安全代理对象。
+
+### Verifier、Critique 与 User Review Gate
+
+`CandidateVerifier` 直接消费 CandidateRuntime 冻结的 changes、preview 和 metrics，不重新渲染或创建 Revision。Contract/Domain/Capability 硬失败阻止进入复核，裁切阈值产生可审阅软警告；每次结果包含覆盖候选差异、指标和预览摘要的 evidence hash。`UserReviewGate` 只冻结用户确认意图并复核正式基线，不承担正式版本提交。

@@ -23,11 +23,21 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable
 
-from .. import ai_proxy, analyzer, chat, config, device_import, intensity, library_tasks, platform_files, report, xmp_writer
-
-from .. import ai_proxy, analyzer, chat, config, intensity, library_tasks, platform_files, report, xmp_writer
+from .. import (
+    ai_proxy,
+    analyzer,
+    chat,
+    config,
+    device_import,
+    intensity,
+    library_tasks,
+    platform_files,
+    report,
+    xmp_writer,
+)
 from ..automation_store import AutomationStore
 from ..automation_tasks import AutomationTaskManager
+from ..builtin_runtimes import builtin_runtime_registry
 from ..library_store import LibraryStore
 from ..render import contract as render_contract
 from ..session_store import DatabaseRecoveryRequired, SessionSnapshot, SessionStore
@@ -48,6 +58,23 @@ _ANALYZE_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
 # 不用原始分辨率做仅供观感的预览(见 design.md)。
 _PREVIEW_MAX_EDGE = 2048
 _PREVIEW_JPEG_QUALITY = 88
+
+
+def _get_runtimes(_ctx: dict) -> tuple[int, dict]:
+    """返回声明式 Runtime 选择数据，不包含密钥、命令参数或环境。"""
+    runtimes = []
+    for definition in builtin_runtime_registry().list():
+        runtimes.append(
+            {
+                "id": definition.runtime_id,
+                "kind": definition.kind,
+                "capabilities": sorted(definition.capabilities),
+                "supports_resume": definition.supports_resume,
+                "supports_mcp": definition.supports_mcp,
+                "models": list(definition.models),
+            }
+        )
+    return 200, {"runtimes": runtimes}
 
 
 def _validate_image_path(path: Any) -> "tuple[Path, None] | tuple[None, tuple[int, dict]]":
@@ -1095,6 +1122,7 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/param-contract"): _param_contract,
     ("GET", "/api/engine-probe"): _engine_probe,
     ("GET", "/api/config"): _get_config,
+    ("GET", "/api/runtimes"): _get_runtimes,
     ("POST", "/api/config"): _post_config,
     ("GET", "/api/tasks/<id>"): _get_task,
     ("POST", "/api/upload"): _upload,

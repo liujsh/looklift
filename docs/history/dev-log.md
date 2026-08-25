@@ -318,3 +318,39 @@
 | Task 7 计划缺陷 | 以计划作者身份授权修复(见坑 3) |
 | 导出需先收藏 | 分析结果区的"导出预设/sidecar"按钮要求先成功 `POST /api/looks` 收藏(`savedLookName` 非空才启用),不提供"未收藏也能导出"的路径——`/api/looks/<name>/export` 是按库里存的 analysis 走的,不是按浏览器内存里的当前状态;这是 design.md「API 路由一览」五条 `/api/looks*` 路由表的忠实实现,也让 U20"滑杆强度带入导出"这条验收标准有一个无歧义的落地点(收藏那一刻的强度)。**但 requirements.md 原始措辞("分析面板能导出预设")读起来像是分析完就能直接导出、不必先收藏,存在歧义,该历史决策记录见 [legacy-spec-process.md](legacy-spec-process.md)** |
 | 报告页打开方式统一 | window 模式(WebView2 支持)和 browser 模式都用前端 `window.open('/report/'+name)`,不额外调用 Python 侧 `webview.create_window`——两种模式前端写同一行代码,不用区分模式维护两套打开逻辑 |
+## 2026-08-25：Context Compiler 2.0 与 Run Manifest 事件接线
+
+- Domain Pack 新增 Capability/Permission、Global Rules、Memory、Project Context 的不可变来源和快照恢复。
+- 固定安全编译顺序：系统边界 → Capability Gate → Tool Contract → 摄影领域契约 → 已确认上下文 → Skill/Template/Reference。
+- Run Manifest 接入规范化 AgentEvent，并修复不同 Attempt 的 sequence 必须独立计数。
+- 定向测试 `34 passed`，受影响文件 Ruff 通过；真实 Provider 和重启 UI 不在本单元验收范围。
+
+## 2026-08-25：Runtime Registry 通用探测骨架
+
+- Runtime Definition 补齐输入传输、事件流格式、Resume 和 MCP 声明字段。
+- 通用探测引擎并行执行注入式 Probe，隔离超时和异常，不向调用方泄漏底层错误正文。
+- 新增可用性、认证、版本和模型发现契约测试；通用启动/取消生命周期仍留在下一完整单元。
+
+## 2026-08-25：Runtime 通用生命周期与目录 API
+
+- 新增通用启动、能力门控、事件身份/序号校验、取消和回收引擎，禁止隐式 Runtime/Provider 回退。
+- Pydantic API、Pi CLI、Fake 进入内置声明式目录；新增 `/api/runtimes` 安全选择数据。
+- Runtime、Adapter 与 GUI 定向回归 `65 passed`；受影响 Ruff 与 diff check 通过。
+
+## 2026-08-25：Plugin 版本、令牌与 Skill staging
+
+- Plugin Registry 使用语义版本选择，校验内容 SHA-256 和高风险能力；禁用版本仍保留用于历史回放。
+- Scoped Token 绑定项目、插件版本和 Attempt，撤销后即时失效。
+- Skill 内容冻结到项目私有 staging，仅允许入口和一层 Markdown Reference；契约测试 `12 passed`。
+
+## 2026-08-25：Connector 来源提案与代理图门禁
+
+- Connector Manifest 固定协议、接收方和能力；Source Packet 以内容摘要保证 ID 幂等。
+- Connector 复用唯一 Proposal Service，ProjectContext 等目标保留完整 Source Packet 来源链。
+- Provider Gateway 仅接受授权接收方的 2048px 无 EXIF JPEG 内存代理图；定向契约测试 `11 passed`。
+
+## 2026-08-25：Verifier、Critique 与用户复核门
+
+- Verifier 复用 CandidateRevision 的白盒差异、真实预览和指标，未复制渲染或 Patch 校验。
+- 固定 Contract/Domain/Capability/Render 失败分类、硬失败与软警告语义，并生成 evidence hash。
+- User Review Gate 复核正式基线且不直接提交；Verifier/Candidate/Eval 定向测试 `23 passed`。
