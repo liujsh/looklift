@@ -543,3 +543,7 @@ Plugin Manifest 校验稳定语义版本、内容 SHA-256、类型、模式和�
 ### Connector Source Packet 与 Provider Gateway
 
 Connector Manifest 固定协议、数据接收方和能力；外部事实先进入带来源摘要的 `SourcePacketStore`，再调用共享 Proposal Service 生成带 provenance 的提案。`ProviderGateway` 不接受文件路径，只接收内存 JPEG，并在发送前校验授权接收方、2048px 上限、真实 JPEG 格式和 EXIF 为空，输出既有 `AgentImage` 安全代理对象。
+
+### Verifier、Critique 与 User Review Gate
+
+`CandidateVerifier` 直接消费 CandidateRuntime 冻结的 changes、preview 和 metrics，不重新渲染或创建 Revision。Contract/Domain/Capability 硬失败阻止进入复核，裁切阈值产生可审阅软警告；每次结果包含覆盖候选差异、指标和预览摘要的 evidence hash。`UserReviewGate` 只冻结用户确认意图并复核正式基线，不承担正式版本提交。

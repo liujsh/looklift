@@ -348,3 +348,9 @@
 - Connector Manifest 固定协议、接收方和能力；Source Packet 以内容摘要保证 ID 幂等。
 - Connector 复用唯一 Proposal Service，ProjectContext 等目标保留完整 Source Packet 来源链。
 - Provider Gateway 仅接受授权接收方的 2048px 无 EXIF JPEG 内存代理图；定向契约测试 `11 passed`。
+
+## 2026-08-25：Verifier、Critique 与用户复核门
+
+- Verifier 复用 CandidateRevision 的白盒差异、真实预览和指标，未复制渲染或 Patch 校验。
+- 固定 Contract/Domain/Capability/Render 失败分类、硬失败与软警告语义，并生成 evidence hash。
+- User Review Gate 复核正式基线且不直接提交；Verifier/Candidate/Eval 定向测试 `23 passed`。
