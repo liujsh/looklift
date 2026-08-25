@@ -315,3 +315,28 @@ export type CreateAutomationWorkflowRequest = {
   suffix: string;
   quality: number;
 };
+
+export type RuntimeSummary = {
+  id: string;
+  kind: "api" | "cli" | "fake";
+  capabilities: string[];
+  supports_resume: boolean;
+  supports_mcp: boolean;
+  models: string[];
+};
+
+export type AgentRunManifest = {
+  run_id: string;
+  status: "starting" | "running" | "cancelling" | "interrupted" | "stale" | "completed" | "failed";
+  baseline_hash: string;
+  photo_hash: string;
+  attempt_id: string | null;
+  last_sequence: number;
+  last_candidate_revision: string | null;
+  stale_reason: string | null;
+  runtime_id: string | null;
+  provider: string | null;
+  model: string | null;
+  domain_pack_hash: string | null;
+  session_id: string | null;
+};

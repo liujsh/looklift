@@ -3,13 +3,13 @@
 - [ ] 1. 定义 Run Manifest、Attempt 与事实事件模型
   - 固定 Hash、快照、候选和确认字段
   - _需求：需求 1_
-- [ ] 2. 实现持久化与追加日志
+- [x] 2. 实现持久化与追加日志
   - 支持幂等、损坏尾记录和版本迁移
   - _需求：需求 1、需求 5_
-- [ ] 3. 实现启动 Reconciliation
+- [x] 3. 实现启动 Reconciliation
   - 收敛中断状态并检测 stale
   - _需求：需求 2、需求 3_
-- [ ] 4. 实现 Attempt Resume 与 Harness 切换
+- [x] 4. 实现 Attempt Resume 与 Harness 切换
   - API/CLI 共享规范化事实，禁止自动恢复收费调用
   - _需求：需求 2、需求 4_
 - [ ] 5. 实现最后候选恢复预览

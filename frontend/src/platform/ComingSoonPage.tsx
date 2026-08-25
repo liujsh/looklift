@@ -6,6 +6,7 @@ const CONTENT: Record<PlatformPage, { title: string; version: string; descriptio
   templates: { title: "大师模板", version: "v2.4", description: "浏览精选与个人模板，了解风格思路并直接应用到照片。" },
   automation: { title: "自动化技能", version: "v2.5", description: "提供显式、可预览、可恢复的批量修图工作流。" },
   plugins: { title: "插件", version: "v2.6", description: "通过受控权限扩展模型、导入、导出和元数据能力。" },
+  runs: { title: "运行恢复", version: "v2.6", description: "查看 Agent 运行事实、中断状态和恢复入口。" },
   settings: { title: "设置与帮助", version: "后续版本", description: "平台级设置、帮助和能力管理将在对应功能具备真实入口后接入。" },
 };
 

@@ -354,3 +354,15 @@
 - Verifier 复用 CandidateRevision 的白盒差异、真实预览和指标，未复制渲染或 Patch 校验。
 - 固定 Contract/Domain/Capability/Render 失败分类、硬失败与软警告语义，并生成 evidence hash。
 - User Review Gate 复核正式基线且不直接提交；Verifier/Candidate/Eval 定向测试 `23 passed`。
+
+## 2026-08-25：Run Manifest Repository 与恢复 API
+
+- 每个 Run 使用独立事实日志/原子快照，Repository 阻断不安全 ID 并提供可恢复列表和详情。
+- 本地服务启动时只执行一次 interrupted 收敛；列表请求不会改变活跃 Run。
+- 恢复仅创建新 Attempt，可显式切换 Runtime，不复用序号、不自动产生模型费用；后端定向回归 `62 passed`。
+
+## 2026-08-25：运行恢复 UI 与服务端基线权威
+
+- 恢复 API 改为根据 Manifest 的 session_id 从 SessionStore 读取正式版本，忽略客户端伪造的 baseline_hash。
+- 平台新增运行恢复导航、可恢复列表、运行事实详情、Runtime 选择和新 Attempt 操作；stale 状态不提供恢复按钮。
+- 后端基线/恢复测试 `18 passed`，前端定向测试 `21 passed` 且 TypeScript 通过；当前环境无浏览器控制入口，实际截图视觉验收待人工完成。

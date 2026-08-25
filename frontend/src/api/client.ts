@@ -30,6 +30,8 @@ import type {
   SessionSnapshot,
   SessionSummary,
   TaskResult,
+  AgentRunManifest,
+  RuntimeSummary,
 } from "./types";
 
 type FetchLike = typeof fetch;
@@ -72,6 +74,27 @@ export class LookliftClient {
 
   paramContract(): Promise<ParamContract> {
     return this.json("/api/param-contract");
+  }
+
+  async runtimes(): Promise<RuntimeSummary[]> {
+    const result = await this.json<{ runtimes: RuntimeSummary[] }>("/api/runtimes");
+    return result.runtimes;
+  }
+
+  async recoverableAgentRuns(): Promise<AgentRunManifest[]> {
+    const result = await this.json<{ runs: AgentRunManifest[] }>("/api/agent/runs/recoverable");
+    return result.runs;
+  }
+
+  agentRun(id: string): Promise<AgentRunManifest> {
+    return this.json(`/api/agent/runs/${encodeURIComponent(id)}`);
+  }
+
+  resumeAgentRun(id: string, attemptId: string, runtimeId?: string): Promise<AgentRunManifest> {
+    return this.json(`/api/agent/runs/${encodeURIComponent(id)}/resume`, {
+      method: "POST",
+      body: JSON.stringify({ attempt_id: attemptId, runtime_id: runtimeId }),
+    });
   }
 
   analyze(payload: AnalyzeRequest): Promise<{ task_id: string }> {
