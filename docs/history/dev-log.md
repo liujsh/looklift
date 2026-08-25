@@ -394,3 +394,9 @@
 - 插件授权接口要求项目范围、作用域和能力子集，任何超出 Manifest 声明的 Shell/原图/黑盒能力均被拒绝；撤销立即使 Grant 失效。
 - React 平台接入插件页，展示版本、来源、输入、能力摘要和授权/撤销操作。
 - 定向证据：插件后端测试 `7 passed`，Ruff 和 TypeScript 通过；真实安装包签名、网络下载和浏览器截图仍未纳入离线验收。
+
+## 2026-08-25：Connector Registry 与调用隔离
+
+- 新增 `ConnectorRegistry`，连接配置只保存受限凭据引用；连接必须显式授权，撤销会断开连接，运行快照只返回已连接 ID。
+- 新增 `ConnectorExecution`，统一显式超时、取消、晚到结果隔离和调用方指定重试，禁止隐式跨 Provider 降级。
+- Fake Connector 安全与生命周期定向测试 `11 passed`；未接入真实网络、密钥存储或真实 Provider。
