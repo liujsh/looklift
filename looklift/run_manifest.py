@@ -9,6 +9,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from .agent_adapter import AgentEvent
+
 
 class ManifestError(ValueError):
     pass
@@ -62,6 +64,21 @@ class RunManifestStore:
         self._write_snapshot(next_manifest)
         return next_manifest
 
+    def append_agent_event(self, manifest: RunManifest, event: AgentEvent) -> RunManifest:
+        """消费统一 AgentEvent；Harness 原生事件不能直接成为状态真相源。"""
+        if event.run_id != manifest.run_id or event.attempt_id != manifest.attempt_id:
+            raise ManifestError("AgentEvent 不属于当前 Run/Attempt")
+        event_id = hash_text(
+            f"{event.run_id}:{event.attempt_id}:{event.sequence}:{event.kind.value}"
+        )
+        return self.append(
+            manifest,
+            event_id=event_id,
+            sequence=event.sequence,
+            kind=event.kind.value,
+            payload=dict(event.payload),
+        )
+
     def reconcile(self, manifest: RunManifest, *, baseline_hash: str) -> RunManifest:
         if manifest.status in {"starting", "running", "cancelling"}:
             manifest = replace(manifest, status="interrupted")
@@ -73,18 +90,32 @@ class RunManifestStore:
     def start_attempt(self, manifest: RunManifest, attempt_id: str) -> RunManifest:
         if manifest.status == "stale":
             raise ManifestError("stale 运行不能直接恢复")
-        next_manifest = replace(manifest, attempt_id=attempt_id, status="starting")
+        next_manifest = replace(
+            manifest,
+            attempt_id=attempt_id,
+            status="starting",
+            last_sequence=0,
+        )
         self._write_snapshot(next_manifest)
         return next_manifest
 
     def _reduce(self, manifest: RunManifest, kind: str, sequence: int, payload: dict[str, Any]) -> RunManifest:
         status = manifest.status
         revision = manifest.last_candidate_revision
-        if kind == "run_started": status = "running"
-        elif kind == "candidate_created": revision = payload.get("revision") or revision
-        elif kind == "run_finished": status = "completed"
-        elif kind == "run_failed": status = "failed"
-        return replace(manifest, status=status, last_sequence=sequence, last_candidate_revision=revision)
+        if kind == "run_started":
+            status = "running"
+        elif kind == "candidate_created":
+            revision = payload.get("revision") or revision
+        elif kind == "run_finished":
+            status = "completed"
+        elif kind == "run_failed":
+            status = "failed"
+        return replace(
+            manifest,
+            status=status,
+            last_sequence=sequence,
+            last_candidate_revision=revision,
+        )
 
     def _write_snapshot(self, manifest: RunManifest) -> None:
         target = self.path.with_suffix(".snapshot.json")
@@ -92,10 +123,12 @@ class RunManifestStore:
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 json.dump(manifest.__dict__, handle, ensure_ascii=False, sort_keys=True)
-                handle.flush(); os.fsync(handle.fileno())
+                handle.flush()
+                os.fsync(handle.fileno())
             os.replace(temporary, target)
         finally:
-            if os.path.exists(temporary): os.unlink(temporary)
+            if os.path.exists(temporary):
+                os.unlink(temporary)
 
 
 def hash_text(value: str) -> str:

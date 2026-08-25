@@ -27,6 +27,9 @@ def _request() -> DomainPackRequest:
         tool_contract=VersionedJson(
             "tools", 1, {"tools": ["render_candidate", "finish_candidate"]}
         ),
+        permission_contract=VersionedJson(
+            "permissions", 1, {"capabilities": ["candidate.render"]}
+        ),
         user_goal="自然提亮，保留高光。",
         run_context={"photo": "proxy", "analysis": {"basic": {"exposure": 0}}},
         style_profile=StyleProfile(
@@ -45,6 +48,9 @@ def _request() -> DomainPackRequest:
             VersionedText("knowledge-light", 1, "曝光影响整体亮度。"),
             VersionedText("knowledge-color", 1, "色温影响冷暖倾向。"),
         ),
+        global_rules=(VersionedText("rule-natural", 1, "禁止过度处理。"),),
+        memory=(VersionedText("memory-preference", 1, "偏好自然低饱和。"),),
+        project_context=(VersionedText("project-catalog", 1, "要求曝光统一。"),),
     )
 
 
@@ -71,9 +77,13 @@ def test_snapshot_preserves_budget_and_omitted_references():
             tool_contract=request.tool_contract,
             user_goal=request.user_goal,
             run_context=request.run_context,
+            permission_contract=request.permission_contract,
             style_profile=request.style_profile,
             skill=request.skill,
             template=request.template,
+            global_rules=request.global_rules,
+            memory=request.memory,
+            project_context=request.project_context,
         )
     )
     snapshot = create_domain_pack_snapshot(

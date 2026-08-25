@@ -526,3 +526,6 @@ finish_candidate（模型终态）→ 内存候选，等待未来 UI 人工确�
 - `agent_eval.py` 固定 12 个效果 Case 与 8 个工程/安全 Case，使用确定性代理图和 Fake Harness 运行；结果记录终态、
   候选/工具调用数、失败码、正式副作用和敏感数据泄漏。消融配置已可表达 Skill、Template 与真实反馈对照，
   但真实模型结果和人工 Pairwise 仍不进入默认 CI。
+### Context Compiler 2.0 与运行事实接线
+
+`DomainPackRequest` 已支持冻结的 Capability/Permission、全局规则、Memory 和 Project Context 来源；编译顺序将权限与 Tool Contract 固定在领域和用户内容之前，所有来源进入稳定 Hash 与可恢复快照。`RunManifestStore.append_agent_event` 消费统一 `AgentEvent`，拒绝跨 Run/Attempt 事件，并在新 Attempt 开始时重置事件序号，避免 Harness 原生会话成为状态真相源。

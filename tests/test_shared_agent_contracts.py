@@ -1,10 +1,9 @@
-from datetime import timedelta
-
 import pytest
 
 from looklift.capabilities import CapabilityGrant, effective_capabilities, require_capability
 from looklift.proposal import ProposalError, ProposalService
 from looklift.run_manifest import RunManifestStore, hash_text
+from looklift.agent_adapter import AgentEvent, AgentEventKind
 from looklift.runtime_registry import RuntimeDefinition, RuntimeDefinitionError, RuntimeRegistry
 from looklift.context_memory import ContextEntry, ContextMemoryStore
 from looklift.plugin_registry import PluginManifest, PluginManifestError, PluginRegistry
@@ -49,6 +48,22 @@ def test_manifest_reconcile_and_attempt(tmp_path):
     assert resumed.attempt_id == "a2"
     stale = store.reconcile(resumed, baseline_hash=hash_text("new"))
     assert stale.status == "stale"
+
+
+def test_manifest_appends_normalized_agent_events_and_resets_attempt_sequence(tmp_path):
+    store = RunManifestStore(tmp_path / "run.jsonl")
+    baseline = hash_text("baseline")
+    manifest = store.create("run", baseline_hash=baseline, photo_hash=hash_text("photo"), attempt_id="a1")
+    started = AgentEvent(AgentEventKind.RUN_STARTED, "run", "a1", 1, {})
+    manifest = store.append_agent_event(manifest, started)
+    assert manifest.status == "running"
+    manifest = store.reconcile(manifest, baseline_hash=baseline)
+    manifest = store.start_attempt(manifest, "a2")
+    assert manifest.last_sequence == 0
+    manifest = store.append_agent_event(
+        manifest, AgentEvent(AgentEventKind.RUN_STARTED, "run", "a2", 1, {})
+    )
+    assert manifest.last_sequence == 1
 
 
 def test_context_memory_requires_proposal_for_updates(tmp_path):

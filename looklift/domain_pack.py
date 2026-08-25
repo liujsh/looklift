@@ -36,18 +36,44 @@ def compile_domain_pack(
     system = _text_snapshot(request.system_contract)
     domain = _text_snapshot(request.domain_contract)
     tools = _json_snapshot(request.tool_contract)
+    permissions = (
+        _json_snapshot(request.permission_contract)
+        if request.permission_contract is not None
+        else None
+    )
     goal = _required_text(request.user_goal, "用户目标")
     run_context = _canonical_json(request.run_context, "运行上下文")
 
-    prefix = [
-        _text_section("SYSTEM_BOUNDARIES", request.system_contract, system),
-        _text_section("PHOTO_EDITING_CONTRACT", request.domain_contract, domain),
-        _plain_json_section("RUN_CONTEXT", run_context),
-    ]
+    prefix = [_text_section("SYSTEM_BOUNDARIES", request.system_contract, system)]
     sources: list[tuple[str, SourceFingerprint]] = [
         _fingerprint(request.system_contract.source_id, request.system_contract.version, system),
-        _fingerprint(request.domain_contract.source_id, request.domain_contract.version, domain),
     ]
+    if request.permission_contract is not None and permissions is not None:
+        prefix.append(_json_section("CAPABILITY_GATE", request.permission_contract, permissions))
+        sources.append(_fingerprint(request.permission_contract.source_id, request.permission_contract.version, permissions))
+    prefix.extend(
+        [
+            _json_section("TOOL_CONTRACT", request.tool_contract, tools),
+            _text_section("PHOTO_EDITING_CONTRACT", request.domain_contract, domain),
+            _plain_json_section("RUN_CONTEXT", run_context),
+        ]
+    )
+    sources.extend(
+        [
+            _fingerprint(request.tool_contract.source_id, request.tool_contract.version, tools),
+            _fingerprint(request.domain_contract.source_id, request.domain_contract.version, domain),
+        ]
+    )
+
+    for tag, documents in (
+        ("GLOBAL_RULE", request.global_rules),
+        ("MEMORY_ENTRY", request.memory),
+        ("PROJECT_CONTEXT", request.project_context),
+    ):
+        for document in documents:
+            content = _text_snapshot(document)
+            prefix.append(_text_section(tag, document, content))
+            sources.append(_fingerprint(document.source_id, document.version, content))
 
     if request.style_profile is not None:
         profile_json = _style_snapshot(request.style_profile)
@@ -87,12 +113,9 @@ def compile_domain_pack(
         reference_values.append((reference, content))
         sources.append(_fingerprint(reference.source_id, reference.version, content))
 
-    sources.append(
-        _fingerprint(request.tool_contract.source_id, request.tool_contract.version, tools)
-    )
     _ensure_unique_source_ids(sources)
 
-    suffix = [_json_section("TOOL_CONTRACT", request.tool_contract, tools)]
+    suffix: list[str] = []
     required = _join_sections(prefix + suffix)
     if max_prompt_chars is not None and len(required) > max_prompt_chars:
         raise DomainPackBudgetError("Domain Pack 必选内容超过 Prompt 字符预算，不能截断")

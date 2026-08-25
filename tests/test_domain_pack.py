@@ -27,6 +27,11 @@ def _request(**overrides) -> DomainPackRequest:
             version=1,
             value={"tools": ["render_candidate", "finish_candidate"]},
         ),
+        "permission_contract": VersionedJson(
+            source_id="capability-gate",
+            version=1,
+            value={"capabilities": ["candidate.render"]},
+        ),
         "user_goal": "自然提亮，但保留高光。",
         "run_context": {"analysis": {"basic": {"exposure": 0.0}}, "photo": "proxy"},
     }
@@ -52,18 +57,25 @@ def test_compiler_preserves_section_priority_and_keeps_goal_separate():
                 value={"analysis_patch": {"basic": {"contrast": -5}}},
             ),
             references=(_text("knowledge-light", "曝光影响整体亮度。"),),
+            global_rules=(_text("rule-natural", "禁止过度处理。"),),
+            memory=(_text("memory-preference", "偏好自然低饱和。"),),
+            project_context=(_text("project-catalog", "本项目要求统一曝光。"),),
         )
     )
 
     tags = [
         "<SYSTEM_BOUNDARIES",
+        "<CAPABILITY_GATE",
+        "<TOOL_CONTRACT",
         "<PHOTO_EDITING_CONTRACT",
         "<RUN_CONTEXT",
+        "<GLOBAL_RULE",
+        "<MEMORY_ENTRY",
+        "<PROJECT_CONTEXT",
         "<STYLE_PROFILE",
         "<SELECTED_SKILL",
         "<SELECTED_TEMPLATE",
         "<REFERENCES>",
-        "<TOOL_CONTRACT",
     ]
     positions = [result.instructions.index(tag) for tag in tags]
     assert positions == sorted(positions)

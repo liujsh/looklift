@@ -318,3 +318,9 @@
 | Task 7 计划缺陷 | 以计划作者身份授权修复(见坑 3) |
 | 导出需先收藏 | 分析结果区的"导出预设/sidecar"按钮要求先成功 `POST /api/looks` 收藏(`savedLookName` 非空才启用),不提供"未收藏也能导出"的路径——`/api/looks/<name>/export` 是按库里存的 analysis 走的,不是按浏览器内存里的当前状态;这是 design.md「API 路由一览」五条 `/api/looks*` 路由表的忠实实现,也让 U20"滑杆强度带入导出"这条验收标准有一个无歧义的落地点(收藏那一刻的强度)。**但 requirements.md 原始措辞("分析面板能导出预设")读起来像是分析完就能直接导出、不必先收藏,存在歧义,该历史决策记录见 [legacy-spec-process.md](legacy-spec-process.md)** |
 | 报告页打开方式统一 | window 模式(WebView2 支持)和 browser 模式都用前端 `window.open('/report/'+name)`,不额外调用 Python 侧 `webview.create_window`——两种模式前端写同一行代码,不用区分模式维护两套打开逻辑 |
+## 2026-08-25：Context Compiler 2.0 与 Run Manifest 事件接线
+
+- Domain Pack 新增 Capability/Permission、Global Rules、Memory、Project Context 的不可变来源和快照恢复。
+- 固定安全编译顺序：系统边界 → Capability Gate → Tool Contract → 摄影领域契约 → 已确认上下文 → Skill/Template/Reference。
+- Run Manifest 接入规范化 AgentEvent，并修复不同 Attempt 的 sequence 必须独立计数。
+- 定向测试 `34 passed`，受影响文件 Ruff 通过；真实 Provider 和重启 UI 不在本单元验收范围。
