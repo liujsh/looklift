@@ -60,6 +60,9 @@ class _RequestHandler(BaseHTTPRequestHandler):
     def do_PUT(self) -> None:
         self._dispatch("PUT")
 
+    def do_PATCH(self) -> None:
+        self._dispatch("PATCH")
+
     def do_DELETE(self) -> None:
         self._dispatch("DELETE")
 
@@ -109,7 +112,7 @@ class _RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", origin)
         self.send_header("Vary", "Origin")
         if preflight:
-            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Looklift-Token")
             self.send_header("Access-Control-Max-Age", "600")
 

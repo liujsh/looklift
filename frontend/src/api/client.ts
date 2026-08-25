@@ -32,6 +32,11 @@ import type {
   TaskResult,
   AgentRunManifest,
   RuntimeSummary,
+  ContextConfig,
+  ContextEntryType,
+  ContextEntryView,
+  ContextTreeView,
+  ProposalView,
 } from "./types";
 
 type FetchLike = typeof fetch;
@@ -95,6 +100,52 @@ export class LookliftClient {
       method: "POST",
       body: JSON.stringify({ attempt_id: attemptId, runtime_id: runtimeId }),
     });
+  }
+
+  contextTree(): Promise<ContextTreeView> {
+    return this.json("/api/memory/tree");
+  }
+
+  async proposals(): Promise<ProposalView[]> {
+    const result = await this.json<{ proposals: ProposalView[] }>("/api/proposals");
+    return result.proposals;
+  }
+
+  updateContextConfig(payload: Partial<ContextConfig>): Promise<ContextConfig> {
+    return this.json("/api/memory/config", { method: "PATCH", body: JSON.stringify(payload) });
+  }
+
+  saveContextEntry(id: string, payload: {
+    type: ContextEntryType;
+    content: string;
+    name?: string;
+    description?: string;
+    scope?: ContextEntryView["scope"];
+  }): Promise<ContextEntryView> {
+    return this.json(`/api/memory/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  disableContextEntry(id: string): Promise<ContextEntryView> {
+    return this.json(`/api/memory/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
+  confirmProposal(id: string): Promise<ProposalView> {
+    return this.proposalAction(id, "confirm");
+  }
+
+  rejectProposal(id: string): Promise<ProposalView> {
+    return this.proposalAction(id, "reject");
+  }
+
+  applyProposal(id: string): Promise<ProposalView> {
+    return this.proposalAction(id, "apply");
+  }
+
+  private proposalAction(id: string, action: "confirm" | "reject" | "apply"): Promise<ProposalView> {
+    return this.json(`/api/proposals/${encodeURIComponent(id)}/${action}`, { method: "POST" });
   }
 
   analyze(payload: AnalyzeRequest): Promise<{ task_id: string }> {

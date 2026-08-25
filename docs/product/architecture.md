@@ -553,3 +553,11 @@ Connector Manifest 固定协议、数据接收方和能力；外部事实先进�
 每个 Run 使用独立 JSONL 事实日志和原子快照，Repository 以安全 Run ID 管理列表、详情和恢复。应用创建本地服务时执行一次启动收敛，将未完成状态标为 interrupted；普通查询不改变运行状态。`GET /api/agent/runs/recoverable` 和详情 API 暴露脱敏事实，恢复命令只在基线一致且状态为 interrupted/failed 时创建新 Attempt，可显式切换 Runtime，但不会自动启动模型调用。
 
 恢复 API 不信任前端提交的基线：Manifest 绑定正式 `session_id`，服务端从 `SessionStore` 读取当前版本并计算 Hash。React 平台增加“运行恢复”页，展示状态、Harness/Provider/Model、最后候选 Revision 和基线摘要；stale Run 只读，中断/失败 Run 可明确选择 Runtime 并新建 Attempt。
+
+### Global Rules、Memory 与 Project Context 设置
+
+`ContextMemoryStore` 在独立应用数据目录保存受限 Markdown 条目、机器可读索引和默认关闭的自动提取配置；条目 ID 只接受安全 slug，用户直接编辑会形成已确认的新版本，停用保留正文和版本审计但不再进入新 Run 快照。Store 启动时从磁盘恢复，不依赖进程内存。
+
+跨 Agent、Connector 和 Context 的写入统一由持久化 `ProposalService` 管理，状态固定为 preview、confirmed、rejected、applied、expired 或 conflict。确认与应用分离，`base_hash` 冲突不会覆盖正式内容，重复确认、拒绝和应用保持幂等；Proposal 保留 Source Packet ID，不把来源正文写进日志。
+
+冻结给 Harness 的 Context 快照只包含 enabled 且 confirmed 的条目，并在不改写本地原文的前提下清除 Home/原图路径、密钥和 EXIF 明细。Global Rule、Memory 与 Project Context 进入 Domain Pack 时转义分区边界，不能伪造 Tool Contract。Python API 提供配置、条目、规则和 Proposal Query/Command；React 设置页展示来源、版本、确认状态、Hash、项目上下文及提案审核，不接触存储路径。

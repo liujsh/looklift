@@ -115,6 +115,14 @@ def test_context_memory_requires_proposal_for_updates(tmp_path):
     assert store.get("fact-a").content == "更新事实"
 
 
+def test_unconfirmed_context_never_enters_compiler_snapshot(tmp_path):
+    store = ContextMemoryStore(tmp_path)
+    store.put(ContextEntry("fact-confirmed", "fact", "已确认", "user", confirmed=True))
+    store.put(ContextEntry("fact-proposed", "fact", "未确认", "connector"))
+
+    assert [entry.entry_id for entry in store.snapshot()] == ["fact-confirmed"]
+
+
 def test_plugin_manifest_and_connector_boundaries():
     registry = PluginRegistry()
     manifest = PluginManifest(1, "demo", "1.0.0", "connector", "catalog", "declarative", (), frozenset({"workspace.read_metadata"}), "a" * 64)

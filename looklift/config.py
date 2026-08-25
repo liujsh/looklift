@@ -114,3 +114,8 @@ def library_db_path() -> Path:
 def run_manifest_dir() -> Path:
     """Agent Run Manifest 与 session_store 分离的运行事实目录。"""
     return CONFIG_PATH.parent / "agent-runs"
+
+
+def context_memory_dir() -> Path:
+    """全局规则、Memory、项目上下文与 Proposal 的应用数据目录。"""
+    return CONFIG_PATH.parent / "context-memory"

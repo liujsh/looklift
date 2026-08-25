@@ -1,11 +1,11 @@
 # 实施计划
 
-- [ ] 1. 固定 Memory、GlobalRule、ProjectContext 和 Proposal 数据契约
+- [x] 1. 固定 Memory、GlobalRule、ProjectContext 和 Proposal 数据契约
   - 定义类型、作用域、来源、确认状态、版本和 Hash
   - 固定 Markdown 条目、索引和配置文件格式
   - 作为跨模块唯一 owner 实现 ProposalStore/ProposalService，提供 preview、confirm/reject、apply、基线冲突和幂等语义
   - _需求：需求 1、需求 2、需求 3_
-- [ ] 2. 实现 Memory/Rule Store 与离线 API
+- [x] 2. 实现 Memory/Rule Store 与离线 API
   - 实现增删改查、归档、提案确认/拒绝和事件通知
   - 增加路径、字段、来源和敏感信息校验
   - _需求：需求 1、需求 2、需求 5_
@@ -14,9 +14,10 @@
   - 输出来源快照、Hash、预算省略原因和可解释摘要
   - _需求：需求 3、需求 4、需求 5_
 - [ ] 4. 接入设置页与运行详情上下文面板
-  - 增加规则、记忆、自动提取和本次上下文视图
+  - [x] 增加规则、记忆、项目上下文和自动提取设置
+  - [ ] 在运行详情展示本次上下文来源、冲突和省略原因
   - 明确显示来源、确认状态、冲突和数据接收方
   - _需求：需求 2、需求 4、需求 5_
-- [ ] 5. 完成契约与隐私测试
+- [x] 5. 完成契约与隐私测试
   - 覆盖新旧 Run 快照隔离、Prompt 注入、预算降级和脱敏
   - _需求：需求 1 至需求 5_
