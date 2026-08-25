@@ -13,6 +13,7 @@ import { createNeutralAnalysis } from "../panel/contractModel";
 import { chooseBrowserImageFile, nativeImageChooser, runQuickEdit } from "./quickEdit";
 import { CloseStudioDialog, type CloseDialogPhase } from "./CloseStudioDialog";
 import { SettingsPage } from "./SettingsPage";
+import { PluginPage } from "./PluginPage";
 import { LibraryPage } from "./LibraryPage";
 import { TemplatePage } from "./TemplatePage";
 import { applyTemplateToStudio, canApplyTemplateToStudio } from "./templateWorkflow";
@@ -210,7 +211,7 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
       <section className="platform-content" inert={closeDialog ? true : undefined}>
         {shellError && <div className="platform-error" role="alert">{shellError}</div>}
         {activeTab.kind === "home" && <HomePage client={client} onResume={resume} onQuickEdit={quickEdit} quickEditBusy={quickEditBusy} onFuture={openFuture} />}
-        {activeTab.kind === "platform" && (activeTab.page === "settings" ? <SettingsPage client={client} /> : activeTab.page === "runs" ? <AgentRunsPage client={client} /> : activeTab.page === "templates" ? <TemplatePage client={client} contract={contract} canApply={Boolean(recentRuntime && recentEditor.activeAiRequestId === null && recentEditor.pendingPreview === null && canApplyTemplateToStudio(recentRuntime))} currentPhoto={currentTemplatePhoto} onApply={applyTemplate} /> : activeTab.page === "import" ? <ImportPage client={client} /> : activeTab.page === "automation" ? <AutomationPage client={client} /> : activeTab.page === "library" ? <LibraryPage client={client} onOpen={async (path) => {
+        {activeTab.kind === "platform" && (activeTab.page === "settings" ? <SettingsPage client={client} /> : activeTab.page === "plugins" ? <PluginPage client={client} /> : activeTab.page === "runs" ? <AgentRunsPage client={client} /> : activeTab.page === "templates" ? <TemplatePage client={client} contract={contract} canApply={Boolean(recentRuntime && recentEditor.activeAiRequestId === null && recentEditor.pendingPreview === null && canApplyTemplateToStudio(recentRuntime))} currentPhoto={currentTemplatePhoto} onApply={applyTemplate} /> : activeTab.page === "import" ? <ImportPage client={client} /> : activeTab.page === "automation" ? <AutomationPage client={client} /> : activeTab.page === "library" ? <LibraryPage client={client} onOpen={async (path) => {
           if (!contract) throw new Error("参数契约尚未就绪");
           openSnapshot(await client.createSession({ path, initial_analysis: createNeutralAnalysis(contract) }));
         }} /> : <ComingSoonPage page={activeTab.page} />)}
