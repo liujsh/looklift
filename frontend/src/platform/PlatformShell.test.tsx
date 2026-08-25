@@ -54,7 +54,7 @@ describe("PlatformShell", () => {
     }
   });
 
-  it("未来页面只展示版本边界说明", () => {
+  it("平台页展示真实图库能力", () => {
     const store = createPlatformStore();
     store.openPlatform("library", "我的图库");
 
@@ -66,6 +66,20 @@ describe("PlatformShell", () => {
     expect(html).toContain("加入图库");
     expect(html).toContain('data-closable="true"');
     expect(html).not.toContain("128 张");
+  });
+
+  it("自动化入口渲染真实工作流页面", () => {
+    const store = createPlatformStore();
+    store.openPlatform("automation", "自动化技能");
+
+    const html = renderToStaticMarkup(
+      <PlatformShell client={client} store={store} engineLabel="测试引擎" />,
+    );
+
+    expect(html).toContain('aria-label="自动化技能"');
+    expect(html).toContain("先预览、再确认");
+    expect(html).toContain("生成预览计划");
+    expect(html).not.toContain("将在 v2.5 提供");
   });
 
   it("Studio 标签通过关闭门禁入口而不是直接销毁", () => {

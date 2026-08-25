@@ -11,10 +11,12 @@ license = { text = "MIT" }
 requires-python = ">=3.11"
 authors = [{ name = "liujsh" }]
 dependencies = [
-    "anthropic>=0.116.0",
+    "anthropic>=0.116.0,<1",
     "Pillow>=10.0.0",
     "numpy>=1.26",
+    "httpx>=0.27",
     "numba>=0.60",
+    "pydantic-ai-slim[anthropic,openai]>=2.32,<2.33",
 ]
 keywords = ["lightroom", "photography", "color-grading", "preset", "xmp", "claude"]
 
@@ -33,4 +35,12 @@ raw = ["rawpy>=0.27,<0.28"]
 packages = ["looklift", "looklift.gui", "looklift.render", "looklift.render.operators"]
 
 [tool.setuptools.package-data]
-looklift = ["gui/static/**", "render/data/*.icc", "data/*.json", "data/looks/*.json"]
+looklift = [
+    "gui/static/**",
+    "render/data/*.icc",
+    "data/*.json",
+    "data/looks/*.json",
+    "data/domain/*.md",
+    "data/skills/**/*.md",
+    "data/cli/*.js",
+]

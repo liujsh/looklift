@@ -3,6 +3,8 @@
 > 产品定位、用户故事、路线图见 [requirements.md](requirements.md)。本文档记录**已实现**的技术架构与关键设计决策。
 > 未实现迭代的详细设计写在 `docs/versions/`(每迭代一个版本目录,实现后要点回填本文档)。最近完成:[RAW 可行性门](../versions/raw-gate/)。
 
+> 未实现迭代的详细设计写在 `docs/versions/`(每迭代一个版本目录,实现后要点回填本文档)。当前:[v2.5](../versions/v2.5/)。
+
 ## 架构总览
 
 ```
@@ -36,6 +38,17 @@
 - 最近 Studio 存在时，详情页以可取消的 factor 0/1 预览请求
   生成当前照片 Before/After；预览不写 Store。详情页应用按钮才通过 Studio runtime 正式提交并
   持久化会话版本。聊天模板附件仍只在发送边界组合名称、摘要和白盒参数，不改变安全边界。
+
+## v2.5 自动化技能架构实况
+
+- `automation_store.py` 以应用数据目录中的独立 JSON 保存技能、冻结计划与运行清单；技能只引用
+  既有 look，计划生成时冻结同一份白盒 `analysis`、强度和输出规则。
+- `automation_render.py` 复用主渲染引擎生成完整尺寸 JPEG，在目标目录先写临时文件，再通过
+  不覆盖既有路径的原子硬链接创建成片；原照片、既有输出和临时失败文件均受保护。
+- `automation_tasks.py` 逐张隔离失败并在每项后持久化进度；协作式取消只阻止下一张开始，
+  进程中断会恢复为可重试状态，重试只处理失败、中断或取消项。
+- sidecar 提供技能、计划和运行 API；React 自动化页负责原生多选照片、输出目录、首张实际
+  预览、逐文件计划确认、进度、取消与失败重试，不拥有渲染或路径安全逻辑。
 
 ## v2.3-A 本地文件夹图库架构实况
 
@@ -456,3 +469,60 @@ Tauri 原生窗口
   Tauri bundler 生成 NSIS 安装包。
 - `packaging/smoke_release.py` 在临时用户目录连续预热冻结引擎，启动随机 localhost 端口，
   校验内置模板只读、用户库可写、XMP 可导出，并回收 sidecar；全程不访问外网或 AI。
+
+---
+
+## v2.6-A–C 新增设计
+
+> 原规格：[v2.6/](../versions/v2.6/)；这里只记录已实现的 API 候选闭环与首条受控 CLI Adapter。
+
+### 27. Domain Pack 与统一 Adapter
+
+- `domain_pack.py` 按固定优先级和预算编译领域契约、StyleProfile、单个 Skill、必要 Reference、可选 Template
+  元数据和本轮目标，并生成内容 Hash；快照可在原始来源变化后复现同一 Attempt 输入。
+- `agent_adapter.py` 把 Harness 收敛为 `start/cancel/dispose` 和八种有限事件。模型只接收编译文本与无 EXIF
+  JPEG 代理图，不接收 Run、Attempt、Lease、正式版本 ID、原图路径或数据库信息。
+- API 路径使用 `pydantic-ai-slim 2.32.x`；Anthropic、OpenAI-compatible 和 Ollama 只共享构造与事件适配层，
+  一个 Attempt 内不自动切换 Provider。Fake/FunctionModel 测试全程离线。
+
+### 28. 受控候选 Runtime
+
+```
+Domain Pack + 代理图 → Pydantic AI Agent
+                         │ render_candidate（白盒 Patch）
+                         ▼
+Run/Attempt/Lease 守卫 → 唯一渲染引擎 → JPEG + 参数差异 + 指标
+                         │ 真实结果回灌，可再修改
+                         ▼
+finish_candidate（模型终态）→ 内存候选，等待未来 UI 人工确认
+```
+
+- `agent_tool_contract.py` 是候选工具类型入口；标量路径和范围仍来自 `render.contract`，越界操作严格拒绝，
+  不静默截断。Template 相对正式基线叠加，只能在首个成功候选决定一次。
+- `CandidateRuntime` 默认最多渲染三次，保存不可变单线 Revision；每次渲染前和原子落候选时均复核权威状态，
+  取消、Lease/Attempt 或正式基线变化使晚到结果成为 `cancelled/stale`。
+- `render_candidate` 的富 Tool Result 同时包含结构化结果和真实 JPEG；`finish_candidate` 仅接受最新候选、
+  无修改或明确能力不足三类终态。Finish 不保存、导出或修改正式版本。
+
+### 29. CLI 隔离与 Pi Adapter
+
+- 每个 CLI Attempt 使用随机 Workspace，只写编译后的 `DOMAIN_PACK.md`、代理图、传输无关 Tool Schema 和候选预览；
+  目录名不含 Run/Attempt，环境按白名单重建并移除 Provider API Key、数据库和 LookLift 私有变量。
+- `ScopedToolGateway` 以随机、可过期和可撤销 Token 私有绑定 `CandidateRuntime`，只接受 `render_candidate` 与
+  `finish_candidate`。CLI 传入的参数不含运行身份、真实路径和正式版本；终态成功、取消或进程结束都会撤销 Token。
+- Pi 使用其原生 RPC JSONL 事件和随应用只读 JavaScript Extension；启动参数关闭内建工具、其他 Extension、Skill、
+  Prompt、Theme、项目上下文和 Session。Extension 经随机 localhost HTTP 端口调用同一 Gateway，并把 JPEG 作为图片
+  Tool Result。RPC 初始消息直接携带冻结 Domain Pack 与安全代理图，不携带 Runtime 身份或私有路径。
+- stdout 使用 8 MiB 硬上限容纳 Pi 回显的代理图片事件；Windows 可用直接 `node + cli.js` 前缀避免 npm `.cmd` 外壳
+  妨碍进程回收。Fake 契约与真实 Pi 0.84.1/OpenRouter 候选、结构化终态和 0.028 秒取消均已验证，Pi 为当前唯一正式
+  CLI Adapter；其他 CLI 不继承该等级。
+
+### 30. v2.6-D 领域内容与离线评测
+
+- `domain_skill.py` 注册三份版本化内置 Skill：`portrait-natural`、`product-consistency` 和
+  `highlight-recovery`；正文与 Reference 均经固定章节、能力白名单、路径和 SHA-256 校验。
+- `builtin_agent_templates.py` 提供六份只读官方相对白盒 Template，全部复用 `AgentTemplate`/`ScalarOperation`，
+  不含脚本、路径、Prompt 或权限，也不复制候选渲染逻辑。
+- `agent_eval.py` 固定 12 个效果 Case 与 8 个工程/安全 Case，使用确定性代理图和 Fake Harness 运行；结果记录终态、
+  候选/工具调用数、失败码、正式副作用和敏感数据泄漏。消融配置已可表达 Skill、Template 与真实反馈对照，
+  但真实模型结果和人工 Pairwise 仍不进入默认 CI。

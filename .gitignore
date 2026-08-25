@@ -23,6 +23,10 @@ looks/
 # 构建产物
 *.egg-info/
 
+# Tauri 本地开发日志
+tauri-dev.log
+tauri-dev-error.log
+
 test-assets/
 .superpowers/
 build/

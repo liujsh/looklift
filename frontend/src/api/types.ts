@@ -263,3 +263,55 @@ export type TaskResult = {
   result: JsonObject | null;
   error: string | null;
 };
+
+export type AutomationWorkflow = {
+  id: string;
+  name: string;
+  look_name: string;
+  factor: number;
+  suffix: string;
+  quality: number;
+  created_at: string;
+};
+
+export type AutomationPlanItem = {
+  source: string;
+  output: string;
+  status: "ready" | "invalid" | "conflict";
+  error: string | null;
+};
+
+export type AutomationPlan = {
+  id: string;
+  workflow: AutomationWorkflow;
+  output_dir: string;
+  ready: boolean;
+  created_at: string;
+  items: AutomationPlanItem[];
+};
+
+export type AutomationRunItem = Omit<AutomationPlanItem, "status"> & {
+  status: "pending" | "running" | "completed" | "failed" | "cancelled" | "interrupted";
+};
+
+export type AutomationRun = {
+  id: string;
+  plan_id: string;
+  workflow: AutomationWorkflow;
+  status: "running" | "done" | "cancelled" | "interrupted";
+  created_at: string;
+  updated_at: string;
+  items: AutomationRunItem[];
+  total: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+};
+
+export type CreateAutomationWorkflowRequest = {
+  name: string;
+  look_name: string;
+  factor: number;
+  suffix: string;
+  quality: number;
+};

@@ -33,6 +33,54 @@
 - [ ] **v2.4 模板与教学人工验收**：用真实照片核对三份官方模板观感与教学文案；从模板页
   直接套用后确认画布、参数面板和会话版本同步；在 AI 输入框附加模板，确认 provider 返回的是
   针对当前照片的自适应参数而非机械覆盖。自动化不调用真实 provider。
+- [ ] **v2.6-A/B API Agent 人工 Spike**：用真实 API 和真实照片验证首候选观感、依据 JPEG
+  反馈继续精修和正确停止；确认代理图无 EXIF、取消在 1 秒内终止且候选不进入正式版本。当前只完成
+  离线 FunctionModel/Mock HTTP 与冻结自动化，不接 UI、SQLite、本地 CLI 或正式保存入口。
+
+## v2.6-A/B Domain Pack 与最小 API 候选闭环（2026-08-20）
+
+- Pydantic AI 可行性门通过：三类 Provider 离线序列化、JPEG Tool Result 回灌、类型化流、取消与
+  Windows PyInstaller 探针均通过；相对已有 NumPy/Pillow sidecar 增量 21.74 MiB，低于 60 MiB 门限。
+- Domain Pack 编译器固定来源优先级、预算降级、Hash 和快照恢复；内置修图领域契约与自然人像 Skill
+  已版本化，但尚未通过真实模型消融，因此不把 Skill 效果写成已验证结论。
+- 受控 Runtime 串通白盒 Patch → 唯一引擎 → JPEG/差异/指标反馈 → 可选再修改 → 三类结构化终态。
+  候选只存在内存，不会保存、导出或修改正式版本；Run/Attempt/Lease、预算、取消晚到和基线冲突有离线测试。
+- API Adapter 归一八类单调事件，重复 Attempt 被拒绝；Provider 错误转稳定文案且不自动跨供应商切换。
+  自动化完成不等于 v2.6 发布，CLI、UI、恢复、三领域 Skill/Eval 与真实照片验收仍在 C–E 阶段。
+- 收口证据：Python 全量 `595 passed, 1 skipped`；本批 Python 文件 Ruff 通过。更新后的真实 sidecar onedir
+  冻结构建成功，冷/热预热、随机 localhost API、3 份内置模板、临时用户预设导出和进程回收 smoke 全部通过。
+  全仓 Ruff 仍有 25 个既有问题，位于本批未修改的设备导入、GUI API 和图库测试文件，未借本批越界清理。
+
+## v2.6-C CLI 基础与 Pi Adapter（2026-08-20）
+
+- 实测本机 Pi 0.84.1：支持 JSON/RPC 事件、`--no-builtin-tools`、单扩展加载、无 Session 和资源发现禁用；同时其
+  随包文档明确不内置 MCP。规格据此把传输收敛为 Scoped Tool Gateway：有原生 MCP 就用 MCP，Pi 使用随应用只读
+  扩展桥；两者仍共享 Token、Pydantic Schema 和 Python Runtime，不额外复制一套候选逻辑。
+- Fake CLI/Pi 自动化覆盖随机 Workspace、敏感环境清理、双工具白名单、Token 过期/撤销、真实 localhost HTTP、JPEG
+  图片结果、原生事件归一、协议错误脱敏、取消和强制进程回收。Pi 启动封套还关闭遥测与版本检查，避免模型服务之外
+  的隐式数据接收方。
+- 真实 Pi 0.84.1 + OpenRouter Gemini 2.5 Flash Lite 已确认初始安全代理图进入模型上下文。一次运行调用
+  `render_candidate`，取得 JPEG、亮度与裁切指标后以 `candidate_ready` 停止；实际 Patch 仅把
+  `basic.shadows: 0 → 0.08`。另一次运行在 `run_started` 后取消，0.028 秒退出、无候选、无正式副作用。
+- 真实门暴露并修复两项只在 Windows/图片输入出现的问题：npm `.cmd` 只回收外壳，现支持直接 `node + cli.js` 命令
+  前缀；RPC 会回显 base64 图片事件，stdout 从默认 64 KiB 改为 8 MiB 硬上限。第一次失败遗留的精确临时 Attempt 目录
+  已删除，后续 Workspace 均自动回收。
+- Pi 达到 v2.6-C 正式 Adapter 支持标准，但真实 API、单张照片主观观感、Skill 消融、UI 与重启恢复仍未完成；当前仍
+  不能写“v2.6 已发布”或“完整双 Harness 产品落地”。
+- 收口证据：Python 全量 `620 passed, 1 skipped`，本批 Ruff 与 Pi Extension Node 语法检查通过；更新后的 Windows
+  sidecar 冻结构建成功，随包包含只读 `pi-looklift-tools.js`，冷/热预热和既有发布 smoke 全部通过；本机 Pi 0.84.1
+  的 `--offline --help` 也能加载该扩展封套且不调用模型。
+
+## v2.6-D 领域 Skill、Template 与离线评测骨架（2026-08-25）
+
+- 新增商品一致性与高光/曝光恢复内置 Skill，与自然人像共同通过 frontmatter、固定章节、引擎能力和内容 Hash 校验；
+  两者复用已登记的曝光/色彩 Reference，不授予工具权限。
+- 新增六份只读官方 Agent Template，覆盖三类 Skill 的匹配场景、禁用条件和风险说明；参数全部复用统一白盒
+  `ScalarOperation` 契约，不能携带脚本、路径或权限。
+- 新增 20 个确定性离线 Eval Case（12 个效果、8 个工程/安全）及 Fake Harness Runner，覆盖终态、候选数量、工具调用、
+  正式副作用和敏感数据泄漏断言；Skill/Template/反馈消融配置仅作为可复用执行维度。
+- 当前未纳入真实照片、真实 Provider 或人工盲测，因此不把离线通过写成视觉增益或 v2.6 发布证据。
+- 收口证据：新增与既有 Domain Skill/Agent 契约测试共 `19 passed`；完整 Agent 定向测试和全量测试待收口验证。
 
 ## v2.4 模板与教学自动化收口（2026-07-23）
 
@@ -55,6 +103,22 @@
   曲线图、HSL 三维度八色滑杆与颜色分级色轮，默认只显示有调整项，可切换显示全部。
 - 自动化验证：Python 模板目录/API `34 passed`；前端 `157 passed`；production build 成功。
   当前环境无可用浏览器实例，1440/1100/900 实际截图与手感继续保留给作者人工验收。
+
+- [ ] **v2.5 自动化技能人工验收**：用一组真实照片检查技能创建、首张效果与逐文件计划；
+  确认批量输出不覆盖原图或既有文件；执行中取消后已完成成片保留；制造一张损坏输入并在重启
+  后只重试失败项。页面布局与交互手感由作者检查。
+
+## v2.5 自动化技能自动化收口（2026-07-24）
+
+- 新增已有风格自动化技能，冻结 look analysis、强度、后缀和 JPEG 质量；输入照片与输出目录
+  显式选择，计划阶段检查缺失、格式、同批重名和已有输出冲突。
+- 完整尺寸成片复用主渲染引擎，以同目录临时文件和不覆盖硬链接保护原图及既有输出；单张失败
+  不阻塞后续照片。
+- 运行清单逐项持久化，支持协作式取消、进程中断恢复和只重试失败/中断/取消项。
+- 平台“自动化技能”占位页替换为真实技能、首张预览、计划确认、运行进度和失败重试页面。
+- 定向验证：Python 相关 `68 passed`；前端 API/页面/平台相关 `23 passed`；Ruff 与
+  TypeScript 检查通过。收口全量验证：Python `494 passed, 1 skipped`，前端 `143 passed`，
+  production build 成功。真实照片观感、页面布局和批量交互保留给作者人工验收。
 
 ## v2.3-A 本地文件夹图库 T1–T4 完成（2026-07-22）
 

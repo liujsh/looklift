@@ -1,0 +1,21 @@
+# 实施计划
+
+- [ ] 1. 定义 Skill、Template、Plugin Manifest Schema
+  - 固定字段、版本和能力枚举
+  - 作为跨模块唯一 owner 定义 Capability、Grant、Permission Profile 与 Scoped Token 的交集、作用域、过期和撤销语义
+  - _需求：需求 1_
+- [ ] 2. 实现多来源 Registry 与版本解析
+  - 支持内置、用户、项目、插件来源及冲突优先级
+  - _需求：需求 2、需求 5_
+- [ ] 3. 实现 Skill staging 与摘要冻结
+  - 复制白名单 Reference，阻断路径遍历
+  - _需求：需求 2_
+- [ ] 4. 实现 Template 兼容性和 Patch 校验
+  - 接入现有参数契约与 CandidateRuntime
+  - _需求：需求 3_
+- [ ] 5. 实现 Capability Grant 与安装生命周期 API
+  - 支持安装、升级、卸载和旧版本保留
+  - _需求：需求 4、需求 5_
+- [ ] 6. 编写 Fake Plugin Conformance Suite
+  - 覆盖越权、恶意清单、回滚和历史回放
+  - _需求：需求 1-5_

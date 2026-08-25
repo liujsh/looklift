@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 import shutil
 import sqlite3
 from dataclasses import asdict
@@ -23,6 +24,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .. import ai_proxy, analyzer, chat, config, device_import, intensity, library_tasks, platform_files, report, xmp_writer
+
+from .. import ai_proxy, analyzer, chat, config, intensity, library_tasks, platform_files, report, xmp_writer
+from ..automation_store import AutomationStore
+from ..automation_tasks import AutomationTaskManager
 from ..library_store import LibraryStore
 from ..render import contract as render_contract
 from ..session_store import DatabaseRecoveryRequired, SessionSnapshot, SessionStore
@@ -948,6 +953,142 @@ def _cancel_import_task(ctx: dict) -> tuple[int, dict]:
         return 200, {"ok": True}
     return (404, {"error": "导入任务不存在"}) if device_import.get(task_id) is None else (409, {"error": "导入任务已结束"})
 
+_automation_cache: dict[str, tuple[AutomationStore, AutomationTaskManager]] = {}
+_automation_cache_lock = threading.Lock()
+
+
+def _automation_components() -> tuple[AutomationStore, AutomationTaskManager]:
+    """按当前隔离配置目录懒加载自动化组件，避免导入时触碰真实用户目录。"""
+    root = str((config.CONFIG_PATH.parent / "automation").resolve())
+    with _automation_cache_lock:
+        components = _automation_cache.get(root)
+        if components is None:
+            store = AutomationStore(root)
+            components = (store, AutomationTaskManager(store))
+            _automation_cache[root] = components
+    return components
+
+
+def _public_automation(value: dict) -> dict:
+    """冻结参数只留在本地清单，不在列表/轮询响应中重复传输。"""
+    result = dict(value)
+    result.pop("analysis", None)
+    return result
+
+
+def _get_automation_workflows(ctx: dict) -> tuple[int, dict]:
+    store, _ = _automation_components()
+    return 200, {"workflows": store.list_workflows()}
+
+
+def _post_automation_workflows(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    look_name = payload.get("look_name")
+    if not isinstance(look_name, str) or lookstore.load(config.looks_dir(), look_name) is None:
+        return 404, {"error": "风格库中找不到指定风格"}
+    store, _ = _automation_components()
+    try:
+        workflow = store.create_workflow(
+            name=payload.get("name"),
+            look_name=look_name,
+            factor=payload.get("factor"),
+            suffix=payload.get("suffix"),
+            quality=payload.get("quality"),
+        )
+    except (TypeError, ValueError, OSError) as exc:
+        return 400, {"error": str(exc)}
+    return 200, workflow
+
+
+def _delete_automation_workflow(ctx: dict) -> tuple[int, dict]:
+    store, _ = _automation_components()
+    try:
+        deleted = store.delete_workflow(ctx["params"]["id"])
+    except ValueError:
+        return 400, {"error": "自动化技能 ID 无效"}
+    if not deleted:
+        return 404, {"error": "自动化技能不存在"}
+    return 200, {"ok": True}
+
+
+def _post_automation_plan(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    store, _ = _automation_components()
+    try:
+        workflow = store.get_workflow(payload.get("workflow_id"))
+    except ValueError:
+        return 400, {"error": "自动化技能 ID 无效"}
+    if workflow is None:
+        return 404, {"error": "自动化技能不存在"}
+    analysis = lookstore.load(config.looks_dir(), workflow["look_name"])
+    if analysis is None:
+        return 404, {"error": "技能引用的风格已不存在"}
+    try:
+        plan = store.create_plan(
+            workflow,
+            analysis,
+            payload.get("inputs"),
+            payload.get("output_dir"),
+        )
+    except (TypeError, ValueError, OSError) as exc:
+        return 400, {"error": str(exc)}
+    return 200, _public_automation(plan)
+
+
+def _post_automation_run(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    _, manager = _automation_components()
+    try:
+        run_id = manager.start(payload.get("plan_id"))
+    except KeyError:
+        return 404, {"error": "自动化执行计划不存在"}
+    except (TypeError, ValueError) as exc:
+        return 409, {"error": str(exc)}
+    return 202, {"run_id": run_id}
+
+
+def _get_automation_runs(ctx: dict) -> tuple[int, dict]:
+    _, manager = _automation_components()
+    return 200, {"runs": [_public_automation(run) for run in manager.list_runs()[:20]]}
+
+
+def _get_automation_run(ctx: dict) -> tuple[int, dict]:
+    _, manager = _automation_components()
+    try:
+        run = manager.get_run(ctx["params"]["id"])
+    except (KeyError, ValueError):
+        return 404, {"error": "自动化任务不存在"}
+    return 200, _public_automation(run)
+
+
+def _cancel_automation_run(ctx: dict) -> tuple[int, dict]:
+    _, manager = _automation_components()
+    run_id = ctx["params"]["id"]
+    try:
+        run = manager.get_run(run_id)
+    except (KeyError, ValueError):
+        return 404, {"error": "自动化任务不存在"}
+    if run["status"] != "running" or not manager.cancel(run_id):
+        return 409, {"error": "自动化任务已经结束"}
+    return 200, {"ok": True}
+
+
+def _retry_automation_run(ctx: dict) -> tuple[int, dict]:
+    _, manager = _automation_components()
+    try:
+        run_id = manager.retry(ctx["params"]["id"])
+    except KeyError:
+        return 404, {"error": "自动化任务不存在"}
+    except (TypeError, ValueError) as exc:
+        return 409, {"error": str(exc)}
+    return 202, {"run_id": run_id}
+
 
 ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/ping"): _ping,
@@ -983,6 +1124,16 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("POST", "/api/import/start"): _post_import_start,
     ("GET", "/api/import/tasks/<id>"): _get_import_task,
     ("POST", "/api/import/tasks/<id>/cancel"): _cancel_import_task,
+
+    ("GET", "/api/automation/workflows"): _get_automation_workflows,
+    ("POST", "/api/automation/workflows"): _post_automation_workflows,
+    ("DELETE", "/api/automation/workflows/<id>"): _delete_automation_workflow,
+    ("POST", "/api/automation/plans"): _post_automation_plan,
+    ("GET", "/api/automation/runs"): _get_automation_runs,
+    ("POST", "/api/automation/runs"): _post_automation_run,
+    ("GET", "/api/automation/runs/<id>"): _get_automation_run,
+    ("POST", "/api/automation/runs/<id>/cancel"): _cancel_automation_run,
+    ("POST", "/api/automation/runs/<id>/retry"): _retry_automation_run,
     ("POST", "/api/looks"): _post_looks,
     ("GET", "/api/looks"): _get_looks,
     ("GET", "/api/templates"): _get_templates,
