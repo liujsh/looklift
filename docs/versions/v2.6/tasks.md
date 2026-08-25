@@ -39,11 +39,14 @@
 
 ## v2.6-D：首批 Skill、Template 与 Evals
 
-- [ ] 完成自然人像、商品一致性和高光恢复三个内置 Skill 及必要 Reference。
-- [ ] 为每个 Skill 准备少量带适用、禁用和风险元数据的官方候选 Template。
-- [ ] 建立 12 个效果 Case 与 8 个安全/工程 Case，默认 CI 使用 Fake Harness 离线执行。
+- [x] 完成自然人像、商品一致性和高光恢复三个内置 Skill 及必要 Reference。
+- [x] 为每个 Skill 准备少量带适用、禁用和风险元数据的官方候选 Template。
+- [x] 建立 12 个效果 Case 与 8 个安全/工程 Case，默认 CI 使用 Fake Harness 离线执行。
 - [ ] 对每个 Skill 完成加载/不加载消融，对 Template 完成无/匹配/不匹配消融。
 - [ ] 完成至少一次隐藏模型和配置的人工 Pairwise 盲测，记录已知失败而非只保留成功截图。
+
+本轮已完成前三项的离线契约与执行骨架；真实模型消融和人工盲测仍需授权照片、Provider 和作者评分，未据此宣称
+Skill 或 Template 已产生视觉增益。
 
 ## v2.6-E：UI、恢复与收口
 

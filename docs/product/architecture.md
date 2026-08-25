@@ -516,3 +516,13 @@ finish_candidate（模型终态）→ 内存候选，等待未来 UI 人工确�
 - stdout 使用 8 MiB 硬上限容纳 Pi 回显的代理图片事件；Windows 可用直接 `node + cli.js` 前缀避免 npm `.cmd` 外壳
   妨碍进程回收。Fake 契约与真实 Pi 0.84.1/OpenRouter 候选、结构化终态和 0.028 秒取消均已验证，Pi 为当前唯一正式
   CLI Adapter；其他 CLI 不继承该等级。
+
+### 30. v2.6-D 领域内容与离线评测
+
+- `domain_skill.py` 注册三份版本化内置 Skill：`portrait-natural`、`product-consistency` 和
+  `highlight-recovery`；正文与 Reference 均经固定章节、能力白名单、路径和 SHA-256 校验。
+- `builtin_agent_templates.py` 提供六份只读官方相对白盒 Template，全部复用 `AgentTemplate`/`ScalarOperation`，
+  不含脚本、路径、Prompt 或权限，也不复制候选渲染逻辑。
+- `agent_eval.py` 固定 12 个效果 Case 与 8 个工程/安全 Case，使用确定性代理图和 Fake Harness 运行；结果记录终态、
+  候选/工具调用数、失败码、正式副作用和敏感数据泄漏。消融配置已可表达 Skill、Template 与真实反馈对照，
+  但真实模型结果和人工 Pairwise 仍不进入默认 CI。

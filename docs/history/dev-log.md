@@ -71,6 +71,17 @@
   sidecar 冻结构建成功，随包包含只读 `pi-looklift-tools.js`，冷/热预热和既有发布 smoke 全部通过；本机 Pi 0.84.1
   的 `--offline --help` 也能加载该扩展封套且不调用模型。
 
+## v2.6-D 领域 Skill、Template 与离线评测骨架（2026-08-25）
+
+- 新增商品一致性与高光/曝光恢复内置 Skill，与自然人像共同通过 frontmatter、固定章节、引擎能力和内容 Hash 校验；
+  两者复用已登记的曝光/色彩 Reference，不授予工具权限。
+- 新增六份只读官方 Agent Template，覆盖三类 Skill 的匹配场景、禁用条件和风险说明；参数全部复用统一白盒
+  `ScalarOperation` 契约，不能携带脚本、路径或权限。
+- 新增 20 个确定性离线 Eval Case（12 个效果、8 个工程/安全）及 Fake Harness Runner，覆盖终态、候选数量、工具调用、
+  正式副作用和敏感数据泄漏断言；Skill/Template/反馈消融配置仅作为可复用执行维度。
+- 当前未纳入真实照片、真实 Provider 或人工盲测，因此不把离线通过写成视觉增益或 v2.6 发布证据。
+- 收口证据：新增与既有 Domain Skill/Agent 契约测试共 `19 passed`；完整 Agent 定向测试和全量测试待收口验证。
+
 ## v2.4 模板与教学自动化收口（2026-07-23）
 
 - 新增模板目录投影与 `GET /api/templates`，官方教学元数据不复制参数值，用户模板无需迁移即可

@@ -33,6 +33,28 @@ def test_load_natural_portrait_skill_with_versioned_metadata() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("skill_id", "name", "applies_to"),
+    [
+        ("portrait-natural", "自然人像", ("portrait",)),
+        ("product-consistency", "商品一致性", ("product",)),
+        ("highlight-recovery", "高光与曝光恢复", ("highlight", "exposure")),
+    ],
+)
+def test_all_builtin_skills_have_versioned_contract_and_references(
+    skill_id: str,
+    name: str,
+    applies_to: tuple[str, ...],
+) -> None:
+    skill = load_builtin_skill(skill_id, engine_capabilities=_ENGINE_CAPABILITIES)
+
+    assert skill.name == name
+    assert skill.applies_to == applies_to
+    assert skill.version == 1
+    assert skill.references == ("knowledge/light.md", "knowledge/color.md")
+    assert "insufficient_capability" in skill.body
+
+
 def test_skill_body_contains_complete_domain_decision_loop() -> None:
     skill = load_builtin_skill(
         "portrait-natural",

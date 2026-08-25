@@ -17,6 +17,16 @@ _BUILTIN_SKILLS = {
         1,
         "af7c7a1517226482e84bca2d2b09efb22229dc250b72b391334a0c37de7cd0c8",
     ),
+    "product-consistency": (
+        ("data", "skills", "product-consistency", "SKILL.md"),
+        1,
+        "3ec14d95d974daa6b801433a1bc1e046422c16dd5525b04f279ad1828c02ada5",
+    ),
+    "highlight-recovery": (
+        ("data", "skills", "highlight-recovery", "SKILL.md"),
+        1,
+        "12ccea2d4b8cc736dabaa1ceebcacf5a59e1e62c2e0e2cb1bb37db9a09134aff",
+    ),
 }
 _METADATA_FIELDS = frozenset(
     {
