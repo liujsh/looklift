@@ -533,3 +533,5 @@ finish_candidate（模型终态）→ 内存候选，等待未来 UI 人工确�
 ### 声明式 Runtime 探测
 
 `RuntimeDefinition` 已统一 API、CLI、Fake 的输入传输、流格式、Resume、MCP、能力和权限描述；`RuntimeDetectionEngine` 对注册项执行并行、限时、故障隔离的探测，输出脱敏的可用性、认证、版本和模型结果，单个 Runtime 失败不会阻断其他结果。
+
+`RuntimeLifecycleEngine` 根据用户明确选择的 Definition 创建 Adapter，校验所需能力与事件身份/序号，统一附加 Runtime 能力快照并负责取消和回收。内置目录声明 Pydantic API、Pi CLI 和 Fake 三种 Runtime；`GET /api/runtimes` 只暴露选择器所需的安全字段，不返回命令、端点、环境或凭据。

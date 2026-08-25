@@ -330,3 +330,9 @@
 - Runtime Definition 补齐输入传输、事件流格式、Resume 和 MCP 声明字段。
 - 通用探测引擎并行执行注入式 Probe，隔离超时和异常，不向调用方泄漏底层错误正文。
 - 新增可用性、认证、版本和模型发现契约测试；通用启动/取消生命周期仍留在下一完整单元。
+
+## 2026-08-25：Runtime 通用生命周期与目录 API
+
+- 新增通用启动、能力门控、事件身份/序号校验、取消和回收引擎，禁止隐式 Runtime/Provider 回退。
+- Pydantic API、Pi CLI、Fake 进入内置声明式目录；新增 `/api/runtimes` 安全选择数据。
+- Runtime、Adapter 与 GUI 定向回归 `65 passed`；受影响 Ruff 与 diff check 通过。
