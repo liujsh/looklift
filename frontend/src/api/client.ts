@@ -32,6 +32,7 @@ import type {
   TaskResult,
   AgentRunManifest,
   RuntimeSummary,
+  PluginSummary,
   ContextConfig,
   ContextEntryType,
   ContextEntryView,
@@ -84,6 +85,19 @@ export class LookliftClient {
   async runtimes(): Promise<RuntimeSummary[]> {
     const result = await this.json<{ runtimes: RuntimeSummary[] }>("/api/runtimes");
     return result.runtimes;
+  }
+
+  async plugins(): Promise<PluginSummary[]> {
+    const result = await this.json<{ plugins: PluginSummary[] }>("/api/plugins");
+    return result.plugins;
+  }
+
+  grantPlugin(id: string, payload: { project_id: string; capabilities: string[]; scope: "run" | "attempt" | "call" }): Promise<PluginSummary> {
+    return this.json(`/api/plugins/${encodeURIComponent(id)}/grant`, { method: "POST", body: JSON.stringify(payload) });
+  }
+
+  revokePlugin(id: string, projectId: string): Promise<PluginSummary> {
+    return this.json(`/api/plugins/${encodeURIComponent(id)}/grant?project_id=${encodeURIComponent(projectId)}`, { method: "DELETE" });
   }
 
   async recoverableAgentRuns(): Promise<AgentRunManifest[]> {

@@ -387,3 +387,10 @@
 - 新增六组 Skill/Template/反馈消融配置；所有结果保持正式版本不变、晚到隔离和敏感数据检查。
 - 报告分离 `offline_contract`、`fake_harness`、`real_model_ablation`、`human_pairwise` 阶段；真实 Provider 与人工 Pairwise 永远标记为待人工完成。
 - 定向证据：Eval 测试 `8 passed`，受影响文件 Ruff 通过；真实模型与人工评测未进入默认 CI。
+
+## 2026-08-25：插件页与最小能力授权
+
+- Registry 增加脱敏 Manifest 列表投影；内置 `catalog-tools` 作为真实只读目录项，不伪造社区安装数据。
+- 插件授权接口要求项目范围、作用域和能力子集，任何超出 Manifest 声明的 Shell/原图/黑盒能力均被拒绝；撤销立即使 Grant 失效。
+- React 平台接入插件页，展示版本、来源、输入、能力摘要和授权/撤销操作。
+- 定向证据：插件后端测试 `7 passed`，Ruff 和 TypeScript 通过；真实安装包签名、网络下载和浏览器截图仍未纳入离线验收。

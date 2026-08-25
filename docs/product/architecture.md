@@ -567,3 +567,7 @@ Connector Manifest 固定协议、数据接收方和能力；外部事实先进�
 冻结给 Harness 的 Context 快照只包含 enabled 且 confirmed 的条目，并在不改写本地原文的前提下清除 Home/原图路径、密钥和 EXIF 明细。Global Rule、Memory 与 Project Context 进入 Domain Pack 时转义分区边界，不能伪造 Tool Contract。Python API 提供配置、条目、规则和 Proposal Query/Command；React 设置页展示来源、版本、确认状态、Hash、项目上下文及提案审核，不接触存储路径。
 
 运行详情的 `RunManifest` 额外冻结脱敏 `context_sources` 摘要，只包含来源 ID、版本、内容 Hash、使用/省略状态和省略原因；旧 Manifest 缺少该字段时按空摘要兼容。恢复页据此展示本次上下文依据，不返回上下文正文、原图路径或密钥。
+
+### Plugin Registry 与能力授权页
+
+`PluginRegistry.list()` 向前端投影脱敏 Manifest 摘要，内置插件与历史版本仍由 Registry 管理；API 不返回包路径、命令或凭据。授权接口要求 `project_id`、作用域和能力子集，服务端拒绝超出 Manifest 声明的能力，并以 `CapabilityGrant` 保存最小授权；撤销将 Grant 标为 revoked，使后续能力校验立即失败。React 插件页只展示声明能力、摘要和当前授权，授权/撤销均需显式点击。

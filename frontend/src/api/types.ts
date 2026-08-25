@@ -325,6 +325,20 @@ export type RuntimeSummary = {
   models: string[];
 };
 
+export type PluginSummary = {
+  id: string;
+  version: string;
+  kind: "skill" | "template" | "connector" | "provider";
+  task_kind: string;
+  mode: string;
+  inputs: string[];
+  capabilities: string[];
+  granted_capabilities: string[];
+  content_hash: string;
+  source: string;
+  enabled: boolean;
+};
+
 export type AgentRunManifest = {
   run_id: string;
   status: "starting" | "running" | "cancelling" | "interrupted" | "stale" | "completed" | "failed";
