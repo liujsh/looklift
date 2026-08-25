@@ -366,3 +366,11 @@
 - 恢复 API 改为根据 Manifest 的 session_id 从 SessionStore 读取正式版本，忽略客户端伪造的 baseline_hash。
 - 平台新增运行恢复导航、可恢复列表、运行事实详情、Runtime 选择和新 Attempt 操作；stale 状态不提供恢复按钮。
 - 后端基线/恢复测试 `18 passed`，前端定向测试 `21 passed` 且 TypeScript 通过；当前环境无浏览器控制入口，实际截图视觉验收待人工完成。
+
+## 2026-08-25：Global Rules、Memory 与 Context 设置页
+
+- Context 条目改为可重启恢复的受限 Markdown + 索引存储；安全 slug 阻断路径穿越，用户编辑形成 confirmed 版本，停用条目不再进入新 Run 快照。
+- Proposal Service 持久化 preview/confirm/reject/apply、过期、基线冲突和 applied revision；重复命令幂等，Connector 来源链继续保留 Source Packet ID。
+- Harness 快照过滤未确认条目并脱敏本地路径、密钥和 EXIF；Domain Pack 转义用户长期文本的分区字符，防止伪造 Tool Contract。
+- 设置页增加全局规则、记忆、项目上下文、自动提取开关和 Proposal 审核；自动提取默认关闭，开启后仍只允许生成待审核提案。
+- 收口证据：Python `675 passed, 1 skipped`，前端 `174 passed`，production build 与受影响文件 Ruff 通过。当前环境没有可用浏览器控制入口，设置页截图、窄屏和主题观感继续作为人工视觉门禁。

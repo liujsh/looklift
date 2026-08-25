@@ -72,7 +72,7 @@ def compile_domain_pack(
     ):
         for document in documents:
             content = _text_snapshot(document)
-            prefix.append(_text_section(tag, document, content))
+            prefix.append(_user_text_section(tag, document, content))
             sources.append(_fingerprint(document.source_id, document.version, content))
 
     if request.style_profile is not None:
@@ -243,6 +243,12 @@ def _ensure_unique_source_ids(sources: list[tuple[str, SourceFingerprint]]) -> N
 
 def _text_section(tag: str, document: VersionedText, content: str) -> str:
     return f"<{tag}{_source_attributes(document.source_id, document.version)}>\n{content}\n</{tag}>"
+
+
+def _user_text_section(tag: str, document: VersionedText, content: str) -> str:
+    """用户可编辑文本不能伪造 Domain Pack 分区边界。"""
+    safe_content = escape(content, quote=False)
+    return f"<{tag}{_source_attributes(document.source_id, document.version)}>\n{safe_content}\n</{tag}>"
 
 
 def _json_section(tag: str, document: VersionedJson, content: str) -> str:

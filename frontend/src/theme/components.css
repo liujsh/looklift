@@ -468,3 +468,44 @@
 .agent-run-detail dd { margin: 0; overflow-wrap: anywhere; }
 .agent-run-detail label { display: grid; gap: 6px; }
 @media (max-width: 900px) { .agent-runs-layout { grid-template-columns: 1fr; } }
+
+/* —— Agent 设置：上下文与提案保持可审查的文档面板结构 —— */
+.settings-page { height: 100%; padding: clamp(20px, 3vw, 38px); overflow: auto; color: var(--color-ink); }
+.settings-page > header { max-width: 780px; margin-bottom: 24px; }
+.settings-page > header h1 { margin: 7px 0 9px; font: 500 clamp(30px, 4vw, 42px)/1.08 var(--font-display); }
+.settings-page > header > p:last-child, .settings-section > p, .settings-heading p { color: var(--color-muted); }
+.settings-status { position: sticky; z-index: 3; top: 8px; width: fit-content; margin-left: auto; padding: 7px 11px; border: 1px solid var(--color-line); border-radius: 999px; background: var(--color-paper-raised); box-shadow: var(--shadow-panel); font-size: 12px; }
+.settings-section { margin: 0 0 16px; padding: 18px; border: 1px solid var(--color-line); border-radius: var(--radius-md); background: var(--color-paper-raised); box-shadow: var(--shadow-panel); }
+.settings-section h2 { margin: 0 0 6px; font-size: 18px; }
+.settings-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.settings-heading p { margin: 0; }
+.settings-switch { display: flex; flex: none; align-items: center; gap: 8px; font-size: 13px; }
+.settings-provider-form, .context-entry-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; margin-top: 14px; }
+.settings-provider-form label, .context-entry-form label { display: grid; gap: 5px; color: var(--color-muted); font-size: 12px; }
+.settings-provider-form input, .settings-provider-form select, .context-entry-form input, .context-entry-form select, .context-entry-form textarea { width: 100%; min-width: 0; }
+.settings-provider-form button { grid-column: 4; }
+.context-entry-content { grid-column: 1 / -2; }
+.context-entry-content textarea { min-height: 82px; resize: vertical; }
+.context-groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.context-group article, .proposal-card { display: grid; gap: 8px; padding: 13px; border: 1px solid var(--color-line-soft); border-radius: var(--radius-sm); background: var(--color-paper); }
+.context-group article + article { margin-top: 9px; }
+.context-group article[data-enabled="false"] { opacity: .58; }
+.context-group article header, .proposal-card header { display: flex; justify-content: space-between; gap: 10px; }
+.context-group article header span, .proposal-card header span { color: var(--color-accent); font-size: 11px; }
+.context-group article p, .proposal-card p { margin: 0; line-height: 1.55; white-space: pre-wrap; }
+.context-group article small, .proposal-card small { color: var(--color-muted); font: 11px/1.45 var(--font-data); overflow-wrap: anywhere; }
+.context-group article > div, .proposal-card > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.proposal-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.proposal-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.proposal-diff > div { padding: 9px; border-radius: var(--radius-xs); background: var(--color-paper-raised); }
+.proposal-diff small { display: block; margin-bottom: 5px; color: var(--color-accent); }
+
+@media (max-width: 1050px) {
+  .settings-provider-form, .context-entry-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .settings-provider-form button { grid-column: auto; }
+  .context-entry-content { grid-column: 1 / -1; }
+  .context-groups { grid-template-columns: 1fr; }
+}
+@media (max-width: 680px) {
+  .settings-heading, .settings-provider-form, .context-entry-form, .proposal-list { display: grid; grid-template-columns: 1fr; }
+}

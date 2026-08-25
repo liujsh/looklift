@@ -340,3 +340,41 @@ export type AgentRunManifest = {
   domain_pack_hash: string | null;
   session_id: string | null;
 };
+
+export type ContextEntryType = "profile" | "rule" | "fact" | "preference" | "project" | "reference" | "feedback";
+
+export type ContextEntryView = {
+  id: string;
+  type: ContextEntryType;
+  content: string;
+  source: string;
+  scope: "global" | "project" | "run";
+  name: string;
+  description: string;
+  confirmed: boolean;
+  enabled: boolean;
+  version: number;
+  content_hash: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ContextConfig = { enabled: boolean; auto_extract: boolean };
+
+export type ContextTreeView = {
+  schema_version: number;
+  config: ContextConfig;
+  entries: ContextEntryView[];
+};
+
+export type ProposalView = {
+  proposal_id: string;
+  target_type: "Memory" | "ProjectContext" | "Skill" | "Template" | "Reference";
+  target_id: string;
+  base_hash: string;
+  patch: Record<string, unknown>;
+  source_packet_ids: string[];
+  expires_at: string;
+  status: "preview" | "confirmed" | "rejected" | "applied" | "expired" | "conflict";
+  applied_revision: string | null;
+};

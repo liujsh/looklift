@@ -38,6 +38,8 @@ from .. import (
 from ..automation_store import AutomationStore
 from ..automation_tasks import AutomationTaskManager
 from ..builtin_runtimes import builtin_runtime_registry
+from ..context_memory import ContextEntry, ContextMemoryStore
+from ..proposal import ProposalError
 from ..run_manifest import ManifestError, RunManifestRepository, hash_text
 from ..library_store import LibraryStore
 from ..render import contract as render_contract
@@ -52,6 +54,8 @@ from . import upload
 Handler = Callable[[dict], "tuple[int, dict] | tuple[int, bytes, str]"]
 
 _VALID_PROVIDERS = {"auto", "cli", "api", "openai_compat", "ollama"}
+_CONTEXT_STORES: dict[Path, ContextMemoryStore] = {}
+_CONTEXT_STORES_LOCK = threading.Lock()
 
 _ANALYZE_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
 
@@ -80,6 +84,174 @@ def _get_runtimes(_ctx: dict) -> tuple[int, dict]:
 
 def _run_manifests() -> RunManifestRepository:
     return RunManifestRepository(config.run_manifest_dir())
+
+
+def _context_store() -> ContextMemoryStore:
+    root = config.context_memory_dir().resolve()
+    with _CONTEXT_STORES_LOCK:
+        store = _CONTEXT_STORES.get(root)
+        if store is None:
+            store = ContextMemoryStore(root)
+            _CONTEXT_STORES[root] = store
+        return store
+
+
+def _context_entry_dict(entry: ContextEntry) -> dict:
+    """设置页只获得可审查元数据，不暴露存储路径。"""
+    return {
+        "id": entry.entry_id,
+        "type": entry.entry_type,
+        "content": entry.content,
+        "source": entry.source,
+        "scope": entry.scope,
+        "name": entry.name,
+        "description": entry.description,
+        "confirmed": entry.confirmed,
+        "enabled": entry.enabled,
+        "version": entry.version,
+        "content_hash": entry.content_hash,
+        "created_at": entry.created_at,
+        "updated_at": entry.updated_at,
+    }
+
+
+def _get_memory_config(_ctx: dict) -> tuple[int, dict]:
+    return 200, _context_store().config()
+
+
+def _patch_memory_config(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    try:
+        return 200, _context_store().update_config(**payload)
+    except (TypeError, ValueError) as exc:
+        return 400, {"error": str(exc)}
+
+
+def _get_memory_tree(_ctx: dict) -> tuple[int, dict]:
+    store = _context_store()
+    return 200, {
+        "schema_version": 1,
+        "config": store.config(),
+        "entries": [_context_entry_dict(item) for item in store.list()],
+    }
+
+
+def _put_memory(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    try:
+        for key in ("type", "content", "name", "description", "scope"):
+            if key in payload and not isinstance(payload[key], str):
+                raise ValueError(f"Context 字段 {key} 必须是字符串")
+        entry = _context_store().user_put(
+            ctx["params"]["id"],
+            entry_type=payload["type"],
+            content=payload["content"],
+            name=payload.get("name", ""),
+            description=payload.get("description", ""),
+            scope=payload.get("scope", "global"),
+        )
+        return 200, _context_entry_dict(entry)
+    except KeyError as exc:
+        return 400, {"error": f"缺少字段：{exc.args[0]}"}
+    except (TypeError, ValueError) as exc:
+        return 400, {"error": str(exc)}
+
+
+def _delete_memory(ctx: dict) -> tuple[int, dict]:
+    try:
+        return 200, _context_entry_dict(_context_store().disable(ctx["params"]["id"]))
+    except KeyError:
+        return 404, {"error": "Context 条目不存在"}
+    except ValueError as exc:
+        return 400, {"error": str(exc)}
+
+
+def _get_rules(_ctx: dict) -> tuple[int, dict]:
+    return 200, {
+        "rules": [_context_entry_dict(item) for item in _context_store().list(entry_type="rule")]
+    }
+
+
+def _put_rules(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    rule_id = payload.get("id")
+    if not isinstance(rule_id, str):
+        return 400, {"error": "缺少规则 id"}
+    next_ctx = {**ctx, "params": {"id": rule_id}}
+    next_ctx["body"] = json.dumps({**payload, "type": "rule"}, ensure_ascii=False).encode()
+    return _put_memory(next_ctx)
+
+
+def _proposal_dict(proposal) -> dict:
+    return asdict(proposal)
+
+
+def _get_proposals(_ctx: dict) -> tuple[int, dict]:
+    return 200, {"proposals": [_proposal_dict(item) for item in _context_store().proposals.list()]}
+
+
+def _post_proposal(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    try:
+        target_id = str(payload["target_id"])
+        patch = payload["patch"]
+        if not isinstance(patch, dict) or not isinstance(patch.get("content"), str):
+            raise ValueError("Context Proposal 必须包含文本 content patch")
+        store = _context_store()
+        # 先验证目标，失败时不得留下无法应用的持久化 Proposal。
+        store.get(target_id)
+        proposal = store.proposals.preview(
+            target_type=str(payload["target_type"]),
+            target_id=target_id,
+            base_hash=str(payload["base_hash"]),
+            patch=patch,
+            source_packet_ids=tuple(payload.get("source_packet_ids", ())),
+        )
+        return 201, _proposal_dict(proposal)
+    except KeyError as exc:
+        return 400, {"error": f"缺少字段或目标：{exc.args[0]}"}
+    except (TypeError, ValueError, ProposalError) as exc:
+        return 400, {"error": str(exc)}
+
+
+def _proposal_action(ctx: dict, action: str) -> tuple[int, dict]:
+    try:
+        store = _context_store()
+        proposal_id = ctx["params"]["id"]
+        if action == "confirm":
+            proposal = store.proposals.confirm(proposal_id)
+        elif action == "reject":
+            proposal = store.proposals.reject(proposal_id)
+        else:
+            proposal = store.apply_proposal(proposal_id)
+        status = 409 if proposal.status == "conflict" else 200
+        return status, _proposal_dict(proposal)
+    except ProposalError as exc:
+        return 409, {"error": str(exc)}
+    except KeyError:
+        return 404, {"error": "Proposal 目标不存在"}
+    except ValueError as exc:
+        return 400, {"error": str(exc)}
+
+
+def _confirm_proposal(ctx: dict) -> tuple[int, dict]:
+    return _proposal_action(ctx, "confirm")
+
+
+def _reject_proposal(ctx: dict) -> tuple[int, dict]:
+    return _proposal_action(ctx, "reject")
+
+
+def _apply_proposal(ctx: dict) -> tuple[int, dict]:
+    return _proposal_action(ctx, "apply")
 
 
 def _manifest_dict(manifest) -> dict:
@@ -1173,6 +1345,18 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/agent/runs/recoverable"): _get_recoverable_agent_runs,
     ("GET", "/api/agent/runs/<id>"): _get_agent_run,
     ("POST", "/api/agent/runs/<id>/resume"): _resume_agent_run,
+    ("GET", "/api/memory/config"): _get_memory_config,
+    ("PATCH", "/api/memory/config"): _patch_memory_config,
+    ("GET", "/api/memory/tree"): _get_memory_tree,
+    ("PUT", "/api/memory/<id>"): _put_memory,
+    ("DELETE", "/api/memory/<id>"): _delete_memory,
+    ("GET", "/api/rules"): _get_rules,
+    ("PUT", "/api/rules"): _put_rules,
+    ("GET", "/api/proposals"): _get_proposals,
+    ("POST", "/api/proposals"): _post_proposal,
+    ("POST", "/api/proposals/<id>/confirm"): _confirm_proposal,
+    ("POST", "/api/proposals/<id>/reject"): _reject_proposal,
+    ("POST", "/api/proposals/<id>/apply"): _apply_proposal,
     ("POST", "/api/config"): _post_config,
     ("GET", "/api/tasks/<id>"): _get_task,
     ("POST", "/api/upload"): _upload,

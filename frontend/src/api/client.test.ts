@@ -104,6 +104,33 @@ describe("LookliftClient", () => {
     expect(queue.requests[0].url).toBe("http://127.0.0.1:9/api/image-info");
   });
 
+  it("覆盖 Context 与 Proposal 审核端点", async () => {
+    const tree = { schema_version: 1, config: { enabled: true, auto_extract: false }, entries: [] };
+    const queue = responseQueue([
+      Response.json(tree), Response.json({ proposals: [] }),
+      Response.json({ enabled: true, auto_extract: true }),
+      Response.json({ id: "fact-a" }), Response.json({ id: "fact-a", enabled: false }),
+      Response.json({ proposal_id: "p1", status: "confirmed" }),
+    ]);
+    const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
+
+    await expect(client.contextTree()).resolves.toEqual(tree);
+    await expect(client.proposals()).resolves.toEqual([]);
+    await client.updateContextConfig({ auto_extract: true });
+    await client.saveContextEntry("fact-a", { type: "fact", content: "事实" });
+    await client.disableContextEntry("fact-a");
+    await client.confirmProposal("p1");
+
+    expect(queue.requests.map((request) => `${request.init.method ?? "GET"} ${request.url}`)).toEqual([
+      "GET http://127.0.0.1:9/api/memory/tree",
+      "GET http://127.0.0.1:9/api/proposals",
+      "PATCH http://127.0.0.1:9/api/memory/config",
+      "PUT http://127.0.0.1:9/api/memory/fact-a",
+      "DELETE http://127.0.0.1:9/api/memory/fact-a",
+      "POST http://127.0.0.1:9/api/proposals/p1/confirm",
+    ]);
+  });
+
   it("浏览器上传使用 multipart 且不手写 Content-Type 边界", async () => {
     const queue = responseQueue([Response.json({ path: "C:/temp/photo.jpg" })]);
     const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
