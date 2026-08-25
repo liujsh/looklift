@@ -16,6 +16,7 @@ const ITEMS: ReadonlyArray<{ target: NavigationTarget; icon: IconName; label: st
   { target: "templates", icon: "template", label: "大师模板" },
   { target: "automation", icon: "skill", label: "自动化技能" },
   { target: "plugins", icon: "plugin", label: "插件" },
+  { target: "runs", icon: "skill", label: "运行恢复" },
   { target: "settings", icon: "settings", label: "设置与帮助" },
 ];
 

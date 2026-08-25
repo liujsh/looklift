@@ -221,6 +221,28 @@ describe("LookliftClient", () => {
     expect(queue.requests[0].url).toBe("http://127.0.0.1:9/api/sessions?limit=3");
   });
 
+  it("使用显式 Runtime 创建新的恢复 Attempt", async () => {
+    const manifest = { run_id: "run-a", status: "starting" };
+    const queue = responseQueue([
+      Response.json({ runs: [] }),
+      Response.json({ runtimes: [] }),
+      Response.json(manifest, { status: 202 }),
+    ]);
+    const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
+    await client.recoverableAgentRuns();
+    await client.runtimes();
+    await client.resumeAgentRun("run/a", "attempt-2", "pi-cli");
+    expect(queue.requests.map((request) => request.url)).toEqual([
+      "http://127.0.0.1:9/api/agent/runs/recoverable",
+      "http://127.0.0.1:9/api/runtimes",
+      "http://127.0.0.1:9/api/agent/runs/run%2Fa/resume",
+    ]);
+    expect(JSON.parse(String(queue.requests[2].init.body))).toEqual({
+      attempt_id: "attempt-2",
+      runtime_id: "pi-cli",
+    });
+  });
+
   it("覆盖图库分页、异步扫描、标签和 Explorer 端点", async () => {
     const queue = responseQueue([
       Response.json({ roots: [] }),

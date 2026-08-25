@@ -38,7 +38,7 @@ from .. import (
 from ..automation_store import AutomationStore
 from ..automation_tasks import AutomationTaskManager
 from ..builtin_runtimes import builtin_runtime_registry
-from ..run_manifest import ManifestError, RunManifestRepository
+from ..run_manifest import ManifestError, RunManifestRepository, hash_text
 from ..library_store import LibraryStore
 from ..render import contract as render_contract
 from ..session_store import DatabaseRecoveryRequired, SessionSnapshot, SessionStore
@@ -103,10 +103,15 @@ def _get_agent_run(ctx: dict) -> tuple[int, dict]:
 def _resume_agent_run(ctx: dict) -> tuple[int, dict]:
     try:
         body = json.loads((ctx.get("body") or b"{}").decode("utf-8"))
+        repository = _run_manifests()
+        current = repository.load(ctx["params"]["id"])
+        if current.session_id is None:
+            raise ManifestError("Run 缺少正式会话绑定，不能安全恢复")
+        session = SessionStore().load(current.session_id)
         manifest = _run_manifests().start_attempt(
             ctx["params"]["id"],
             attempt_id=str(body["attempt_id"]),
-            baseline_hash=str(body["baseline_hash"]),
+            baseline_hash=hash_text(session.current_version_id),
             runtime_id=str(body["runtime_id"]) if body.get("runtime_id") else None,
         )
         return 202, _manifest_dict(manifest)

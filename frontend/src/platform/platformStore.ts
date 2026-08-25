@@ -1,4 +1,4 @@
-export type PlatformPage = "library" | "import" | "templates" | "automation" | "plugins" | "settings";
+export type PlatformPage = "library" | "import" | "templates" | "automation" | "plugins" | "runs" | "settings";
 
 export type StudioRuntimeLike = {
   sessionId: string;

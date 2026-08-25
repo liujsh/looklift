@@ -31,6 +31,7 @@ class RunManifest:
     provider: str | None = None
     model: str | None = None
     domain_pack_hash: str | None = None
+    session_id: str | None = None
 
 
 class RunManifestStore:
@@ -51,6 +52,7 @@ class RunManifestStore:
         provider: str | None = None,
         model: str | None = None,
         domain_pack_hash: str | None = None,
+        session_id: str | None = None,
     ) -> RunManifest:
         if not run_id or len(baseline_hash) != 64 or len(photo_hash) != 64:
             raise ManifestError("Manifest 身份或 Hash 无效")
@@ -64,6 +66,7 @@ class RunManifestStore:
             provider=provider,
             model=model,
             domain_pack_hash=domain_pack_hash,
+            session_id=session_id,
         )
         self._write_snapshot(manifest)
         return manifest

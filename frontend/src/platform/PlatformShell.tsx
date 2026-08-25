@@ -20,6 +20,7 @@ import { ImportPage } from "./ImportPage";
 import type { EditorState } from "../store/editorStore";
 
 import { AutomationPage } from "./AutomationPage";
+import { AgentRunsPage } from "./AgentRunsPage";
 
 type PlatformShellProps = {
   client: LookliftClient;
@@ -35,6 +36,7 @@ const PLATFORM_TITLES: Record<PlatformPage, string> = {
   templates: "大师模板",
   automation: "自动化技能",
   plugins: "插件",
+  runs: "运行恢复",
   settings: "设置与帮助",
 };
 const EMPTY_EDITOR_SNAPSHOT: EditorState = Object.freeze({
@@ -208,7 +210,7 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
       <section className="platform-content" inert={closeDialog ? true : undefined}>
         {shellError && <div className="platform-error" role="alert">{shellError}</div>}
         {activeTab.kind === "home" && <HomePage client={client} onResume={resume} onQuickEdit={quickEdit} quickEditBusy={quickEditBusy} onFuture={openFuture} />}
-        {activeTab.kind === "platform" && (activeTab.page === "settings" ? <SettingsPage client={client} /> : activeTab.page === "templates" ? <TemplatePage client={client} contract={contract} canApply={Boolean(recentRuntime && recentEditor.activeAiRequestId === null && recentEditor.pendingPreview === null && canApplyTemplateToStudio(recentRuntime))} currentPhoto={currentTemplatePhoto} onApply={applyTemplate} /> : activeTab.page === "import" ? <ImportPage client={client} /> : activeTab.page === "automation" ? <AutomationPage client={client} /> : activeTab.page === "library" ? <LibraryPage client={client} onOpen={async (path) => {
+        {activeTab.kind === "platform" && (activeTab.page === "settings" ? <SettingsPage client={client} /> : activeTab.page === "runs" ? <AgentRunsPage client={client} /> : activeTab.page === "templates" ? <TemplatePage client={client} contract={contract} canApply={Boolean(recentRuntime && recentEditor.activeAiRequestId === null && recentEditor.pendingPreview === null && canApplyTemplateToStudio(recentRuntime))} currentPhoto={currentTemplatePhoto} onApply={applyTemplate} /> : activeTab.page === "import" ? <ImportPage client={client} /> : activeTab.page === "automation" ? <AutomationPage client={client} /> : activeTab.page === "library" ? <LibraryPage client={client} onOpen={async (path) => {
           if (!contract) throw new Error("参数契约尚未就绪");
           openSnapshot(await client.createSession({ path, initial_analysis: createNeutralAnalysis(contract) }));
         }} /> : <ComingSoonPage page={activeTab.page} />)}
