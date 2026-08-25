@@ -57,6 +57,9 @@ class DomainPackRequest:
     skill: VersionedText | None = None
     template: VersionedJson | None = None
     references: tuple[VersionedText, ...] = field(default_factory=tuple)
+    global_rules: tuple[VersionedText, ...] = field(default_factory=tuple)
+    memory: tuple[VersionedText, ...] = field(default_factory=tuple)
+    project_context: tuple[VersionedText, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
