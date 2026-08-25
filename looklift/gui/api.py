@@ -19,7 +19,7 @@ import re
 import threading
 import shutil
 import sqlite3
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, Callable
 
@@ -39,6 +39,8 @@ from ..automation_store import AutomationStore
 from ..automation_tasks import AutomationTaskManager
 from ..builtin_runtimes import builtin_runtime_registry
 from ..context_memory import ContextEntry, ContextMemoryStore
+from ..capabilities import CapabilityGrant
+from ..plugin_registry import PluginManifest, PluginManifestError, PluginRegistry
 from ..proposal import ProposalError
 from ..run_manifest import ManifestError, RunManifestRepository, hash_text
 from ..library_store import LibraryStore
@@ -56,6 +58,69 @@ Handler = Callable[[dict], "tuple[int, dict] | tuple[int, bytes, str]"]
 _VALID_PROVIDERS = {"auto", "cli", "api", "openai_compat", "ollama"}
 _CONTEXT_STORES: dict[Path, ContextMemoryStore] = {}
 _CONTEXT_STORES_LOCK = threading.Lock()
+_PLUGIN_REGISTRY = PluginRegistry()
+_PLUGIN_GRANTS: dict[tuple[str, str], CapabilityGrant] = {}
+
+
+def _seed_plugin_registry() -> None:
+    if _PLUGIN_REGISTRY.list(include_disabled=True):
+        return
+    _PLUGIN_REGISTRY.install(
+        PluginManifest(
+            1, "catalog-tools", "1.0.0", "connector", "catalog", "declarative",
+            ("catalog",), frozenset({"connector.read_catalog"}), "a" * 64, source="builtin",
+        )
+    )
+
+
+def _plugin_payload(item: dict) -> dict:
+    grants = [grant for (name, _), grant in _PLUGIN_GRANTS.items() if name == item["name"] and grant.active()]
+    granted = sorted({cap for grant in grants for cap in grant.capabilities})
+    return {"id": item["name"], **{key: value for key, value in item.items() if key != "name"}, "granted_capabilities": granted}
+
+
+def _get_plugins(_ctx: dict) -> tuple[int, dict]:
+    _seed_plugin_registry()
+    return 200, {"plugins": [_plugin_payload(item) for item in _PLUGIN_REGISTRY.list()]}
+
+
+def _grant_plugin(ctx: dict) -> tuple[int, dict]:
+    _seed_plugin_registry()
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    try:
+        manifest = _PLUGIN_REGISTRY.resolve(ctx["params"]["id"])
+        project_id = payload["project_id"]
+        capabilities = payload["capabilities"]
+        scope = payload.get("scope", "run")
+        if not isinstance(project_id, str) or not project_id or not isinstance(capabilities, list) or not all(isinstance(item, str) for item in capabilities):
+            raise ValueError("Grant 字段不合法")
+        if scope not in {"run", "attempt", "call"}:
+            raise ValueError("Grant 作用域不合法")
+        requested = frozenset(capabilities)
+        if not requested <= manifest.capabilities:
+            raise ValueError("Grant 不能超过 Plugin 已声明能力")
+        grant = CapabilityGrant(manifest.name, requested, project_id, manifest.content_hash, scope=scope)
+        _PLUGIN_GRANTS[(manifest.name, project_id)] = grant
+        return 200, _plugin_payload({"name": manifest.name, **next(item for item in _PLUGIN_REGISTRY.list() if item["name"] == manifest.name)})
+    except (KeyError, TypeError, ValueError, PluginManifestError) as exc:
+        return 400, {"error": str(exc)}
+
+
+def _revoke_plugin(ctx: dict) -> tuple[int, dict]:
+    _seed_plugin_registry()
+    project_id = (ctx.get("query") or {}).get("project_id")
+    if not isinstance(project_id, str) or not project_id:
+        return 400, {"error": "缺少 project_id"}
+    try:
+        manifest = _PLUGIN_REGISTRY.resolve(ctx["params"]["id"])
+    except PluginManifestError as exc:
+        return 404, {"error": str(exc)}
+    grant = _PLUGIN_GRANTS.get((manifest.name, project_id))
+    if grant is not None:
+        _PLUGIN_GRANTS[(manifest.name, project_id)] = replace(grant, revoked=True)
+    return 200, _plugin_payload(next(item for item in _PLUGIN_REGISTRY.list() if item["name"] == manifest.name))
 
 _ANALYZE_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
 
@@ -1345,6 +1410,9 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/agent/runs/recoverable"): _get_recoverable_agent_runs,
     ("GET", "/api/agent/runs/<id>"): _get_agent_run,
     ("POST", "/api/agent/runs/<id>/resume"): _resume_agent_run,
+    ("GET", "/api/plugins"): _get_plugins,
+    ("POST", "/api/plugins/<id>/grant"): _grant_plugin,
+    ("DELETE", "/api/plugins/<id>/grant"): _revoke_plugin,
     ("GET", "/api/memory/config"): _get_memory_config,
     ("PATCH", "/api/memory/config"): _patch_memory_config,
     ("GET", "/api/memory/tree"): _get_memory_tree,

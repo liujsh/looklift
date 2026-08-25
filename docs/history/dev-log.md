@@ -380,3 +380,10 @@
 - Run Manifest 增加向后兼容的 `context_sources` 摘要，记录来源 ID、版本、Hash、使用状态和预算省略原因；详情 API 与恢复页只展示摘要，不暴露正文或本地路径。
 - 运行详情页补充“本次上下文”面板，帮助用户核对 Agent 实际依据和被省略的 Reference。
 - 定向证据：后端 `7 passed`，前端 AgentRuns `2 passed`，TypeScript 与 Ruff 通过。浏览器控制工具在当前会话不可用，实际截图验收仍待人工完成。
+
+## 2026-08-25：插件页与最小能力授权
+
+- Registry 增加脱敏 Manifest 列表投影；内置 `catalog-tools` 作为真实只读目录项，不伪造社区安装数据。
+- 插件授权接口要求项目范围、作用域和能力子集，任何超出 Manifest 声明的 Shell/原图/黑盒能力均被拒绝；撤销立即使 Grant 失效。
+- React 平台接入插件页，展示版本、来源、输入、能力摘要和授权/撤销操作。
+- 定向证据：插件后端测试 `7 passed`，Ruff 和 TypeScript 通过；真实安装包签名、网络下载和浏览器截图仍未纳入离线验收。

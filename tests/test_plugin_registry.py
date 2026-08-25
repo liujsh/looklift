@@ -65,3 +65,16 @@ def test_scoped_token_revocation_invalidates_attempt_immediately():
     assert store.validate(token, capability="connector.read_catalog", project_id="p", attempt_id="a1") is True
     store.revoke_subject("plugin", version_hash="a" * 64)
     assert store.validate(token, capability="connector.read_catalog", project_id="p", attempt_id="a1") is False
+
+
+def test_registry_lists_versions_without_exposing_disabled_as_active():
+    registry = PluginRegistry()
+    registry.install(_manifest("1.0.0"))
+    registry.install(_manifest("2.0.0", "b" * 64))
+    registry.uninstall("catalog-tools", "2.0.0")
+
+    listed = registry.list()
+
+    assert listed[0]["name"] == "catalog-tools"
+    assert listed[0]["version"] == "1.0.0"
+    assert registry.list(include_disabled=True)[-1]["enabled"] is False

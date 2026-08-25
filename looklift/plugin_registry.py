@@ -79,6 +79,26 @@ class PluginRegistry:
         except KeyError as exc:
             raise PluginManifestError("未知 Plugin") from exc
 
+    def list(self, *, include_disabled: bool = False) -> list[dict]:
+        """返回 UI 所需的脱敏 Manifest 摘要，不返回包路径或内容。"""
+        items = sorted(self._items.values(), key=lambda item: (item.name, _version_key(item.version)), reverse=False)
+        return [
+            {
+                "name": item.name,
+                "version": item.version,
+                "kind": item.kind,
+                "task_kind": item.task_kind,
+                "mode": item.mode,
+                "inputs": list(item.inputs),
+                "capabilities": sorted(item.capabilities),
+                "content_hash": item.content_hash,
+                "source": item.source,
+                "enabled": item.enabled,
+            }
+            for item in items
+            if include_disabled or item.enabled
+        ]
+
 
 def manifest_hash(payload: dict) -> str:
     encoded = json.dumps(
