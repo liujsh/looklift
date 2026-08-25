@@ -336,3 +336,9 @@
 - 新增通用启动、能力门控、事件身份/序号校验、取消和回收引擎，禁止隐式 Runtime/Provider 回退。
 - Pydantic API、Pi CLI、Fake 进入内置声明式目录；新增 `/api/runtimes` 安全选择数据。
 - Runtime、Adapter 与 GUI 定向回归 `65 passed`；受影响 Ruff 与 diff check 通过。
+
+## 2026-08-25：Plugin 版本、令牌与 Skill staging
+
+- Plugin Registry 使用语义版本选择，校验内容 SHA-256 和高风险能力；禁用版本仍保留用于历史回放。
+- Scoped Token 绑定项目、插件版本和 Attempt，撤销后即时失效。
+- Skill 内容冻结到项目私有 staging，仅允许入口和一层 Markdown Reference；契约测试 `12 passed`。

@@ -117,11 +117,11 @@ def test_context_memory_requires_proposal_for_updates(tmp_path):
 
 def test_plugin_manifest_and_connector_boundaries():
     registry = PluginRegistry()
-    manifest = PluginManifest(1, "demo", "1.0.0", "connector", "catalog", "declarative", (), frozenset({"workspace.read_metadata"}), "h")
+    manifest = PluginManifest(1, "demo", "1.0.0", "connector", "catalog", "declarative", (), frozenset({"workspace.read_metadata"}), "a" * 64)
     registry.install(manifest)
-    assert registry.resolve("demo").content_hash == "h"
+    assert registry.resolve("demo").content_hash == "a" * 64
     with pytest.raises(PluginManifestError):
-        PluginManifest(1, "bad", "1", "connector", "x", "declarative", (), frozenset({"shell.exec"}), "h")
+        PluginManifest(1, "bad", "1.0.0", "connector", "x", "declarative", (), frozenset({"shell.exec"}), "a" * 64)
     packet = make_source_packet("p1", "catalog", {"x": 1})
     assert len(packet.content_hash) == 64
     validate_external_url("https://example.com", resolved_ips=("93.184.216.34",))
