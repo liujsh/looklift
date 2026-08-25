@@ -18,13 +18,14 @@ looklift 是**开源一站式 AI 调色应用**(演进中):AI 逆向出**可解�
 | [docs/README.md](docs/README.md) | **唯一文档导航与存放规范** |
 | [docs/product/requirements.md](docs/product/requirements.md) | **产品宪法**:定位、白盒双向、用户故事总表、路线图、非目标。范围之争以它为准 |
 | [docs/product/architecture.md](docs/product/architecture.md) | 只记**已实现**的架构实况(实现后回填,不写未来设计) |
+| [docs/specs/](docs/specs/) | 跨版本新功能的需求、设计、任务规格；每个功能一个日期目录 |
 | [docs/versions/](docs/versions/) | 各版本需求、设计、任务与同版本实施计划 |
 | [docs/history/dev-log.md](docs/history/dev-log.md) | 开发踩坑记录 + 自主决策 + 待作者人工验收清单 |
 
 ## Binding 流程规范(不可绕过)
 
 1. **spec 先行**:需求/设计变更**先改 spec 再改代码**。不在没有 spec 的情况下改动架构。
-2. **spec → plan → 实现**:开工由版本三文档生成同版本 `docs/versions/<版本>/plans/` 计划,再按计划 TDD 执行。禁止新建 `docs/specs/`、根 `docs/plans/` 或 `docs/superpowers/`。
+2. **spec → plan → 实现**:跨版本或尚未归属版本的新功能使用 `docs/specs/YYMMDD-feature-name/`，目录内固定保存 `requirements.md`、`design.md`、`tasks.md`；已纳入版本的功能继续使用 `docs/versions/<版本>/` 及其 `plans/`。不得新建根 `docs/plans/` 或 `docs/superpowers/`。
 3. **TDD**:先写失败测试 → 跑到失败 → 最小实现 → 跑到通过 → 提交。方向/正确性断言先行。
 4. **测试离线**:测试**不触网、不调真实 AI/provider**;依赖 `tests/conftest.py` 的 autouse
    `_isolate_env` fixture(假 home / 假 config / 清 `LOOKLIFT_*`),任何测试不得碰真实 `~/.looklift`。
@@ -71,6 +72,16 @@ looklift 是**开源一站式 AI 调色应用**(演进中):AI 逆向出**可解�
    - **`vite build` 只在这些情况才需要中途跑**:动了依赖、import 路径别名、静态资源引用、vite 配置。
      纯组件逻辑/样式改动不跑。
    - 与 rule 11 呼应:纯视觉改动连 vitest 都不必跑,直接 `pnpm dev` 看渲染。
+
+## 需求与设计工作流
+
+实现新功能时，遵循以下结构化工作流；纯文档修订也必须保持三份规格之间的一致性。
+
+1. **需求分析**：收到新需求时，先通过仓库探索和必要的澄清确认目标、用户故事、范围、约束、验收标准和未决取舍，再开始实现。
+2. **需求文档**：使用 EARS（Easy Approach to Requirements Syntax）方法论创建 `docs/specs/YYMMDD-feature-name/requirements.md`。文档必须用中文，包含 `# 需求文档`、简介、用户故事和“当/如果/那么”形式的验收标准。
+3. **技术设计**：需求确认后创建同目录 `design.md`，用中文描述架构概览、技术栈与选型、数据/API 契约、测试策略、安全考虑，并在关系复杂时使用 Mermaid 图表。
+4. **任务拆分**：创建同目录 `tasks.md`，标题为 `# 实施计划`，将实现拆成可验证任务，使用复选框、子任务和 `_需求：需求编号_` 关联；实现过程中同步更新状态。
+5. **审查与实现**：需求、设计和任务文档完成一次一致性审查并确认后，才开始代码实现；禁止在规格未确认时提前改架构。版本归属明确后，可将规格内容迁入对应 `docs/versions/<版本>/`，并保留来源链接。
 
 
 ## Binding 技术栈(2026-07-17 锁定,不走回头路)

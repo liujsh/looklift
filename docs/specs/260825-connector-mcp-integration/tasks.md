@@ -1,0 +1,21 @@
+# 实施计划
+
+- [ ] 1. 定义 Connector、MCP、Provider Manifest
+  - 固定协议、输入、能力和接收方字段
+  - _需求：需求 1、需求 3_
+- [ ] 2. 实现 Registry 与连接配置存储
+  - 支持 workspace 快照和凭据引用
+  - _需求：需求 1、需求 4_
+- [ ] 3. 实现 Source Packet 与 Proposal 流程
+  - 实现 Source Packet 及 Memory/ProjectContext/Skill/Template/Reference 目标适配器
+  - 调用 Context Spec 提供的 ProposalStore/ProposalService，不重复实现状态机
+  - _需求：需求 2_
+- [ ] 4. 实现 Provider Gateway 脱敏
+  - 代理图、EXIF、路径和接收方校验
+  - _需求：需求 3、需求 5_
+- [ ] 5. 实现超时、取消、晚到和显式重试
+  - 禁止隐式跨 Provider 降级
+  - _需求：需求 4_
+- [ ] 6. 编写安全与 Fake 集成测试
+  - 覆盖 SSRF、密钥、恶意指令和路径隔离
+  - _需求：需求 1-5_

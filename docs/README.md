@@ -4,7 +4,7 @@
 
 ## 1. 目标
 
-文档按“产品级、版本级、历史记录、调研资料”划分。一个版本的需求、设计、任务和实施计划必须集中在同一个版本目录，不再并存 `specs/`、`plans/` 与 `superpowers/` 三套入口。
+文档按“产品级、功能规格、版本级、历史记录、调研资料”划分。跨版本或尚未归属版本的新功能先在 `specs/YYMMDD-feature-name/` 中完成需求、设计和任务规格；版本归属明确后再迁入对应 `versions/`。
 
 ## 2. 目标目录
 
@@ -23,6 +23,11 @@ docs/
 │  │  └─ plans/
 │  │     └─ implementation.md
 │  └─ ...
+├─ specs/
+│  └─ YYMMDD-feature-name/
+│     ├─ requirements.md
+│     ├─ design.md
+│     └─ tasks.md
 ├─ history/
 │  ├─ dev-log.md
 │  ├─ legacy-tasks.md
@@ -42,6 +47,9 @@ docs/
 | `product/requirements.md` | 产品定位、完整用户故事、正式路线图和版本边界 | 单个任务的实现步骤 |
 | `product/architecture.md` | 已实现系统的架构实况 | 尚未确认的未来实现细节 |
 | `product/platform-ui-design.md` | 已确认的平台整体信息架构与跨版本设计 | 某一版本的逐任务计划 |
+| `specs/<日期-功能>/requirements.md` | 新功能的 EARS 需求和验收标准 | 代码级实现细节 |
+| `specs/<日期-功能>/design.md` | 新功能的架构、接口、安全和测试设计 | 未确认的实现结果 |
+| `specs/<日期-功能>/tasks.md` | 新功能的可验证实施任务 | 跨功能状态汇总 |
 | `versions/<版本>/requirements.md` | 该版本做什么、不做什么、验收结果 | 实现代码级步骤 |
 | `versions/<版本>/design.md` | 该版本怎么做、状态所有权和技术决策 | 全产品路线图 |
 | `versions/<版本>/tasks.md` | 版本任务、依赖、完成条件和人工验收 | 跨版本待办汇总 |
@@ -82,7 +90,7 @@ docs/
 | `docs/requirements.md` | `docs/product/requirements.md` |
 | `docs/design.md` | `docs/product/architecture.md` |
 | `docs/superpowers/specs/2026-07-18-looklift-platform-ui-design.md` | `docs/product/platform-ui-design.md` |
-| `docs/specs/<版本>/` | `docs/versions/<版本>/` |
+| 历史 `docs/specs/<版本>/` | `docs/versions/<版本>/`（仅迁移旧版本规格；新规格继续使用日期目录） |
 | `docs/specs/2026-07-16-v0.3-precision-loop.md` | `docs/versions/v0.3/spec.md` |
 | `docs/specs/README.md` | `docs/history/legacy-spec-process.md` |
 | `docs/plans/<版本实施计划>.md` | 对应 `docs/versions/<版本>/plans/implementation.md` |
@@ -97,12 +105,13 @@ docs/
 ## 6. 后续写入规则
 
 1. 新版本只在 `docs/versions/<版本>/` 中建立 `requirements.md`、`design.md`、`tasks.md` 和 `plans/`。
-2. 实施计划必须属于一个明确版本；跨版本设计进入 `product/`，不得再创建通用 `docs/plans/`。
+2. 实施计划必须属于一个明确版本；跨版本设计进入 `docs/specs/YYMMDD-feature-name/`，不得再创建通用 `docs/plans/`。
 3. 不再创建 `docs/superpowers/`。工具或技能给出的默认目录必须服从本文件约定。
 4. `product/architecture.md` 只记录已经实现的架构；版本完成后从版本设计回填必要实况。
-5. 版本状态只在本索引、产品路线图和该版本文档中维护，不新增第四份状态表。
+5. 版本状态只在本索引、产品路线图和该版本文档中维护；功能规格只维护自身需求/设计/任务状态，不新增第四份状态表。
 6. Markdown 内部链接优先使用相对路径；移动文档后必须扫描整个仓库并修复所有引用。
 7. 历史版本文档原则上只修断链和明显事实错误，不继续扩写需求。
+8. 新功能规格遵循“需求分析 → EARS 需求 → 技术设计 → 任务拆分 → 一致性审查 → 实现”，三份文档全部使用中文。
 
 ## 7. 本次整理范围
 
@@ -111,7 +120,7 @@ docs/
 - 建立目标目录并移动现有文档；
 - 更新 `AGENTS.md` 的文档地图和工作流；
 - 修复仓库内 Markdown 对旧路径的引用；
-- 删除搬空后的 `docs/specs/`、`docs/plans/` 和 `docs/superpowers/`；
+- 保留 `docs/specs/` 作为跨版本功能规格入口；不新建根 `docs/plans/` 和 `docs/superpowers/`；
 - 检查所有本地 Markdown 链接和 Git 工作树，确保没有遗漏或误删。
 
 本次不会：
@@ -123,8 +132,20 @@ docs/
 
 ## 8. 验收标准
 
-- `docs/` 顶层除 `README.md` 外只保留 `product/`、`versions/`、`history/`、`research/` 四个目录。
+- `docs/` 顶层除 `README.md` 外只保留 `product/`、`versions/`、`history/`、`research/`、`specs/` 五个目录。
 - 每份现有文档都能在迁移映射中找到唯一归属，没有内容重复拷贝。
-- 仓库内不再引用 `docs/specs/`、`docs/plans/` 或 `docs/superpowers/`。
+- `docs/specs/` 下每个功能目录均有完整的 `requirements.md`、`design.md` 和 `tasks.md`；仓库不新建根 `docs/plans/` 或 `docs/superpowers/`。
+
+### Agent 对齐路线（七阶段）
+
+在七阶段之前先冻结两项跨模块基础契约：共享 `Capability/Grant/Permission Profile/Scoped Token`，以及共享 `Proposal/SourcePacket` 生命周期。两项契约分别由 Plugin Spec 的基础任务和 Context Spec 的 Proposal Store/Service 任务负责唯一实现，其他 Spec 只能调用适配器。
+
+1. Memory / Global Rules / Project Context：`260825-context-memory-global-rules`
+2. Context Compiler 2.0 与 Run Manifest：Context Compiler 在第一阶段设计中，Run Manifest 在 `260825-run-manifest-resume`
+3. Runtime Registry 与 API/CLI 通用引擎：`260825-runtime-registry`
+4. Plugin Manifest / Capability Grant / Registry：`260825-skill-template-plugin`
+5. Connector / MCP / Source Packet：`260825-connector-mcp-integration`
+6. Verifier / Critique / Real Eval：`260825-verifier-critique-eval`
+7. 设置页、插件页、运行详情页和恢复 UI：`260825-settings-plugin-run-ui`
 - Markdown 本地链接检查通过，Git 能识别为移动而不是内容丢失。
 - `AGENTS.md` 明确以后只按本结构写文档。
