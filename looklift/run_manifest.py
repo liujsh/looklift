@@ -32,6 +32,7 @@ class RunManifest:
     model: str | None = None
     domain_pack_hash: str | None = None
     session_id: str | None = None
+    context_sources: tuple[dict[str, Any], ...] = ()
 
 
 class RunManifestStore:
@@ -53,6 +54,7 @@ class RunManifestStore:
         model: str | None = None,
         domain_pack_hash: str | None = None,
         session_id: str | None = None,
+        context_sources: tuple[dict[str, Any], ...] = (),
     ) -> RunManifest:
         if not run_id or len(baseline_hash) != 64 or len(photo_hash) != 64:
             raise ManifestError("Manifest 身份或 Hash 无效")
@@ -67,6 +69,7 @@ class RunManifestStore:
             model=model,
             domain_pack_hash=domain_pack_hash,
             session_id=session_id,
+            context_sources=tuple(dict(item) for item in context_sources),
         )
         self._write_snapshot(manifest)
         return manifest
@@ -76,7 +79,9 @@ class RunManifestStore:
         if not snapshot.exists():
             raise ManifestError("Manifest 不存在")
         try:
-            return RunManifest(**json.loads(snapshot.read_text(encoding="utf-8")))
+            data = json.loads(snapshot.read_text(encoding="utf-8"))
+            data["context_sources"] = tuple(dict(item) for item in data.get("context_sources", ()))
+            return RunManifest(**data)
         except (OSError, ValueError, TypeError) as exc:
             raise ManifestError("Manifest 快照损坏") from exc
 

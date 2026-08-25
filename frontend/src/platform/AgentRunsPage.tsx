@@ -56,6 +56,10 @@ export function AgentRunsPage({ client }: { client: LookliftClient }) {
           <dt>最后候选</dt><dd>{selected.last_candidate_revision ?? "尚无候选"}</dd>
           <dt>基线</dt><dd>{selected.baseline_hash.slice(0, 12)}</dd>
         </dl>
+        <section className="agent-context-summary" aria-label="本次上下文">
+          <h3>本次上下文</h3>
+          {selected.context_sources.length === 0 ? <p>没有保存上下文来源摘要。</p> : <ul>{selected.context_sources.map((source) => <li key={`${source.id}:${source.version}`}><strong>{source.id}</strong><span>v{source.version} · {source.hash.slice(0, 12)}</span>{source.status === "omitted" && <small>已省略：{source.reason ?? "预算或策略"}</small>}</li>)}</ul>}
+        </section>
         {selected.status === "stale" ? <p role="status">正式基线已变化，只能查看，不能直接恢复。</p> : <>
           <label>继续使用 Runtime<select value={runtimeId} onChange={(event) => setRuntimeId(event.target.value)}>
             <option value="">沿用原 Runtime</option>

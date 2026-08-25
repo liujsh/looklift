@@ -374,3 +374,9 @@
 - Harness 快照过滤未确认条目并脱敏本地路径、密钥和 EXIF；Domain Pack 转义用户长期文本的分区字符，防止伪造 Tool Contract。
 - 设置页增加全局规则、记忆、项目上下文、自动提取开关和 Proposal 审核；自动提取默认关闭，开启后仍只允许生成待审核提案。
 - 收口证据：Python `675 passed, 1 skipped`，前端 `174 passed`，production build 与受影响文件 Ruff 通过。当前环境没有可用浏览器控制入口，设置页截图、窄屏和主题观感继续作为人工视觉门禁。
+
+## 2026-08-25：运行详情上下文来源面板
+
+- Run Manifest 增加向后兼容的 `context_sources` 摘要，记录来源 ID、版本、Hash、使用状态和预算省略原因；详情 API 与恢复页只展示摘要，不暴露正文或本地路径。
+- 运行详情页补充“本次上下文”面板，帮助用户核对 Agent 实际依据和被省略的 Reference。
+- 定向证据：后端 `7 passed`，前端 AgentRuns `2 passed`，TypeScript 与 Ruff 通过。浏览器控制工具在当前会话不可用，实际截图验收仍待人工完成。
