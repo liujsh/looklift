@@ -539,3 +539,7 @@ finish_candidate（模型终态）→ 内存候选，等待未来 UI 人工确�
 ### Plugin Registry、Scoped Token 与 Skill staging
 
 Plugin Manifest 校验稳定语义版本、内容 SHA-256、类型、模式和能力红线；Registry 保留所有历史版本，卸载只禁用当前选择，不删除历史运行引用。`ScopedTokenStore` 将 Grant 绑定项目、版本和 Attempt，撤销主体后现有令牌立即失效。Skill staging 只接受 `SKILL.md` 和一层 Markdown Reference，将规范化内容冻结到项目私有 Hash 目录并阻断路径穿越。
+
+### Connector Source Packet 与 Provider Gateway
+
+Connector Manifest 固定协议、数据接收方和能力；外部事实先进入带来源摘要的 `SourcePacketStore`，再调用共享 Proposal Service 生成带 provenance 的提案。`ProviderGateway` 不接受文件路径，只接收内存 JPEG，并在发送前校验授权接收方、2048px 上限、真实 JPEG 格式和 EXIF 为空，输出既有 `AgentImage` 安全代理对象。

@@ -342,3 +342,9 @@
 - Plugin Registry 使用语义版本选择，校验内容 SHA-256 和高风险能力；禁用版本仍保留用于历史回放。
 - Scoped Token 绑定项目、插件版本和 Attempt，撤销后即时失效。
 - Skill 内容冻结到项目私有 staging，仅允许入口和一层 Markdown Reference；契约测试 `12 passed`。
+
+## 2026-08-25：Connector 来源提案与代理图门禁
+
+- Connector Manifest 固定协议、接收方和能力；Source Packet 以内容摘要保证 ID 幂等。
+- Connector 复用唯一 Proposal Service，ProjectContext 等目标保留完整 Source Packet 来源链。
+- Provider Gateway 仅接受授权接收方的 2048px 无 EXIF JPEG 内存代理图；定向契约测试 `11 passed`。
