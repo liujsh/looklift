@@ -547,3 +547,7 @@ Connector Manifest 固定协议、数据接收方和能力；外部事实先进�
 ### Verifier、Critique 与 User Review Gate
 
 `CandidateVerifier` 直接消费 CandidateRuntime 冻结的 changes、preview 和 metrics，不重新渲染或创建 Revision。Contract/Domain/Capability 硬失败阻止进入复核，裁切阈值产生可审阅软警告；每次结果包含覆盖候选差异、指标和预览摘要的 evidence hash。`UserReviewGate` 只冻结用户确认意图并复核正式基线，不承担正式版本提交。
+
+### Run Manifest Repository 与恢复 API
+
+每个 Run 使用独立 JSONL 事实日志和原子快照，Repository 以安全 Run ID 管理列表、详情和恢复。应用创建本地服务时执行一次启动收敛，将未完成状态标为 interrupted；普通查询不改变运行状态。`GET /api/agent/runs/recoverable` 和详情 API 暴露脱敏事实，恢复命令只在基线一致且状态为 interrupted/failed 时创建新 Attempt，可显式切换 Runtime，但不会自动启动模型调用。

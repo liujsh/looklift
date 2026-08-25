@@ -39,6 +39,7 @@ def create_server(port: int = 0, token: str | None = None) -> ThreadingHTTPServe
     `token` 只供 Tauri sidecar 模式启用；旧 pywebview 入口与现有
     测试不传 token，保持原契约。
     """
+    api.reconcile_agent_runs_on_startup()
     server = ThreadingHTTPServer(("127.0.0.1", port), _RequestHandler)
     server.looklift_token = token  # type: ignore[attr-defined]
     return server

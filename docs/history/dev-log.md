@@ -354,3 +354,9 @@
 - Verifier 复用 CandidateRevision 的白盒差异、真实预览和指标，未复制渲染或 Patch 校验。
 - 固定 Contract/Domain/Capability/Render 失败分类、硬失败与软警告语义，并生成 evidence hash。
 - User Review Gate 复核正式基线且不直接提交；Verifier/Candidate/Eval 定向测试 `23 passed`。
+
+## 2026-08-25：Run Manifest Repository 与恢复 API
+
+- 每个 Run 使用独立事实日志/原子快照，Repository 阻断不安全 ID 并提供可恢复列表和详情。
+- 本地服务启动时只执行一次 interrupted 收敛；列表请求不会改变活跃 Run。
+- 恢复仅创建新 Attempt，可显式切换 Runtime，不复用序号、不自动产生模型费用；后端定向回归 `62 passed`。

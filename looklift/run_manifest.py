@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import tempfile
+import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,10 @@ class RunManifest:
     last_sequence: int = 0
     last_candidate_revision: str | None = None
     stale_reason: str | None = None
+    runtime_id: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    domain_pack_hash: str | None = None
 
 
 class RunManifestStore:
@@ -35,10 +40,31 @@ class RunManifestStore:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
-    def create(self, run_id: str, *, baseline_hash: str, photo_hash: str, attempt_id: str) -> RunManifest:
+    def create(
+        self,
+        run_id: str,
+        *,
+        baseline_hash: str,
+        photo_hash: str,
+        attempt_id: str,
+        runtime_id: str | None = None,
+        provider: str | None = None,
+        model: str | None = None,
+        domain_pack_hash: str | None = None,
+    ) -> RunManifest:
         if not run_id or len(baseline_hash) != 64 or len(photo_hash) != 64:
             raise ManifestError("Manifest 身份或 Hash 无效")
-        manifest = RunManifest(run_id, "starting", baseline_hash, photo_hash, attempt_id)
+        manifest = RunManifest(
+            run_id,
+            "starting",
+            baseline_hash,
+            photo_hash,
+            attempt_id,
+            runtime_id=runtime_id,
+            provider=provider,
+            model=model,
+            domain_pack_hash=domain_pack_hash,
+        )
         self._write_snapshot(manifest)
         return manifest
 
@@ -87,7 +113,13 @@ class RunManifestStore:
         self._write_snapshot(manifest)
         return manifest
 
-    def start_attempt(self, manifest: RunManifest, attempt_id: str) -> RunManifest:
+    def start_attempt(
+        self,
+        manifest: RunManifest,
+        attempt_id: str,
+        *,
+        runtime_id: str | None = None,
+    ) -> RunManifest:
         if manifest.status == "stale":
             raise ManifestError("stale 运行不能直接恢复")
         next_manifest = replace(
@@ -95,6 +127,7 @@ class RunManifestStore:
             attempt_id=attempt_id,
             status="starting",
             last_sequence=0,
+            runtime_id=runtime_id or manifest.runtime_id,
         )
         self._write_snapshot(next_manifest)
         return next_manifest
@@ -133,3 +166,77 @@ class RunManifestStore:
 
 def hash_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+_RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")
+
+
+class RunManifestRepository:
+    """按 Run ID 管理独立事实日志，不拥有 session_store 的正式编辑状态。"""
+
+    RECOVERABLE = frozenset({"interrupted", "stale", "failed"})
+
+    def __init__(self, root: Path) -> None:
+        self.root = Path(root)
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    def store(self, run_id: str) -> RunManifestStore:
+        if not _RUN_ID.fullmatch(run_id):
+            raise ManifestError("Run ID 不安全")
+        return RunManifestStore(self.root / f"{run_id}.jsonl")
+
+    def create(self, run_id: str, **values: Any) -> RunManifest:
+        store = self.store(run_id)
+        if store.path.with_suffix(".snapshot.json").exists():
+            raise ManifestError("Run Manifest 已存在")
+        return store.create(run_id, **values)
+
+    def load(self, run_id: str) -> RunManifest:
+        return self.store(run_id).load()
+
+    def list(self) -> tuple[RunManifest, ...]:
+        manifests: list[RunManifest] = []
+        for snapshot in sorted(self.root.glob("*.snapshot.json")):
+            run_id = snapshot.name.removesuffix(".snapshot.json")
+            try:
+                manifests.append(self.load(run_id))
+            except ManifestError:
+                continue
+        return tuple(manifests)
+
+    def reconcile_startup(self) -> tuple[RunManifest, ...]:
+        reconciled = []
+        for manifest in self.list():
+            reconciled.append(
+                self.store(manifest.run_id).reconcile(
+                    manifest,
+                    baseline_hash=manifest.baseline_hash,
+                )
+            )
+        return tuple(reconciled)
+
+    def list_recoverable(self) -> tuple[RunManifest, ...]:
+        return tuple(item for item in self.list() if item.status in self.RECOVERABLE)
+
+    def start_attempt(
+        self,
+        run_id: str,
+        *,
+        attempt_id: str,
+        baseline_hash: str,
+        runtime_id: str | None = None,
+    ) -> RunManifest:
+        manifest = self.load(run_id)
+        if baseline_hash != manifest.baseline_hash:
+            stale = self.store(run_id).reconcile(
+                manifest,
+                baseline_hash=baseline_hash,
+            )
+            raise ManifestError(stale.stale_reason or "正式基线已变化")
+        if manifest.status not in {"interrupted", "failed"}:
+            raise ManifestError("只有中断或失败的 Run 可以新建 Attempt")
+        return self.store(run_id).start_attempt(
+            manifest,
+            attempt_id,
+            runtime_id=runtime_id,
+        )

@@ -38,6 +38,7 @@ from .. import (
 from ..automation_store import AutomationStore
 from ..automation_tasks import AutomationTaskManager
 from ..builtin_runtimes import builtin_runtime_registry
+from ..run_manifest import ManifestError, RunManifestRepository
 from ..library_store import LibraryStore
 from ..render import contract as render_contract
 from ..session_store import DatabaseRecoveryRequired, SessionSnapshot, SessionStore
@@ -75,6 +76,47 @@ def _get_runtimes(_ctx: dict) -> tuple[int, dict]:
             }
         )
     return 200, {"runtimes": runtimes}
+
+
+def _run_manifests() -> RunManifestRepository:
+    return RunManifestRepository(config.run_manifest_dir())
+
+
+def _manifest_dict(manifest) -> dict:
+    return asdict(manifest)
+
+
+def _get_recoverable_agent_runs(_ctx: dict) -> tuple[int, dict]:
+    repository = _run_manifests()
+    return 200, {
+        "runs": [_manifest_dict(item) for item in repository.list_recoverable()]
+    }
+
+
+def _get_agent_run(ctx: dict) -> tuple[int, dict]:
+    try:
+        return 200, _manifest_dict(_run_manifests().load(ctx["params"]["id"]))
+    except ManifestError as exc:
+        return 404, {"error": str(exc)}
+
+
+def _resume_agent_run(ctx: dict) -> tuple[int, dict]:
+    try:
+        body = json.loads((ctx.get("body") or b"{}").decode("utf-8"))
+        manifest = _run_manifests().start_attempt(
+            ctx["params"]["id"],
+            attempt_id=str(body["attempt_id"]),
+            baseline_hash=str(body["baseline_hash"]),
+            runtime_id=str(body["runtime_id"]) if body.get("runtime_id") else None,
+        )
+        return 202, _manifest_dict(manifest)
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        return 409, {"error": str(exc)}
+
+
+def reconcile_agent_runs_on_startup() -> None:
+    """应用启动时执行一次；普通列表请求不得中断正在运行的 Attempt。"""
+    _run_manifests().reconcile_startup()
 
 
 def _validate_image_path(path: Any) -> "tuple[Path, None] | tuple[None, tuple[int, dict]]":
@@ -1123,6 +1165,9 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/engine-probe"): _engine_probe,
     ("GET", "/api/config"): _get_config,
     ("GET", "/api/runtimes"): _get_runtimes,
+    ("GET", "/api/agent/runs/recoverable"): _get_recoverable_agent_runs,
+    ("GET", "/api/agent/runs/<id>"): _get_agent_run,
+    ("POST", "/api/agent/runs/<id>/resume"): _resume_agent_run,
     ("POST", "/api/config"): _post_config,
     ("GET", "/api/tasks/<id>"): _get_task,
     ("POST", "/api/upload"): _upload,
