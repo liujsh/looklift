@@ -529,3 +529,7 @@ finish_candidate（模型终态）→ 内存候选，等待未来 UI 人工确�
 ### Context Compiler 2.0 与运行事实接线
 
 `DomainPackRequest` 已支持冻结的 Capability/Permission、全局规则、Memory 和 Project Context 来源；编译顺序将权限与 Tool Contract 固定在领域和用户内容之前，所有来源进入稳定 Hash 与可恢复快照。`RunManifestStore.append_agent_event` 消费统一 `AgentEvent`，拒绝跨 Run/Attempt 事件，并在新 Attempt 开始时重置事件序号，避免 Harness 原生会话成为状态真相源。
+
+### 声明式 Runtime 探测
+
+`RuntimeDefinition` 已统一 API、CLI、Fake 的输入传输、流格式、Resume、MCP、能力和权限描述；`RuntimeDetectionEngine` 对注册项执行并行、限时、故障隔离的探测，输出脱敏的可用性、认证、版本和模型结果，单个 Runtime 失败不会阻断其他结果。

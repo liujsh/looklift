@@ -20,15 +20,28 @@ class CapabilityGrant:
     revoked: bool = False
 
     def active(self, *, now: datetime | None = None) -> bool:
-        return not self.revoked and (self.expires_at is None or (now or datetime.now(timezone.utc)) < self.expires_at)
+        current = now or datetime.now(timezone.utc)
+        return not self.revoked and (
+            self.expires_at is None or current < self.expires_at
+        )
 
 
-def effective_capabilities(grant: CapabilityGrant, permission_profile: set[str], tool_contract: set[str]) -> frozenset[str]:
+def effective_capabilities(
+    grant: CapabilityGrant,
+    permission_profile: set[str],
+    tool_contract: set[str],
+) -> frozenset[str]:
     if not grant.active():
         return frozenset()
     return frozenset(grant.capabilities & permission_profile & tool_contract)
 
 
-def require_capability(capability: str, *, grant: CapabilityGrant, permission_profile: set[str], tool_contract: set[str]) -> None:
+def require_capability(
+    capability: str,
+    *,
+    grant: CapabilityGrant,
+    permission_profile: set[str],
+    tool_contract: set[str],
+) -> None:
     if capability not in effective_capabilities(grant, permission_profile, tool_contract):
         raise CapabilityError(f"未授予能力：{capability}")

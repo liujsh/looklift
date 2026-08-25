@@ -324,3 +324,9 @@
 - 固定安全编译顺序：系统边界 → Capability Gate → Tool Contract → 摄影领域契约 → 已确认上下文 → Skill/Template/Reference。
 - Run Manifest 接入规范化 AgentEvent，并修复不同 Attempt 的 sequence 必须独立计数。
 - 定向测试 `34 passed`，受影响文件 Ruff 通过；真实 Provider 和重启 UI 不在本单元验收范围。
+
+## 2026-08-25：Runtime Registry 通用探测骨架
+
+- Runtime Definition 补齐输入传输、事件流格式、Resume 和 MCP 声明字段。
+- 通用探测引擎并行执行注入式 Probe，隔离超时和异常，不向调用方泄漏底层错误正文。
+- 新增可用性、认证、版本和模型发现契约测试；通用启动/取消生命周期仍留在下一完整单元。

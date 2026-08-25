@@ -4,7 +4,12 @@ from looklift.capabilities import CapabilityGrant, effective_capabilities, requi
 from looklift.proposal import ProposalError, ProposalService
 from looklift.run_manifest import RunManifestStore, hash_text
 from looklift.agent_adapter import AgentEvent, AgentEventKind
-from looklift.runtime_registry import RuntimeDefinition, RuntimeDefinitionError, RuntimeRegistry
+from looklift.runtime_registry import (
+    RuntimeDefinition,
+    RuntimeDefinitionError,
+    RuntimeDetectionEngine,
+    RuntimeRegistry,
+)
 from looklift.context_memory import ContextEntry, ContextMemoryStore
 from looklift.plugin_registry import PluginManifest, PluginManifestError, PluginRegistry
 from looklift.connector import make_source_packet, validate_external_url
@@ -33,6 +38,40 @@ def test_runtime_registry_validates_api_cli_fake_shapes():
     with pytest.raises(RuntimeDefinitionError):
         RuntimeDefinition("bad", "api")
     assert registry.get("fake").kind == "fake"
+
+
+def test_runtime_definition_declares_transport_and_detection_is_isolated():
+    async def exercise():
+        registry = RuntimeRegistry()
+        registry.register(
+            RuntimeDefinition(
+                "api",
+                "api",
+                endpoint="https://provider.invalid",
+                input_transport="provider_message",
+                stream_format="pydantic_events",
+                capabilities=frozenset({"proxy_image"}),
+            )
+        )
+        registry.register(RuntimeDefinition("fake", "fake"))
+
+        async def available(_definition):
+            return {"version": "1", "authenticated": True, "models": ("m",)}
+
+        async def broken(_definition):
+            raise RuntimeError("secret-token")
+
+        results = await RuntimeDetectionEngine(
+            registry,
+            probes={"api": available, "fake": broken},
+        ).detect_all()
+        assert results[0].available is True
+        assert results[1].available is False
+        assert "secret-token" not in (results[1].error or "")
+
+    import asyncio
+
+    asyncio.run(exercise())
 
 
 def test_manifest_reconcile_and_attempt(tmp_path):
