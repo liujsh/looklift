@@ -12,12 +12,12 @@
   - 明确 CLI Harness、API Harness、Workflow、CandidateRuntime 的职责边界
   - _需求：需求 1、需求 4、需求 6_
 
-- [ ] 2. 扩展现有 Runtime 生命周期引擎并完成兼容迁移
+- [x] 2. 扩展现有 Runtime 生命周期引擎并完成兼容迁移
   - 统一探测、启动、输入、事件归一、超时、取消、回收和错误脱敏
   - 保留旧 Adapter 的兼容工厂，完成生命周期迁移
   - _需求：需求 1、需求 2、需求 6_
 
-- [ ] 3. 接入 Claude Code、Codex、Pi 与 DeepSeek Harness Definition
+- [x] 3. 接入 Claude Code、Codex、Pi 与 DeepSeek Harness Definition
   - 注册可执行文件、版本探测、模型探测、能力、流格式和 Resume 声明
   - 复用或补齐对应 Stream Parser 与 Fake CLI Fixture
   - 标注 Pi 为正式，其余 Runtime 未通过门禁前保持实验性

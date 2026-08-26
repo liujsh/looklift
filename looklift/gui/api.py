@@ -133,7 +133,7 @@ _PREVIEW_JPEG_QUALITY = 88
 def _get_runtimes(_ctx: dict) -> tuple[int, dict]:
     """返回声明式 Runtime 选择数据，不包含密钥、命令参数或环境。"""
     runtimes = []
-    for definition in builtin_runtime_registry().list():
+    for definition in builtin_runtime_registry().list(selectable_only=True):
         runtimes.append(
             {
                 "id": definition.runtime_id,
@@ -142,6 +142,8 @@ def _get_runtimes(_ctx: dict) -> tuple[int, dict]:
                 "supports_resume": definition.supports_resume,
                 "supports_mcp": definition.supports_mcp,
                 "models": list(definition.models),
+                "display_name": definition.display_name,
+                "support_level": definition.support_level.value,
             }
         )
     return 200, {"runtimes": runtimes}

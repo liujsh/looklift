@@ -1,6 +1,7 @@
 """声明式 Runtime 共用的启动、事件校验、取消和回收引擎。"""
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Callable, Mapping
 
 from .agent_adapter import AgentAdapter, AgentEvent, AgentRunInput
@@ -31,12 +32,17 @@ class RuntimeLifecycleEngine:
         self._factories = dict(factories)
         self._active: dict[str, AgentAdapter] = {}
 
+    @property
+    def active_run_ids(self) -> tuple[str, ...]:
+        return tuple(self._active)
+
     async def start(
         self,
         runtime_id: str,
         run_input: AgentRunInput,
         *,
         required_capabilities: set[str] | frozenset[str] = frozenset(),
+        timeout_seconds: float | None = None,
     ) -> AsyncIterator[AgentEvent]:
         definition = self._registry.get(runtime_id)
         missing = set(required_capabilities) - set(definition.permission_profile)
@@ -58,34 +64,42 @@ class RuntimeLifecycleEngine:
         expected_sequence = 1
         terminal_seen = False
         try:
-            async for event in adapter.start(run_input):
-                if (
-                    event.run_id != run_input.run_id
-                    or event.attempt_id != run_input.attempt_id
-                    or event.sequence != expected_sequence
-                ):
-                    raise RuntimeLifecycleError("Runtime 事件身份或序号不合法")
-                expected_sequence += 1
-                terminal_seen = event.kind.terminal
-                payload = dict(event.payload)
-                payload["runtime"] = {
-                    "runtime_id": runtime_id,
-                    "capabilities": sorted(definition.capabilities),
-                    "supports_resume": definition.supports_resume,
-                }
-                yield AgentEvent(
-                    kind=event.kind,
-                    run_id=event.run_id,
-                    attempt_id=event.attempt_id,
-                    sequence=event.sequence,
-                    payload=payload,
-                )
-            if not terminal_seen:
-                raise RuntimeLifecycleError("Runtime 未产生终态事件")
+            async with asyncio.timeout(timeout_seconds):
+                async for event in adapter.start(run_input):
+                    if (
+                        event.run_id != run_input.run_id
+                        or event.attempt_id != run_input.attempt_id
+                        or event.sequence != expected_sequence
+                    ):
+                        raise RuntimeLifecycleError("Runtime 事件身份或序号不合法")
+                    expected_sequence += 1
+                    terminal_seen = event.kind.terminal
+                    payload = dict(event.payload)
+                    payload["runtime"] = {
+                        "runtime_id": runtime_id,
+                        "capabilities": sorted(definition.capabilities),
+                        "supports_resume": definition.supports_resume,
+                    }
+                    yield AgentEvent(
+                        kind=event.kind,
+                        run_id=event.run_id,
+                        attempt_id=event.attempt_id,
+                        sequence=event.sequence,
+                        payload=payload,
+                    )
+                if not terminal_seen:
+                    raise RuntimeLifecycleError("Runtime 未产生终态事件")
+        except TimeoutError as exc:
+            raise RuntimeLifecycleError("Runtime 执行超时") from exc
         except RuntimeLifecycleError:
             raise
         except Exception as exc:
             raise RuntimeLifecycleError("Runtime 执行失败") from exc
+        finally:
+            if not terminal_seen:
+                await adapter.cancel(run_input.run_id)
+            await adapter.dispose(run_input.run_id)
+            self._active.pop(run_input.run_id, None)
 
     async def cancel(self, run_id: str) -> None:
         adapter = self._active.get(run_id)

@@ -44,6 +44,7 @@ class RuntimeDefinition:
     support_level: RuntimeSupportLevel = RuntimeSupportLevel.EXPERIMENTAL
     supports_cancel: bool = True
     supports_timeout: bool = True
+    selectable: bool = True
 
     def __post_init__(self) -> None:
         if not self.runtime_id or self.kind not in {"api", "cli", "fake"}:
@@ -82,6 +83,8 @@ class RuntimeDefinition:
             self.supports_timeout, bool
         ):
             raise RuntimeDefinitionError("Runtime 取消或超时能力声明无效")
+        if not isinstance(self.selectable, bool):
+            raise RuntimeDefinitionError("Runtime 可选择状态无效")
 
 
 @dataclass(frozen=True)
@@ -111,9 +114,19 @@ class RuntimeRegistry:
         except KeyError as exc:
             raise RuntimeDefinitionError("未知 Runtime") from exc
 
-    def list(self, *, kind: str | None = None) -> tuple[RuntimeDefinition, ...]:
+    def list(
+        self,
+        *,
+        kind: str | None = None,
+        selectable_only: bool = False,
+    ) -> tuple[RuntimeDefinition, ...]:
         values = tuple(self._definitions.values())
-        return tuple(item for item in values if kind is None or item.kind == kind)
+        return tuple(
+            item
+            for item in values
+            if (kind is None or item.kind == kind)
+            and (not selectable_only or item.selectable)
+        )
 
 
 Probe = Callable[[RuntimeDefinition], Awaitable[Mapping[str, object]]]

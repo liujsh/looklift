@@ -95,11 +95,15 @@ def test_lifecycle_rejects_unknown_runtime_instead_of_selecting_another():
         asyncio.run(exercise())
 
 
-def test_builtin_registry_declares_api_pi_and_fake_harnesses():
+def test_builtin_registry_keeps_user_and_compatibility_harnesses():
     registry = builtin_runtime_registry()
     assert [item.runtime_id for item in registry.list()] == [
-        "pydantic-api",
+        "claude-code",
+        "codex-cli",
         "pi-cli",
+        "deepseek-cli",
+        "openai-api",
+        "pydantic-api",
         "fake",
     ]
     assert registry.get("pi-cli").supports_resume is True
