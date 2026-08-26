@@ -7,7 +7,7 @@
   - 未完成该文档迁移任务前，不开始 API Harness 代码迁移
   - _需求：需求 1、需求 6_
 
-- [ ] 1. 冻结统一 Runtime 与 Harness 契约
+- [x] 1. 冻结统一 Runtime 与 Harness 契约
   - 定义 Runtime Definition、Provider Snapshot、AgentEvent、Parser 和 Capability 字段
   - 明确 CLI Harness、API Harness、Workflow、CandidateRuntime 的职责边界
   - _需求：需求 1、需求 4、需求 6_
