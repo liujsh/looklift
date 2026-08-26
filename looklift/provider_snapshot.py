@@ -44,7 +44,7 @@ class ProviderSnapshot:
         if not isinstance(self.config_version, int) or self.config_version < 1:
             raise ValueError("Provider 配置版本必须是正整数")
         if self.api_key_ref is not None and not self.api_key_ref.startswith(
-            "credential://"
+            ("credential://", "dpapi://")
         ):
             raise ValueError("API Key 必须使用受控凭据引用")
         if (

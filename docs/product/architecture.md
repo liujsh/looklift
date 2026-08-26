@@ -587,3 +587,11 @@ Connector Manifest 固定协议、数据接收方和能力；外部事实先进�
 会隔离并消费晚到任务，结果不会回写当前调用；只有调用方明确指定的次数才会重试，不会隐式切换
 Provider。连接注册、调用错误和安全拒绝均保持结构化错误分类，未改变 Source Packet、Proposal
 或正式候选的用户确认边界。
+
+### Runtime Harness v2 与 Provider 设置
+
+`RuntimeDefinition` v2 在保留 v1 读取兼容的同时，固定显示名、版本/模型探测器、事件解析器、支持等级、取消与超时能力；内置目录向用户暴露 Claude Code、Codex、Pi、DeepSeek Harness 和 OpenAI API，旧 Pydantic API 与 Fake 仅作为不可选择兼容项。`RuntimeLifecycleEngine` 对所有 Definition 统一校验事件身份与序号，并在超时、异常或未产生终态时取消、回收和清除活动状态。
+
+OpenAI-compatible 路径使用独立 SSE/JSON 协议层和 `OpenAiApiAdapter`，多轮 Tool Call 只经过共享 `ScopedToolGateway` 与 `CandidateRuntime`。成功的 `candidate_ready` 由共享 `VerifiedAgentAdapter` 进入 `CandidateVerifier` 和 `UserReviewGate`；无候选终态不进入复核门。HTTP 传输禁用环境代理与重定向，远程地址要求 HTTPS 并在 DNS 解析后拒绝私网、loopback、link-local 和 CGNAT；显式本地 Ollama 只允许 loopback。
+
+Provider 元数据保存在版本化 JSON 快照，API Key 使用当前 Windows 用户 DPAPI 加密，快照、Query、日志和 Run Manifest 只接触 `dpapi://` 引用。React 设置页提供本机 CLI/API 双模式、支持等级和能力标签、Runtime 重新扫描、OpenAI/Ollama 隔离草稿、连通性检测、保存与删除；Ollama 不显示或要求 API Key。

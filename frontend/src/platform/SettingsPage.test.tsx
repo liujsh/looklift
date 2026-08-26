@@ -36,7 +36,15 @@ describe("SettingsPage", () => {
 
   function client(overrides = {}) {
     return {
-      config: vi.fn().mockResolvedValue({ provider: "auto", model: "", base_url: "", timeout: "", has_key: false }),
+      providerConfig: vi.fn().mockResolvedValue({ contract_version: 1, configured: false, has_key: false }),
+      saveProviderConfig: vi.fn().mockResolvedValue({ ok: true, config_version: 1, has_key: true }),
+      deleteProviderConfig: vi.fn().mockResolvedValue({ ok: true }),
+      detectProvider: vi.fn().mockResolvedValue({ available: true, models: ["gpt-5"] }),
+      runtimes: vi.fn().mockResolvedValue([
+        { id: "pi-cli", kind: "cli", display_name: "Pi", support_level: "stable", capabilities: ["proxy_image"], supports_resume: true, supports_mcp: true, models: [] },
+        { id: "openai-api", kind: "api", display_name: "OpenAI API", support_level: "experimental", capabilities: ["proxy_image"], supports_resume: false, supports_mcp: false, models: [] },
+      ]),
+      detectRuntimes: vi.fn().mockResolvedValue([]),
       saveConfig: vi.fn().mockResolvedValue({ ok: true }),
       contextTree: vi.fn().mockResolvedValue({ schema_version: 1, config: { enabled: true, auto_extract: false }, entries }),
       proposals: vi.fn().mockResolvedValue([proposal]),
@@ -97,5 +105,20 @@ describe("SettingsPage", () => {
     await act(async () => save.click());
 
     await vi.waitFor(() => expect(saveContextEntry).toHaveBeenCalledWith("fact-camera", expect.objectContaining({ content: "使用同一机身" })));
+  });
+
+  it("区分本机 CLI 与 API，并在 Ollama 下隐藏密钥", async () => {
+    await act(async () => root.render(<SettingsPage client={client()} />));
+    await vi.waitFor(() => expect(container.textContent).toContain("Pi"));
+    expect(container.textContent).toContain("正式");
+
+    const apiMode = [...container.querySelectorAll("button")].find((button) => button.textContent === "API 提供商")!;
+    await act(async () => apiMode.click());
+    expect(container.querySelector('input[type="password"]')).not.toBeNull();
+
+    const ollama = [...container.querySelectorAll("button")].find((button) => button.textContent === "Ollama")!;
+    await act(async () => ollama.click());
+    expect(container.querySelector('input[type="password"]')).toBeNull();
+    expect(container.textContent).toContain("请求仅发送到本机");
   });
 });

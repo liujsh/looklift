@@ -23,24 +23,24 @@
   - 标注 Pi 为正式，其余 Runtime 未通过门禁前保持实验性
   - _需求：需求 2、需求 6、需求 7_
 
-- [ ] 4. 实现 OpenAI API Harness
+- [x] 4. 实现 OpenAI API Harness
   - 实现 OpenAI/兼容协议请求构造、SSE/JSON 解析和结构化工具调用
   - 实现 API Key 引用、Provider 配置快照、超时、取消、错误分类和显式重试
   - 增加 HTTPS、DNS 重绑定、重定向、响应/解压大小和凭据保存失败处理；Ollama 仅允许用户明确选择的 loopback 例外
   - _需求：需求 3、需求 4、需求 6、需求 8_
 
-- [ ] 5. 强制接入统一候选 Workflow
+- [x] 5. 强制接入统一候选 Workflow
   - 让 API/CLI 所有工具调用进入 ScopedToolGateway 与 CandidateRuntime，仅成功的 `candidate_ready` 候选进入 Verifier
   - 覆盖非法 Patch、未知工具、能力不足、晚到结果和正式版本不变
   - _需求：需求 4、需求 6_
 
-- [ ] 6. 实现“模型与提供商”设置页
+- [x] 6. 实现“模型与提供商”设置页
   - 增加“本机 CLI / API 提供商”双模式和 Query/Command ViewModel
   - 实现 Provider 胶囊选择、API Key/URL/Model 表单、检测、保存和删除
   - 按参考界面实现卡片、分段控件、状态提示、窄屏和主题适配
   - _需求：需求 5_
 
-- [ ] 7. 完成 Fake Runtime Conformance 与安全测试
+- [x] 7. 完成 Fake Runtime Conformance 与安全测试
   - 覆盖五类 Runtime 的探测、启动、事件、工具、取消、超时、恢复和回收契约
   - 覆盖密钥、路径、EXIF、Prompt 注入、权限越权、Provider 降级和晚到隔离
   - 增加 Base URL SSRF、DNS 重绑定、重定向、响应/解压大小及凭据不落日志断言
@@ -51,7 +51,7 @@
   - 使用 `references/provider-settings-wide.png`（1280×832）和 `references/provider-settings-narrow.png`（390×844），DPR 1，完成浅色/深色主题人工截图验收
   - _需求：需求 5、需求 6、需求 9_
 
-- [ ] 9. 文档与迁移收口
+- [x] 9. 文档与迁移收口
   - 更新架构实况、任务状态、运行时兼容矩阵和离线测试证据
   - 记录未进入默认 CI 的真实 Provider/CLI 和人工视觉验收边界
   - _需求：需求 1 至需求 9_

@@ -505,6 +505,22 @@
 .settings-provider-form label, .context-entry-form label { display: grid; gap: 5px; color: var(--color-muted); font-size: 12px; }
 .settings-provider-form input, .settings-provider-form select, .context-entry-form input, .context-entry-form select, .context-entry-form textarea { width: 100%; min-width: 0; }
 .settings-provider-form button { grid-column: 4; }
+.provider-mode { display: inline-flex; padding: 3px; border: 1px solid var(--color-line); border-radius: 999px; background: var(--color-paper); }
+.provider-mode button, .provider-capsules button { border: 0; border-radius: 999px; padding: 8px 13px; color: var(--color-muted); background: transparent; cursor: pointer; }
+.provider-mode button[aria-selected="true"], .provider-capsules button[aria-pressed="true"] { color: var(--color-ink); background: var(--color-paper-raised); box-shadow: var(--shadow-panel); }
+.runtime-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+.runtime-card { padding: 14px; border: 1px solid var(--color-line-soft); border-radius: var(--radius-sm); background: var(--color-paper); }
+.runtime-card header { display: flex; justify-content: space-between; gap: 12px; }
+.runtime-card header div { display: grid; gap: 3px; }
+.runtime-card small, .runtime-card p, .provider-privacy { color: var(--color-muted); }
+.runtime-card header span { height: fit-content; padding: 3px 7px; border-radius: 999px; background: var(--color-paper-raised); font-size: 11px; }
+.runtime-card header span[data-level="stable"] { color: var(--color-accent); }
+.runtime-capabilities, .provider-capsules { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.runtime-capabilities span { padding: 3px 7px; border: 1px solid var(--color-line-soft); border-radius: 999px; color: var(--color-muted); font: 10px var(--font-data); }
+.provider-capsules { margin: 16px 0 4px; }
+.provider-capsules button { border: 1px solid var(--color-line); }
+.runtime-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+.provider-delete { margin-top: 10px; color: var(--color-muted); }
 .context-entry-content { grid-column: 1 / -2; }
 .context-entry-content textarea { min-height: 82px; resize: vertical; }
 .context-groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
@@ -529,4 +545,5 @@
 }
 @media (max-width: 680px) {
   .settings-heading, .settings-provider-form, .context-entry-form, .proposal-list { display: grid; grid-template-columns: 1fr; }
+  .runtime-grid { grid-template-columns: 1fr; }
 }

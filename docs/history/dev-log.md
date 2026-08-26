@@ -400,3 +400,13 @@
 - 新增 `ConnectorRegistry`，连接配置只保存受限凭据引用；连接必须显式授权，撤销会断开连接，运行快照只返回已连接 ID。
 - 新增 `ConnectorExecution`，统一显式超时、取消、晚到结果隔离和调用方指定重试，禁止隐式跨 Provider 降级。
 - Fake Connector 安全与生命周期定向测试 `11 passed`；未接入真实网络、密钥存储或真实 Provider。
+
+## 2026-08-26：Runtime Harness v2 与模型提供商设置
+
+- Runtime Definition v2 增加显式版本、探测器、Parser、支持等级和生命周期能力，保留 v1 兼容；五类用户 Runtime 进入目录，Pi 为正式，其余保持实验性。
+- 通用生命周期补齐超时取消与自动回收；JSONL、SSE、OpenAI Tool Call 和五 Runtime Fake Conformance 全程离线验证。
+- 新 OpenAI-compatible Adapter 通过统一 Scoped Gateway 执行候选工具，并由共享 Verified Adapter 进入 Verifier 与 User Review Gate；没有候选的终态不打开复核门。
+- Provider 网络层拒绝重定向、私网、loopback、link-local、CGNAT 和超限响应；本地 Ollama 仅允许用户明确选择的 loopback，HTTP 客户端禁用环境代理。
+- API Key 迁出普通 TOML，使用 Windows 当前用户 DPAPI 加密；Provider Query 不返回密钥或凭据引用，保存失败不形成可用配置，删除同时移除密文。
+- React 设置页完成本机 CLI/API 双模式、支持等级、能力标签、重新扫描、Provider 隔离草稿、Ollama 无密钥表单、检测、保存和删除。
+- 自动化视觉参考 `references/provider-settings-wide.png` 与 `references/provider-settings-narrow.png` 尚未由需求方提供，当前环境也没有浏览器控制运行工具；像素级截图验收保持待人工，不据此宣称通过。
