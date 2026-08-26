@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
+
+import pytest
 
 from looklift import config
 from looklift.gui.api import ROUTES
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Provider 凭据端点依赖 Windows DPAPI")
 def test_provider_config_commands_never_echo_key(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.toml")
     save = ROUTES[("POST", "/api/providers/config")]
