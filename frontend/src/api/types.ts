@@ -323,6 +323,24 @@ export type RuntimeSummary = {
   supports_resume: boolean;
   supports_mcp: boolean;
   models: string[];
+  display_name: string;
+  support_level: "stable" | "experimental";
+  available?: boolean;
+  authenticated?: boolean;
+  version?: string | null;
+  error?: string | null;
+};
+
+export type ProviderSettings = {
+  contract_version: number;
+  configured: boolean;
+  provider_id?: "openai" | "ollama";
+  base_url?: string;
+  model?: string;
+  protocol?: string;
+  max_tokens?: number;
+  config_version?: number;
+  has_key: boolean;
 };
 
 export type PluginSummary = {

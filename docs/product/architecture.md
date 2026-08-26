@@ -474,6 +474,8 @@ Tauri 原生窗口
 
 ## v2.6-A–C 新增设计
 
+> 迁移说明：本节记录 v2.6-A–C 已实现的 Pydantic-AI API Harness 基线。后续 `docs/specs/260826-runtime-harness-provider/` 作为增量规格，定义替换实现层的理由、迁移门和兼容范围；迁移完成前，本节仍是当前实现实况。
+
 > 原规格：[v2.6/](../versions/v2.6/)；这里只记录已实现的 API 候选闭环与首条受控 CLI Adapter。
 
 ### 27. Domain Pack 与统一 Adapter
@@ -484,6 +486,8 @@ Tauri 原生窗口
   JPEG 代理图，不接收 Run、Attempt、Lease、正式版本 ID、原图路径或数据库信息。
 - API 路径使用 `pydantic-ai-slim 2.32.x`；Anthropic、OpenAI-compatible 和 Ollama 只共享构造与事件适配层，
   一个 Attempt 内不自动切换 Provider。Fake/FunctionModel 测试全程离线。
+
+> 迁移边界：上述为 v2.6-A–C 当前实现实况。新规格规划将 API Harness 迁移到声明式 Runtime Definition；Anthropic、OpenAI-compatible 与 Ollama 的协议能力在迁移门通过后按兼容矩阵保留或调整，未完成前不视为已迁移。
 
 ### 28. 受控候选 Runtime
 
@@ -583,3 +587,11 @@ Connector Manifest 固定协议、数据接收方和能力；外部事实先进�
 会隔离并消费晚到任务，结果不会回写当前调用；只有调用方明确指定的次数才会重试，不会隐式切换
 Provider。连接注册、调用错误和安全拒绝均保持结构化错误分类，未改变 Source Packet、Proposal
 或正式候选的用户确认边界。
+
+### Runtime Harness v2 与 Provider 设置
+
+`RuntimeDefinition` v2 在保留 v1 读取兼容的同时，固定显示名、版本/模型探测器、事件解析器、支持等级、取消与超时能力；内置目录向用户暴露 Claude Code、Codex、Pi、DeepSeek Harness 和 OpenAI API，旧 Pydantic API 与 Fake 仅作为不可选择兼容项。`RuntimeLifecycleEngine` 对所有 Definition 统一校验事件身份与序号，并在超时、异常或未产生终态时取消、回收和清除活动状态。
+
+OpenAI-compatible 路径使用独立 SSE/JSON 协议层和 `OpenAiApiAdapter`，多轮 Tool Call 只经过共享 `ScopedToolGateway` 与 `CandidateRuntime`。成功的 `candidate_ready` 由共享 `VerifiedAgentAdapter` 进入 `CandidateVerifier` 和 `UserReviewGate`；无候选终态不进入复核门。HTTP 传输禁用环境代理与重定向，远程地址要求 HTTPS 并在 DNS 解析后拒绝私网、loopback、link-local 和 CGNAT；显式本地 Ollama 只允许 loopback。
+
+Provider 元数据保存在版本化 JSON 快照，API Key 使用当前 Windows 用户 DPAPI 加密，快照、Query、日志和 Run Manifest 只接触 `dpapi://` 引用。React 设置页提供本机 CLI/API 双模式、支持等级和能力标签、Runtime 重新扫描、OpenAI/Ollama 隔离草稿、连通性检测、保存与删除；Ollama 不显示或要求 API Key。

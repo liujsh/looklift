@@ -4,10 +4,23 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from enum import StrEnum
+
+
+_STREAM_FORMATS = frozenset(
+    {"agent_events", "pydantic_events", "jsonl", "json_rpc", "rpc", "sse"}
+)
 
 
 class RuntimeDefinitionError(ValueError):
     pass
+
+
+class RuntimeSupportLevel(StrEnum):
+    """Runtime 对用户公开的支持等级。"""
+
+    STABLE = "stable"
+    EXPERIMENTAL = "experimental"
 
 
 @dataclass(frozen=True)
@@ -23,6 +36,15 @@ class RuntimeDefinition:
     stream_format: str = "agent_events"
     supports_resume: bool = False
     supports_mcp: bool = False
+    contract_version: int = 1
+    display_name: str | None = None
+    version_probe: str | None = None
+    model_probe: str | None = None
+    event_parser: str | None = None
+    support_level: RuntimeSupportLevel = RuntimeSupportLevel.EXPERIMENTAL
+    supports_cancel: bool = True
+    supports_timeout: bool = True
+    selectable: bool = True
 
     def __post_init__(self) -> None:
         if not self.runtime_id or self.kind not in {"api", "cli", "fake"}:
@@ -37,8 +59,32 @@ class RuntimeDefinition:
             raise RuntimeDefinitionError("permission_profile 不能扩大 Runtime capabilities")
         if self.input_transport not in {"domain_pack", "provider_message", "cli_workspace"}:
             raise RuntimeDefinitionError("Runtime input_transport 不受支持")
-        if self.stream_format not in {"agent_events", "pydantic_events", "jsonl"}:
+        if self.stream_format not in _STREAM_FORMATS:
             raise RuntimeDefinitionError("Runtime stream_format 不受支持")
+        if self.contract_version not in {1, 2}:
+            raise RuntimeDefinitionError("Runtime Definition 版本不受支持")
+        try:
+            support_level = RuntimeSupportLevel(self.support_level)
+        except ValueError as exc:
+            raise RuntimeDefinitionError("Runtime 支持等级无效") from exc
+        object.__setattr__(self, "support_level", support_level)
+        if self.display_name is None and self.contract_version == 1:
+            object.__setattr__(self, "display_name", self.runtime_id)
+        if self.contract_version == 2:
+            required = {
+                "display_name": self.display_name,
+                "version_probe": self.version_probe,
+                "model_probe": self.model_probe,
+                "event_parser": self.event_parser,
+            }
+            if any(not isinstance(value, str) or not value.strip() for value in required.values()):
+                raise RuntimeDefinitionError("Runtime Definition v2 声明不完整")
+        if not isinstance(self.supports_cancel, bool) or not isinstance(
+            self.supports_timeout, bool
+        ):
+            raise RuntimeDefinitionError("Runtime 取消或超时能力声明无效")
+        if not isinstance(self.selectable, bool):
+            raise RuntimeDefinitionError("Runtime 可选择状态无效")
 
 
 @dataclass(frozen=True)
@@ -68,9 +114,19 @@ class RuntimeRegistry:
         except KeyError as exc:
             raise RuntimeDefinitionError("未知 Runtime") from exc
 
-    def list(self, *, kind: str | None = None) -> tuple[RuntimeDefinition, ...]:
+    def list(
+        self,
+        *,
+        kind: str | None = None,
+        selectable_only: bool = False,
+    ) -> tuple[RuntimeDefinition, ...]:
         values = tuple(self._definitions.values())
-        return tuple(item for item in values if kind is None or item.kind == kind)
+        return tuple(
+            item
+            for item in values
+            if (kind is None or item.kind == kind)
+            and (not selectable_only or item.selectable)
+        )
 
 
 Probe = Callable[[RuntimeDefinition], Awaitable[Mapping[str, object]]]

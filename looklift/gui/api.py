@@ -38,9 +38,13 @@ from .. import (
 from ..automation_store import AutomationStore
 from ..automation_tasks import AutomationTaskManager
 from ..builtin_runtimes import builtin_runtime_registry
+from ..cli_runtime_detection import detect_cli_runtime
 from ..context_memory import ContextEntry, ContextMemoryStore
 from ..capabilities import CapabilityGrant
 from ..plugin_registry import PluginManifest, PluginManifestError, PluginRegistry
+from ..credential_store import CredentialStoreError, DpapiCredentialStore
+from ..provider_config_store import ProviderConfigStore
+from ..provider_detection import detect_provider
 from ..proposal import ProposalError
 from ..run_manifest import ManifestError, RunManifestRepository, hash_text
 from ..library_store import LibraryStore
@@ -133,18 +137,110 @@ _PREVIEW_JPEG_QUALITY = 88
 def _get_runtimes(_ctx: dict) -> tuple[int, dict]:
     """返回声明式 Runtime 选择数据，不包含密钥、命令参数或环境。"""
     runtimes = []
-    for definition in builtin_runtime_registry().list():
-        runtimes.append(
+    for definition in builtin_runtime_registry().list(selectable_only=True):
+        runtimes.append(_runtime_payload(definition))
+    return 200, {"runtimes": runtimes}
+
+
+def _runtime_payload(definition, detection=None) -> dict:
+    payload = {
+        "id": definition.runtime_id,
+        "kind": definition.kind,
+        "capabilities": sorted(definition.capabilities),
+        "supports_resume": definition.supports_resume,
+        "supports_mcp": definition.supports_mcp,
+        "models": list(definition.models),
+        "display_name": definition.display_name,
+        "support_level": definition.support_level.value,
+    }
+    if detection is not None:
+        payload.update(
             {
-                "id": definition.runtime_id,
-                "kind": definition.kind,
-                "capabilities": sorted(definition.capabilities),
-                "supports_resume": definition.supports_resume,
-                "supports_mcp": definition.supports_mcp,
-                "models": list(definition.models),
+                "available": detection.available,
+                "authenticated": detection.authenticated,
+                "version": detection.version,
+                "models": list(detection.models),
+                "error": detection.error,
             }
         )
-    return 200, {"runtimes": runtimes}
+    return payload
+
+
+def _detect_runtimes(_ctx: dict) -> tuple[int, dict]:
+    registry = builtin_runtime_registry()
+    values = []
+    for definition in registry.list(selectable_only=True):
+        detection = detect_cli_runtime(definition) if definition.kind == "cli" else None
+        values.append(_runtime_payload(definition, detection))
+    return 200, {"runtimes": values}
+
+
+def _provider_store() -> ProviderConfigStore:
+    root = config.CONFIG_PATH.parent
+    return ProviderConfigStore(
+        root / "providers.json",
+        credentials=DpapiCredentialStore(root / "credentials"),
+    )
+
+
+def _get_provider_config(_ctx: dict) -> tuple[int, dict]:
+    try:
+        return 200, _provider_store().query()
+    except (CredentialStoreError, ValueError, OSError):
+        return 503, {"error": "本地凭据安全存储不可用"}
+
+
+def _post_provider_config(ctx: dict) -> tuple[int, dict]:
+    try:
+        payload = json.loads(ctx.get("body") or b"{}")
+        provider_id = payload["provider_id"]
+        protocol = (
+            "ollama_openai_compatible"
+            if provider_id == "ollama"
+            else payload.get("protocol", "openai_chat_completions")
+        )
+        snapshot = _provider_store().save(
+            provider_id=provider_id,
+            base_url=payload["base_url"],
+            model=payload["model"],
+            protocol=protocol,
+            max_tokens=int(payload.get("max_tokens", 4096)),
+            api_key=payload.get("api_key") or None,
+        )
+        return 200, {
+            "ok": True,
+            "config_version": snapshot.config_version,
+            "has_key": snapshot.api_key_ref is not None,
+        }
+    except (KeyError, TypeError, ValueError, CredentialStoreError, OSError):
+        return 400, {"error": "Provider 配置无效或安全存储失败"}
+
+
+def _delete_provider_config(_ctx: dict) -> tuple[int, dict]:
+    try:
+        _provider_store().delete()
+        return 200, {"ok": True}
+    except (CredentialStoreError, ValueError, OSError):
+        return 503, {"error": "Provider 配置删除失败"}
+
+
+def _detect_provider_config(_ctx: dict) -> tuple[int, dict]:
+    try:
+        store = _provider_store()
+        snapshot = store.load()
+        if snapshot is None:
+            return 409, {"error": "请先保存 Provider 配置"}
+        api_key = (
+            store.credentials.get(snapshot.api_key_ref)
+            if snapshot.api_key_ref is not None
+            else None
+        )
+        result = detect_provider(snapshot, api_key=api_key)
+        if not result.available:
+            return 422, {"error": "Provider 连通性检测失败", "code": result.error_code}
+        return 200, {"available": True, "models": list(result.models)}
+    except (CredentialStoreError, ValueError, OSError, KeyError):
+        return 503, {"error": "Provider 检测配置不可用"}
 
 
 def _run_manifests() -> RunManifestRepository:
@@ -1407,6 +1503,11 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/engine-probe"): _engine_probe,
     ("GET", "/api/config"): _get_config,
     ("GET", "/api/runtimes"): _get_runtimes,
+    ("POST", "/api/runtimes/detect"): _detect_runtimes,
+    ("GET", "/api/providers/config"): _get_provider_config,
+    ("POST", "/api/providers/config"): _post_provider_config,
+    ("DELETE", "/api/providers/config"): _delete_provider_config,
+    ("POST", "/api/providers/detect"): _detect_provider_config,
     ("GET", "/api/agent/runs/recoverable"): _get_recoverable_agent_runs,
     ("GET", "/api/agent/runs/<id>"): _get_agent_run,
     ("POST", "/api/agent/runs/<id>/resume"): _resume_agent_run,

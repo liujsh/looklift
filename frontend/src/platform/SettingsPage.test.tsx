@@ -36,7 +36,15 @@ describe("SettingsPage", () => {
 
   function client(overrides = {}) {
     return {
-      config: vi.fn().mockResolvedValue({ provider: "auto", model: "", base_url: "", timeout: "", has_key: false }),
+      providerConfig: vi.fn().mockResolvedValue({ contract_version: 1, configured: false, has_key: false }),
+      saveProviderConfig: vi.fn().mockResolvedValue({ ok: true, config_version: 1, has_key: true }),
+      deleteProviderConfig: vi.fn().mockResolvedValue({ ok: true }),
+      detectProvider: vi.fn().mockResolvedValue({ available: true, models: ["gpt-5"] }),
+      runtimes: vi.fn().mockResolvedValue([
+        { id: "pi-cli", kind: "cli", display_name: "Pi", support_level: "stable", capabilities: ["proxy_image"], supports_resume: true, supports_mcp: true, models: [] },
+        { id: "openai-api", kind: "api", display_name: "OpenAI API", support_level: "experimental", capabilities: ["proxy_image"], supports_resume: false, supports_mcp: false, models: [] },
+      ]),
+      detectRuntimes: vi.fn().mockResolvedValue([]),
       saveConfig: vi.fn().mockResolvedValue({ ok: true }),
       contextTree: vi.fn().mockResolvedValue({ schema_version: 1, config: { enabled: true, auto_extract: false }, entries }),
       proposals: vi.fn().mockResolvedValue([proposal]),
@@ -50,8 +58,15 @@ describe("SettingsPage", () => {
     } as unknown as LookliftClient;
   }
 
+  async function openSection(label: string) {
+    const button = [...container.querySelectorAll(".settings-nav nav button")].find((item) => item.textContent === label) as HTMLButtonElement;
+    await act(async () => button.click());
+  }
+
   it("分区展示规则、记忆、项目上下文和来源摘要", async () => {
     await act(async () => root.render(<SettingsPage client={client()} />));
+    await vi.waitFor(() => expect(container.textContent).toContain("模型与提供商"));
+    await openSection("指令与记忆");
     await vi.waitFor(() => expect(container.textContent).toContain("自然优先"));
 
     expect(container.textContent).toContain("全局规则");
@@ -59,6 +74,7 @@ describe("SettingsPage", () => {
     expect(container.textContent).toContain("项目上下文");
     expect(container.textContent).toContain("connector · v1");
     expect(container.textContent).toContain("bbbbbbbbbbbb");
+    await openSection("通用与隐私");
     expect((container.querySelector('input[name="auto_extract"]') as HTMLInputElement).checked).toBe(false);
   });
 
@@ -68,6 +84,7 @@ describe("SettingsPage", () => {
     const proposals = vi.fn().mockResolvedValue([proposal]);
     const current = client({ confirmProposal, contextTree, proposals });
     await act(async () => root.render(<SettingsPage client={current} />));
+    await openSection("待审核提案");
     await vi.waitFor(() => expect(container.textContent).toContain("肤色保持中性"));
     expect(container.textContent).toContain("肤色略暖");
 
@@ -83,6 +100,7 @@ describe("SettingsPage", () => {
     const saveContextEntry = vi.fn().mockResolvedValue(entries[0]);
     const current = client({ saveContextEntry });
     await act(async () => root.render(<SettingsPage client={current} />));
+    await openSection("指令与记忆");
     await vi.waitFor(() => expect(container.textContent).toContain("新增或编辑上下文"));
 
     const id = container.querySelector('input[name="entry_id"]') as HTMLInputElement;
@@ -97,5 +115,55 @@ describe("SettingsPage", () => {
     await act(async () => save.click());
 
     await vi.waitFor(() => expect(saveContextEntry).toHaveBeenCalledWith("fact-camera", expect.objectContaining({ content: "使用同一机身" })));
+  });
+
+  it("区分本机 CLI 与 API，并在 Ollama 下隐藏密钥", async () => {
+    await act(async () => root.render(<SettingsPage client={client()} />));
+    await vi.waitFor(() => expect(container.textContent).toContain("Pi"));
+    expect(container.textContent).toContain("正式");
+
+    const apiMode = [...container.querySelectorAll("button")].find((button) => button.textContent === "API 提供商")!;
+    await act(async () => apiMode.click());
+    expect(container.querySelector('input[type="password"]')).not.toBeNull();
+
+    const ollama = [...container.querySelectorAll("button")].find((button) => button.textContent === "本机 Ollama")!;
+    await act(async () => ollama.click());
+    expect(container.querySelector('input[type="password"]')).toBeNull();
+    expect(container.textContent).toContain("请求仅发送到本机");
+  });
+
+  it("切换 Provider 时隔离保留未提交表单", async () => {
+    await act(async () => root.render(<SettingsPage client={client()} />));
+    await vi.waitFor(() => expect(container.textContent).toContain("Pi"));
+    const click = async (text: string) => {
+      const button = [...container.querySelectorAll("button")].find((item) => item.textContent === text)!;
+      await act(async () => button.click());
+    };
+    const fill = async (input: HTMLInputElement, value: string) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    };
+
+    await click("API 提供商");
+    await fill(container.querySelector('input[placeholder="例如 gpt-5"]') as HTMLInputElement, "gpt-5-mini");
+    await click("本机 Ollama");
+    await fill(container.querySelector('input[placeholder="例如 qwen3"]') as HTMLInputElement, "qwen3:8b");
+    await click("OpenAI / 兼容接口");
+    expect((container.querySelector('input[placeholder="例如 gpt-5"]') as HTMLInputElement).value).toBe("gpt-5-mini");
+    await click("本机 Ollama");
+    expect((container.querySelector('input[placeholder="例如 qwen3"]') as HTMLInputElement).value).toBe("qwen3:8b");
+  });
+
+  it("重新扫描失败时显示可操作状态", async () => {
+    const detectRuntimes = vi.fn().mockRejectedValue(new Error("CLI 扫描失败，请检查安装路径"));
+    await act(async () => root.render(<SettingsPage client={client({ detectRuntimes })} />));
+    await vi.waitFor(() => expect(container.textContent).toContain("Pi"));
+
+    const rescan = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("重新扫描"))!;
+    await act(async () => rescan.click());
+
+    await vi.waitFor(() => expect(container.textContent).toContain("CLI 扫描失败，请检查安装路径"));
   });
 });

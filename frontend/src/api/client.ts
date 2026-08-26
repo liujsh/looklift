@@ -32,6 +32,7 @@ import type {
   TaskResult,
   AgentRunManifest,
   RuntimeSummary,
+  ProviderSettings,
   PluginSummary,
   ContextConfig,
   ContextEntryType,
@@ -85,6 +86,27 @@ export class LookliftClient {
   async runtimes(): Promise<RuntimeSummary[]> {
     const result = await this.json<{ runtimes: RuntimeSummary[] }>("/api/runtimes");
     return result.runtimes;
+  }
+
+  async detectRuntimes(): Promise<RuntimeSummary[]> {
+    const result = await this.json<{ runtimes: RuntimeSummary[] }>("/api/runtimes/detect", { method: "POST" });
+    return result.runtimes;
+  }
+
+  providerConfig(): Promise<ProviderSettings> {
+    return this.json("/api/providers/config");
+  }
+
+  saveProviderConfig(payload: { provider_id: string; base_url: string; model: string; max_tokens: number; api_key?: string }): Promise<{ ok: boolean; config_version: number; has_key: boolean }> {
+    return this.json("/api/providers/config", { method: "POST", body: JSON.stringify(payload) });
+  }
+
+  deleteProviderConfig(): Promise<{ ok: boolean }> {
+    return this.json("/api/providers/config", { method: "DELETE" });
+  }
+
+  detectProvider(): Promise<{ available: boolean; models: string[] }> {
+    return this.json("/api/providers/detect", { method: "POST" });
   }
 
   async plugins(): Promise<PluginSummary[]> {
