@@ -58,8 +58,15 @@ describe("SettingsPage", () => {
     } as unknown as LookliftClient;
   }
 
+  async function openSection(label: string) {
+    const button = [...container.querySelectorAll(".settings-nav nav button")].find((item) => item.textContent === label) as HTMLButtonElement;
+    await act(async () => button.click());
+  }
+
   it("分区展示规则、记忆、项目上下文和来源摘要", async () => {
     await act(async () => root.render(<SettingsPage client={client()} />));
+    await vi.waitFor(() => expect(container.textContent).toContain("模型与提供商"));
+    await openSection("指令与记忆");
     await vi.waitFor(() => expect(container.textContent).toContain("自然优先"));
 
     expect(container.textContent).toContain("全局规则");
@@ -67,6 +74,7 @@ describe("SettingsPage", () => {
     expect(container.textContent).toContain("项目上下文");
     expect(container.textContent).toContain("connector · v1");
     expect(container.textContent).toContain("bbbbbbbbbbbb");
+    await openSection("通用与隐私");
     expect((container.querySelector('input[name="auto_extract"]') as HTMLInputElement).checked).toBe(false);
   });
 
@@ -76,6 +84,7 @@ describe("SettingsPage", () => {
     const proposals = vi.fn().mockResolvedValue([proposal]);
     const current = client({ confirmProposal, contextTree, proposals });
     await act(async () => root.render(<SettingsPage client={current} />));
+    await openSection("待审核提案");
     await vi.waitFor(() => expect(container.textContent).toContain("肤色保持中性"));
     expect(container.textContent).toContain("肤色略暖");
 
@@ -91,6 +100,7 @@ describe("SettingsPage", () => {
     const saveContextEntry = vi.fn().mockResolvedValue(entries[0]);
     const current = client({ saveContextEntry });
     await act(async () => root.render(<SettingsPage client={current} />));
+    await openSection("指令与记忆");
     await vi.waitFor(() => expect(container.textContent).toContain("新增或编辑上下文"));
 
     const id = container.querySelector('input[name="entry_id"]') as HTMLInputElement;

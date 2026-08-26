@@ -28,7 +28,9 @@ const CAPABILITY_LABELS: Record<string, string> = {
   mcp: "MCP",
 };
 
-export function SettingsPage({ client }: { client: LookliftClient }) {
+type SettingsSection = "providers" | "privacy" | "memory" | "proposals";
+
+export function SettingsPage({ client, onBack }: { client: LookliftClient; onBack?(): void }) {
   const [providerId, setProviderId] = useState<"openai" | "ollama">("openai");
   const [providerDrafts, setProviderDrafts] = useState(EMPTY_PROVIDER_DRAFTS);
   const provider = providerDrafts[providerId];
@@ -39,6 +41,7 @@ export function SettingsPage({ client }: { client: LookliftClient }) {
   const [status, setStatus] = useState("正在读取设置…");
   const [runtimeMode, setRuntimeMode] = useState<"cli" | "api">("cli");
   const [runtimes, setRuntimes] = useState<RuntimeSummary[]>([]);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("providers");
 
   const loadContext = async () => {
     const [tree, nextProposals] = await Promise.all([client.contextTree(), client.proposals()]);
@@ -140,11 +143,18 @@ export function SettingsPage({ client }: { client: LookliftClient }) {
     }
   };
 
-  return <main className="settings-page" aria-label="设置与帮助">
-    <header><p className="pane-kicker">SETTINGS</p><h1>设置与上下文</h1><p>模型、长期上下文和外部提案都保存在本地，并在每次运行前冻结版本。</p></header>
+  const sectionVisible = (section: SettingsSection) => settingsSection === section;
+  return <main className="settings-page settings-layout" aria-label="设置与帮助">
+    <aside className="settings-nav" aria-label="设置导航">
+      <button type="button" className="settings-back" onClick={onBack}>← 回到应用</button>
+      <p className="pane-kicker">SETTINGS</p><h1>设置</h1>
+      <nav>{([['providers', '模型与提供商'], ['privacy', '通用与隐私'], ['memory', '指令与记忆'], ['proposals', '待审核提案']] as const).map(([id, label]) => <button key={id} type="button" data-active={settingsSection === id} onClick={() => setSettingsSection(id)}>{label}</button>)}</nav>
+    </aside>
+    <section className="settings-content">
+    <header><p className="pane-kicker">SETTINGS / {settingsSection.toUpperCase()}</p><h2>{settingsSection === "providers" ? "模型与提供商" : settingsSection === "privacy" ? "通用与隐私" : settingsSection === "memory" ? "指令与记忆" : "待审核提案"}</h2><p>设置保存在本地，并在每次运行前冻结版本。</p></header>
     {status && <p role="status" className="settings-status">{status}</p>}
 
-    <section className="settings-section provider-settings" aria-labelledby="provider-settings">
+    {sectionVisible("providers") && <section className="settings-section provider-settings" aria-labelledby="provider-settings">
       <div className="provider-settings-title"><div><h2 id="provider-settings">模型与提供商</h2><p>选择运行提示词的本机 CLI，或配置由本地引擎安全保管凭据的 API。</p></div></div>
       <div className="provider-mode" role="tablist"><button type="button" role="tab" aria-selected={runtimeMode === "cli"} onClick={() => setRuntimeMode("cli")}>本机 CLI</button><button type="button" role="tab" aria-selected={runtimeMode === "api"} onClick={() => setRuntimeMode("api")}>API 提供商</button></div>
       {runtimeMode === "cli" ? <div className="runtime-panel" role="tabpanel">
@@ -163,13 +173,13 @@ export function SettingsPage({ client }: { client: LookliftClient }) {
           <div className="provider-form-actions"><button type="button" onClick={() => void detectProvider()}>测试连接</button><button className="provider-delete" type="button" onClick={() => void deleteProvider()}>删除配置</button><button className="provider-save" type="submit">保存模型配置</button></div>
         </form>
       </div>}
-    </section>
+    </section>}
 
-    <section className="settings-section" aria-labelledby="privacy-settings">
+    {sectionVisible("privacy") && <section className="settings-section" aria-labelledby="privacy-settings">
       <div className="settings-heading"><div><h2 id="privacy-settings">自动提取与隐私</h2><p>默认关闭。开启后也只生成待审核 Proposal，不会静默写入正式记忆。</p></div><label className="settings-switch"><input name="auto_extract" type="checkbox" checked={context.config.auto_extract} onChange={(event) => void toggleAutoExtract(event.target.checked)} />允许生成记忆提案</label></div>
-    </section>
+    </section>}
 
-    <section className="settings-section" aria-labelledby="context-editor">
+    {sectionVisible("memory") && <section className="settings-section" aria-labelledby="context-editor">
       <h2 id="context-editor">新增或编辑上下文</h2>
       <form className="context-entry-form" onSubmit={saveEntry}>
         <label>ID<input name="entry_id" required pattern="[a-z0-9-]+" value={draft.id} onChange={(event) => setDraft({ ...draft, id: event.target.value })} placeholder="preference-natural" /></label>
@@ -179,15 +189,15 @@ export function SettingsPage({ client }: { client: LookliftClient }) {
         <label className="context-entry-content">内容<textarea name="content" required value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} /></label>
         <button type="submit">保存上下文</button>
       </form>
-    </section>
+    </section>}
 
-    <div className="context-groups">
+    {sectionVisible("memory") && <div className="context-groups">
       <ContextGroup title="全局规则" entries={grouped.rules} onEdit={setDraft} onDisable={disable} />
       <ContextGroup title="记忆" entries={grouped.memory} onEdit={setDraft} onDisable={disable} />
       <ContextGroup title="项目上下文" entries={grouped.projects} onEdit={setDraft} onDisable={disable} />
-    </div>
+    </div>}
 
-    <section className="settings-section" aria-labelledby="proposal-review">
+    {sectionVisible("proposals") && <section className="settings-section" aria-labelledby="proposal-review">
       <h2 id="proposal-review">待审核 Proposal</h2>
       {proposals.filter((item) => !["applied", "rejected"].includes(item.status)).length === 0 && <p>没有待审核提案。</p>}
       <div className="proposal-list">{proposals.filter((item) => !["applied", "rejected"].includes(item.status)).map((item) => <article key={item.proposal_id} className="proposal-card">
@@ -196,6 +206,7 @@ export function SettingsPage({ client }: { client: LookliftClient }) {
         <small>来源：{item.source_packet_ids.join("、") || "Agent"} · 基线 {item.base_hash.slice(0, 12)}</small>
         <div>{item.status === "preview" && <><button type="button" onClick={() => void review(item, "confirm")}>确认提案</button><button type="button" onClick={() => void review(item, "reject")}>拒绝</button></>}{item.status === "confirmed" && <button type="button" onClick={() => void review(item, "apply")}>应用到正式上下文</button>}</div>
       </article>)}</div>
+    </section>}
     </section>
   </main>;
 }

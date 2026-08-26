@@ -492,6 +492,16 @@
 
 /* —— Agent 设置：上下文与提案保持可审查的文档面板结构 —— */
 .settings-page { height: 100%; padding: clamp(20px, 3vw, 38px); overflow: auto; color: var(--color-ink); }
+.settings-layout { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: clamp(24px, 4vw, 52px); padding: 0; }
+.settings-nav { position: sticky; top: 0; align-self: start; height: 100%; padding: 28px 18px; border-right: 1px solid var(--color-line); background: var(--color-paper-raised); }
+.settings-nav h1 { margin: 7px 0 28px; font: 500 28px/1.1 var(--font-display); }
+.settings-back { margin-bottom: 28px; padding: 0; border: 0; color: var(--color-muted); background: transparent; cursor: pointer; font-size: 12px; }
+.settings-nav nav { display: grid; gap: 4px; }
+.settings-nav nav button { padding: 10px 11px; border: 0; border-radius: var(--radius-sm); color: var(--color-muted); background: transparent; cursor: pointer; text-align: left; font-size: 13px; }
+.settings-nav nav button:hover, .settings-nav nav button[data-active="true"] { color: var(--color-ink); background: color-mix(in srgb, var(--color-accent) 10%, transparent); font-weight: 600; }
+.settings-content { min-width: 0; padding: clamp(28px, 4vw, 54px) clamp(20px, 4vw, 58px) 48px 0; overflow: auto; }
+.settings-content > header { max-width: 780px; margin-bottom: 24px; }
+.settings-content > header h2 { margin: 7px 0 9px; font: 500 clamp(26px, 3vw, 36px)/1.08 var(--font-display); }
 .settings-page > header { max-width: 780px; margin-bottom: 24px; }
 .settings-page > header h1 { margin: 7px 0 9px; font: 500 clamp(30px, 4vw, 42px)/1.08 var(--font-display); }
 .settings-page > header > p:last-child, .settings-section > p, .settings-heading p { color: var(--color-muted); }
@@ -570,6 +580,13 @@
   .context-groups { grid-template-columns: 1fr; }
 }
 @media (max-width: 680px) {
+  .settings-layout { display: block; }
+  .settings-nav { position: sticky; z-index: 4; top: 0; width: 100%; height: auto; padding: 14px 16px 10px; border-right: 0; border-bottom: 1px solid var(--color-line); }
+  .settings-nav h1, .settings-nav .pane-kicker { display: none; }
+  .settings-back { margin: 0 0 10px; }
+  .settings-nav nav { display: flex; overflow-x: auto; gap: 5px; }
+  .settings-nav nav button { flex: none; }
+  .settings-content { padding: 24px 16px 40px; overflow: visible; }
   .settings-heading, .context-entry-form, .proposal-list { display: grid; grid-template-columns: 1fr; }
   .provider-settings-title, .runtime-titlebar, .provider-form-heading { align-items: stretch; }
   .runtime-titlebar { display: grid; }
