@@ -116,9 +116,44 @@ describe("SettingsPage", () => {
     await act(async () => apiMode.click());
     expect(container.querySelector('input[type="password"]')).not.toBeNull();
 
-    const ollama = [...container.querySelectorAll("button")].find((button) => button.textContent === "Ollama")!;
+    const ollama = [...container.querySelectorAll("button")].find((button) => button.textContent === "本机 Ollama")!;
     await act(async () => ollama.click());
     expect(container.querySelector('input[type="password"]')).toBeNull();
     expect(container.textContent).toContain("请求仅发送到本机");
+  });
+
+  it("切换 Provider 时隔离保留未提交表单", async () => {
+    await act(async () => root.render(<SettingsPage client={client()} />));
+    await vi.waitFor(() => expect(container.textContent).toContain("Pi"));
+    const click = async (text: string) => {
+      const button = [...container.querySelectorAll("button")].find((item) => item.textContent === text)!;
+      await act(async () => button.click());
+    };
+    const fill = async (input: HTMLInputElement, value: string) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    };
+
+    await click("API 提供商");
+    await fill(container.querySelector('input[placeholder="例如 gpt-5"]') as HTMLInputElement, "gpt-5-mini");
+    await click("本机 Ollama");
+    await fill(container.querySelector('input[placeholder="例如 qwen3"]') as HTMLInputElement, "qwen3:8b");
+    await click("OpenAI / 兼容接口");
+    expect((container.querySelector('input[placeholder="例如 gpt-5"]') as HTMLInputElement).value).toBe("gpt-5-mini");
+    await click("本机 Ollama");
+    expect((container.querySelector('input[placeholder="例如 qwen3"]') as HTMLInputElement).value).toBe("qwen3:8b");
+  });
+
+  it("重新扫描失败时显示可操作状态", async () => {
+    const detectRuntimes = vi.fn().mockRejectedValue(new Error("CLI 扫描失败，请检查安装路径"));
+    await act(async () => root.render(<SettingsPage client={client({ detectRuntimes })} />));
+    await vi.waitFor(() => expect(container.textContent).toContain("Pi"));
+
+    const rescan = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("重新扫描"))!;
+    await act(async () => rescan.click());
+
+    await vi.waitFor(() => expect(container.textContent).toContain("CLI 扫描失败，请检查安装路径"));
   });
 });

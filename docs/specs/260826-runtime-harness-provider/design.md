@@ -100,7 +100,7 @@ OpenAI API Harness 支持：
 
 视觉实现目标是以已确认的参考截图为基准进行像素级对齐：顶部双模式分段控件、Provider 胶囊列表、卡片式配置区域、字体层级、间距、状态提示、模型下拉和检测反馈均纳入截图对比；使用 LookLift 自有 Token、组件和文案实现相同布局与交互结果。
 
-固定基准：宽屏 `1280×832`、窄屏 `390×844`、DPR 1，浅色和深色主题；资源路径为 `references/provider-settings-wide.png` 与 `references/provider-settings-narrow.png`，由需求方提供后纳入仓库。验收采用人工浏览器截图对比，不复制外部源码、图标或资源。
+固定状态基准：`references/provider-settings-cli.jpg` 与 `references/provider-settings-api.jpg`，两张均为 `1264×861`、DPR 1、桌面浅色界面，分别对应“本机 CLI”和“API 提供商”。验收采用人工浏览器截图对比，不复制外部源码、图标或资源。参考图未提供窄屏和深色版本，因此 `390×844` 窄屏与深色主题只按 LookLift 自有 Token 人工验证响应式重排、内容可读性、控件可操作性和主题对比度，不声称像素级参考图对齐。
 
 设置页 ViewModel 必须带 `contract_version`，Query 不返回密钥正文、可执行文件完整路径、环境变量或本地数据库路径。Command 接口需要区分保存、检测、删除和选择 Runtime，保存失败不能改变当前生效配置。
 

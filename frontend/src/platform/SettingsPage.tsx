@@ -21,6 +21,13 @@ const EMPTY_PROVIDER_DRAFTS: Record<"openai" | "ollama", ProviderDraft> = {
   ollama: { model: "", base_url: "http://127.0.0.1:11434/v1", max_tokens: "4096", api_key: "" },
 };
 
+const CAPABILITY_LABELS: Record<string, string> = {
+  proxy_image: "代理图",
+  structured_events: "结构化事件",
+  tool_calling: "工具调用",
+  mcp: "MCP",
+};
+
 export function SettingsPage({ client }: { client: LookliftClient }) {
   const [providerId, setProviderId] = useState<"openai" | "ollama">("openai");
   const [providerDrafts, setProviderDrafts] = useState(EMPTY_PROVIDER_DRAFTS);
@@ -52,6 +59,10 @@ export function SettingsPage({ client }: { client: LookliftClient }) {
     memory: context.entries.filter((entry) => entry.type !== "rule" && entry.type !== "project"),
     projects: context.entries.filter((entry) => entry.type === "project"),
   }), [context.entries]);
+  const cliRuntimes = useMemo(() => runtimes
+    .filter((runtime) => runtime.kind === "cli")
+    .sort((left, right) => Number(right.available !== false) - Number(left.available !== false)
+      || Number(right.support_level === "stable") - Number(left.support_level === "stable")), [runtimes]);
 
   const saveProvider = async (event: FormEvent) => {
     event.preventDefault();
@@ -134,19 +145,24 @@ export function SettingsPage({ client }: { client: LookliftClient }) {
     {status && <p role="status" className="settings-status">{status}</p>}
 
     <section className="settings-section provider-settings" aria-labelledby="provider-settings">
-      <div className="settings-heading"><div><h2 id="provider-settings">模型与提供商</h2><p>选择本机 Agent CLI，或配置由本地引擎保管凭据的 API。</p></div><div className="provider-mode" role="tablist"><button type="button" role="tab" aria-selected={runtimeMode === "cli"} onClick={() => setRuntimeMode("cli")}>本机 CLI</button><button type="button" role="tab" aria-selected={runtimeMode === "api"} onClick={() => setRuntimeMode("api")}>API 提供商</button></div></div>
-      {runtimeMode === "cli" ? <><div className="runtime-actions"><button type="button" onClick={() => void rescanRuntimes()}>重新扫描</button></div><div className="runtime-grid">{runtimes.filter((runtime) => runtime.kind === "cli").map((runtime) => <article className="runtime-card" key={runtime.id}><header><div><strong>{runtime.display_name}</strong><small>{runtime.version ?? runtime.id}</small></div><span data-level={runtime.support_level}>{runtime.support_level === "stable" ? "正式" : "实验性"}</span></header><div className="runtime-capabilities">{runtime.capabilities.map((capability) => <span key={capability}>{capability}</span>)}</div><p>{runtime.available === false ? runtime.error : `${runtime.supports_mcp ? "支持 MCP" : "不支持 MCP"} · ${runtime.supports_resume ? "支持原生续接" : "使用事实恢复"}`}</p></article>)}</div></> : <>
-      <div className="provider-capsules" aria-label="Provider 选择"><button type="button" aria-pressed={providerId === "openai"} onClick={() => setProviderId("openai")}>OpenAI</button><button type="button" aria-pressed={providerId === "ollama"} onClick={() => setProviderId("ollama")}>Ollama</button></div>
-      <form className="settings-provider-form" onSubmit={saveProvider}>
-        <label>模型<input value={provider.model} onChange={(event) => updateProvider({ model: event.target.value })} /></label>
-        <label>Base URL<input value={provider.base_url} onChange={(event) => updateProvider({ base_url: event.target.value })} /></label>
-        {providerId !== "ollama" && <label>API Key<input type="password" value={provider.api_key} onChange={(event) => updateProvider({ api_key: event.target.value })} placeholder="留空则保留" /><small>密钥仅交给本地安全存储，不会回显。</small></label>}
-        <label>最大 Token<input inputMode="numeric" value={provider.max_tokens} onChange={(event) => updateProvider({ max_tokens: event.target.value })} /></label>
-        <button type="submit">保存模型配置</button>
-      </form>
-      <button type="button" onClick={() => void detectProvider()}>测试连接</button>
-      <button className="provider-delete" type="button" onClick={() => void deleteProvider()}>删除 Provider 配置</button>
-      <p className="provider-privacy">{providerId === "ollama" ? "请求仅发送到本机 Ollama，不经过外部代理。" : "代理图最长边 2048px、无 EXIF；发送前显示实际数据接收方。"}</p></>}
+      <div className="provider-settings-title"><div><h2 id="provider-settings">模型与提供商</h2><p>选择运行提示词的本机 CLI，或配置由本地引擎安全保管凭据的 API。</p></div></div>
+      <div className="provider-mode" role="tablist"><button type="button" role="tab" aria-selected={runtimeMode === "cli"} onClick={() => setRuntimeMode("cli")}>本机 CLI</button><button type="button" role="tab" aria-selected={runtimeMode === "api"} onClick={() => setRuntimeMode("api")}>API 提供商</button></div>
+      {runtimeMode === "cli" ? <div className="runtime-panel" role="tabpanel">
+        <div className="runtime-titlebar"><div><h3>你的 CLI <span>({cliRuntimes.length})</span></h3><p>已检测的入口会共享同一套候选版本与安全校验。</p></div><button type="button" onClick={() => void rescanRuntimes()}>↻ 重新扫描</button></div>
+        <div className="runtime-list">{cliRuntimes.map((runtime, index) => <RuntimeCard key={runtime.id} runtime={runtime} primary={index === 0} />)}{cliRuntimes.length === 0 && <p className="runtime-empty">没有检测到本机 CLI。安装后点击“重新扫描”。</p>}</div>
+      </div> : <div className="provider-panel" role="tabpanel">
+        <div className="provider-capsules" aria-label="Provider 选择"><button type="button" aria-pressed={providerId === "openai"} onClick={() => setProviderId("openai")}>OpenAI / 兼容接口</button><button type="button" aria-pressed={providerId === "ollama"} onClick={() => setProviderId("ollama")}>本机 Ollama</button></div>
+        <form className="settings-provider-form" onSubmit={saveProvider}>
+          <div className="provider-form-heading"><div><h3>{providerId === "ollama" ? "Ollama API" : "OpenAI API"}</h3><p>{providerId === "ollama" ? "仅连接本机回环地址，不经过外部代理。" : "适用于 OpenAI 和采用 OpenAI 协议的 HTTPS 提供商。"}</p></div><span>{providerId === "ollama" ? "本机" : "远程"}</span></div>
+          <p className="provider-notice">填写必填项后即可保存；当前已生效配置在保存成功前保持不变。</p>
+          {providerId !== "ollama" && <label>API Key <span aria-hidden="true">*</span><input type="password" value={provider.api_key} onChange={(event) => updateProvider({ api_key: event.target.value })} placeholder="留空则保留现有密钥" /><small>密钥仅交给本机安全存储，查询接口和日志均不会回显。</small></label>}
+          <label>Base URL <span aria-hidden="true">*</span><input value={provider.base_url} onChange={(event) => updateProvider({ base_url: event.target.value })} /></label>
+          <label>最大 Token <small>可选</small><input inputMode="numeric" value={provider.max_tokens} onChange={(event) => updateProvider({ max_tokens: event.target.value })} /></label>
+          <label>模型 <span aria-hidden="true">*</span><input value={provider.model} onChange={(event) => updateProvider({ model: event.target.value })} placeholder={providerId === "ollama" ? "例如 qwen3" : "例如 gpt-5"} /></label>
+          <p className="provider-privacy">{providerId === "ollama" ? "请求仅发送到本机 Ollama，不经过外部代理。" : "代理图最长边 2048px、无 EXIF；发送前显示实际数据接收方。"}</p>
+          <div className="provider-form-actions"><button type="button" onClick={() => void detectProvider()}>测试连接</button><button className="provider-delete" type="button" onClick={() => void deleteProvider()}>删除配置</button><button className="provider-save" type="submit">保存模型配置</button></div>
+        </form>
+      </div>}
     </section>
 
     <section className="settings-section" aria-labelledby="privacy-settings">
@@ -182,6 +198,16 @@ export function SettingsPage({ client }: { client: LookliftClient }) {
       </article>)}</div>
     </section>
   </main>;
+}
+
+function RuntimeCard({ runtime, primary }: { runtime: RuntimeSummary; primary: boolean }) {
+  const state = runtime.available === false ? "未检测到" : runtime.authenticated === false ? "需要认证" : "可用";
+  return <article className="runtime-card" data-primary={primary} data-available={runtime.available !== false}>
+    <div className="runtime-mark" aria-hidden="true">{runtime.display_name.slice(0, 2)}</div>
+    <div className="runtime-card-main"><header><div><strong>{runtime.display_name}</strong><small>{runtime.version ?? runtime.id}</small></div><div className="runtime-badges"><span data-state={runtime.available === false ? "missing" : "ready"}>{state}</span><span data-level={runtime.support_level}>{runtime.support_level === "stable" ? "正式" : "实验性"}</span></div></header>
+      {primary && <><div className="runtime-capabilities">{runtime.capabilities.map((capability) => <span key={capability}>{CAPABILITY_LABELS[capability] ?? capability}</span>)}</div><p>{runtime.available === false ? runtime.error ?? "未找到可执行文件" : `${runtime.supports_mcp ? "支持 MCP" : "不支持 MCP"} · ${runtime.supports_resume ? "支持原生续接" : "使用事实恢复"}${runtime.models.length ? ` · ${runtime.models.length} 个模型` : ""}`}</p></>}
+    </div>
+  </article>;
 }
 
 function ContextGroup({ title, entries, onEdit, onDisable }: {

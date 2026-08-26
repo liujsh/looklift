@@ -48,7 +48,8 @@
 
 - [ ] 8. 完成设置页交互与视觉验收
   - 测试模式切换、表单隔离、密钥不回显、检测失败、刷新和取消
-  - 使用 `references/provider-settings-wide.png`（1280×832）和 `references/provider-settings-narrow.png`（390×844），DPR 1，完成浅色/深色主题人工截图验收
+  - 使用 `references/provider-settings-cli.jpg` 和 `references/provider-settings-api.jpg`（均为 1264×861），DPR 1，完成两种模式的桌面浅色人工截图对比
+  - 在 390×844 窄屏与深色主题下，按 LookLift 自有 Token 完成响应式、可读性、可操作性和对比度人工验收
   - _需求：需求 5、需求 6、需求 9_
 
 - [x] 9. 文档与迁移收口

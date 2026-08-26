@@ -409,4 +409,5 @@
 - Provider 网络层拒绝重定向、私网、loopback、link-local、CGNAT 和超限响应；本地 Ollama 仅允许用户明确选择的 loopback，HTTP 客户端禁用环境代理。
 - API Key 迁出普通 TOML，使用 Windows 当前用户 DPAPI 加密；Provider Query 不返回密钥或凭据引用，保存失败不形成可用配置，删除同时移除密文。
 - React 设置页完成本机 CLI/API 双模式、支持等级、能力标签、重新扫描、Provider 隔离草稿、Ollama 无密钥表单、检测、保存和删除。
-- 自动化视觉参考 `references/provider-settings-wide.png` 与 `references/provider-settings-narrow.png` 尚未由需求方提供，当前环境也没有浏览器控制运行工具；像素级截图验收保持待人工，不据此宣称通过。
+- 需求方补充的两张 `1264×861` 浅色桌面图分别是 CLI/API 状态，而非宽屏/窄屏；原图已以 `references/provider-settings-cli.jpg` 与 `references/provider-settings-api.jpg` 纳入规格，窄屏和深色只按 LookLift Token 验收，不虚构缺失基准。
+- 设置页按状态基准重排为全宽模式切换、CLI 纵向主卡与紧凑条目、Provider 胶囊及单列配置卡；前端全量 `177 passed`，production build 与 TypeScript 通过。内置浏览器安全策略拒绝访问本机开发地址，因此实际桌面截图、`390×844` 窄屏和深色观感仍保持待人工门禁，不据此宣称视觉通过。
