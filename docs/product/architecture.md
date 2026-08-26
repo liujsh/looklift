@@ -474,6 +474,8 @@ Tauri 原生窗口
 
 ## v2.6-A–C 新增设计
 
+> 迁移说明：本节记录 v2.6-A–C 已实现的 Pydantic-AI API Harness 基线。后续 `docs/specs/260826-runtime-harness-provider/` 作为增量规格，定义替换实现层的理由、迁移门和兼容范围；迁移完成前，本节仍是当前实现实况。
+
 > 原规格：[v2.6/](../versions/v2.6/)；这里只记录已实现的 API 候选闭环与首条受控 CLI Adapter。
 
 ### 27. Domain Pack 与统一 Adapter
@@ -484,6 +486,8 @@ Tauri 原生窗口
   JPEG 代理图，不接收 Run、Attempt、Lease、正式版本 ID、原图路径或数据库信息。
 - API 路径使用 `pydantic-ai-slim 2.32.x`；Anthropic、OpenAI-compatible 和 Ollama 只共享构造与事件适配层，
   一个 Attempt 内不自动切换 Provider。Fake/FunctionModel 测试全程离线。
+
+> 迁移边界：上述为 v2.6-A–C 当前实现实况。新规格规划将 API Harness 迁移到声明式 Runtime Definition；Anthropic、OpenAI-compatible 与 Ollama 的协议能力在迁移门通过后按兼容矩阵保留或调整，未完成前不视为已迁移。
 
 ### 28. 受控候选 Runtime
 

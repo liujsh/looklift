@@ -1,5 +1,7 @@
 # 技术设计
 
+> 增量规格：`../260826-runtime-harness-provider/` 扩展具体 CLI/API Harness、Provider 迁移和支持等级；本规格继续拥有 Runtime Registry 基础契约。
+
 ## 架构概览
 
 ```mermaid

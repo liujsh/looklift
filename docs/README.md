@@ -143,6 +143,7 @@ docs/
 1. Memory / Global Rules / Project Context：`260825-context-memory-global-rules`
 2. Context Compiler 2.0 与 Run Manifest：Context Compiler 在第一阶段设计中，Run Manifest 在 `260825-run-manifest-resume`
 3. Runtime Registry 与 API/CLI 通用引擎：`260825-runtime-registry`
+   - Harness/Provider 迁移与“模型与提供商”增量：`260826-runtime-harness-provider`
 4. Plugin Manifest / Capability Grant / Registry：`260825-skill-template-plugin`
 5. Connector / MCP / Source Packet：`260825-connector-mcp-integration`
 6. Verifier / Critique / Real Eval：`260825-verifier-critique-eval`
