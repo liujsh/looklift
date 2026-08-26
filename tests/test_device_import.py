@@ -23,7 +23,9 @@ def test_import_copies_atomically(tmp_path, monkeypatch):
     source.write_bytes(b"raw-bytes")
     monkeypatch.setenv("LOOKLIFT_LIBRARY_DB", str(tmp_path / "library.db"))
     task_id = device_import.start([str(source)], str(tmp_path / "dest"))
-    deadline = time.monotonic() + 10
+    # Windows CI 首次初始化 SQLite/图库索引可能明显慢于本地；这里等待
+    # 异步任务完成，而不是把初始化抖动误判为导入失败。
+    deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         task = device_import.get(task_id)
         if task and task["status"] != "running":

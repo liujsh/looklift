@@ -571,3 +571,15 @@ Connector Manifest 固定协议、数据接收方和能力；外部事实先进�
 ### Plugin Registry 与能力授权页
 
 `PluginRegistry.list()` 向前端投影脱敏 Manifest 摘要，内置插件与历史版本仍由 Registry 管理；API 不返回包路径、命令或凭据。授权接口要求 `project_id`、作用域和能力子集，服务端拒绝超出 Manifest 声明的能力，并以 `CapabilityGrant` 保存最小授权；撤销将 Grant 标为 revoked，使后续能力校验立即失败。React 插件页只展示声明能力、摘要和当前授权，授权/撤销均需显式点击。
+
+### Connector Registry 与调用隔离
+
+`ConnectorRegistry` 保存经过 Manifest 校验的连接配置，仅记录 `keyring://`、`secret://` 或
+`env://` 凭据引用，不保存密钥正文；连接必须经过用户授权，撤销会同时断开连接。`snapshot()`
+和 `workspace_snapshot()` 返回排序且只读的已连接 ID 集合，作为 Run Manifest 的可复现输入，
+`public_list()` 不返回凭据引用。
+
+`ConnectorExecution` 为 Connector/MCP/Provider 调用提供统一的显式超时、取消和重试结果。超时或取消
+会隔离并消费晚到任务，结果不会回写当前调用；只有调用方明确指定的次数才会重试，不会隐式切换
+Provider。连接注册、调用错误和安全拒绝均保持结构化错误分类，未改变 Source Packet、Proposal
+或正式候选的用户确认边界。
