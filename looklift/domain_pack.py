@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from html import escape
 from typing import Any
 
@@ -163,6 +164,50 @@ def compile_domain_pack(
         content_hash=_sha256(digest_payload),
         estimated_tokens=max(1, (len(instructions) + len(goal) + 3) // 4),
     )
+
+
+def compile_domain_pack_with_memory(
+    request: DomainPackRequest,
+    memory_store: "Any",
+    recall_query: "Any",
+    *,
+    max_prompt_chars: int | None = None,
+) -> CompiledDomainPack:
+    """先冻结 Hybrid Memory 结果，再编译 Domain Pack，确保 Run 可复现。"""
+    from .memory_retrieval import RecallQuery
+
+    if not isinstance(recall_query, RecallQuery):
+        raise TypeError("recall_query 必须是 RecallQuery")
+    retrieved = memory_store.retrieve(recall_query)
+    selected = tuple(
+        VersionedText(item.entry.entry_id, item.entry.version, item.entry.content)
+        for item in retrieved
+    )
+    selected_ids = {item.entry.entry_id for item in retrieved}
+    omitted = tuple(
+        (item.entry_id, "not-selected-by-hybrid-retrieval")
+        for item in memory_store.list()
+        if item.state == "active" and item.entry_id not in selected_ids
+    )
+    compiled = compile_domain_pack(
+        DomainPackRequest(
+            system_contract=request.system_contract,
+            domain_contract=request.domain_contract,
+            tool_contract=request.tool_contract,
+            user_goal=request.user_goal,
+            run_context=request.run_context,
+            permission_contract=request.permission_contract,
+            style_profile=request.style_profile,
+            skill=request.skill,
+            template=request.template,
+            references=request.references,
+            global_rules=request.global_rules,
+            memory=selected,
+            project_context=request.project_context,
+        ),
+        max_prompt_chars=max_prompt_chars,
+    )
+    return replace(compiled, memory_used=tuple(item.entry.entry_id for item in retrieved), memory_omitted=omitted)
 
 
 def _text_snapshot(document: VersionedText) -> str:

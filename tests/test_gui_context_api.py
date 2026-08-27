@@ -20,7 +20,7 @@ def test_context_api_crud_never_exposes_local_paths(tmp_path, monkeypatch):
     put = api.ROUTES[("PUT", "/api/memory/<id>")]
     status, entry = put(_ctx(body={"type": "preference", "content": "保持自然", "name": "自然观感"}))
     assert status == 200
-    assert entry["confirmed"] is True
+    assert entry["state"] == "active"
     assert str(tmp_path) not in json.dumps(entry, ensure_ascii=False)
 
     status, tree = api.ROUTES[("GET", "/api/memory/tree")]({})
@@ -64,7 +64,7 @@ def test_context_config_defaults_to_no_automatic_extraction(tmp_path, monkeypatc
 
     status, current = api.ROUTES[("GET", "/api/memory/config")]({})
     assert status == 200
-    assert current == {"enabled": True, "auto_extract": False}
+    assert current == {"enabled": True, "auto_extract": False, "embedding_enabled": True}
 
     status, updated = api.ROUTES[("PATCH", "/api/memory/config")](
         _ctx(body={"auto_extract": True})

@@ -31,11 +31,17 @@ class ContextEntry:
     content: str
     source: str
     version: int = 1
-    confirmed: bool = False
+    state: str = "active"
     enabled: bool = True
     name: str = ""
     description: str = ""
     scope: str = "global"
+    project_id: str | None = None
+    run_id: str | None = None
+    expires_at: str | None = None
+    source_event_id: str | None = None
+    confidence: float = 1.0
+    evidence: str = ""
     created_at: str = field(default_factory=_now)
     updated_at: str = field(default_factory=_now)
 
@@ -51,7 +57,7 @@ class ContextMemoryStore:
         {"profile", "rule", "fact", "preference", "project", "reference", "feedback"}
     )
     SCOPES = frozenset({"global", "project", "run"})
-    DEFAULT_CONFIG = {"enabled": True, "auto_extract": False}
+    DEFAULT_CONFIG = {"enabled": True, "auto_extract": False, "embedding_enabled": True}
 
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
@@ -76,8 +82,11 @@ class ContextMemoryStore:
         name: str = "",
         description: str = "",
         scope: str = "global",
+        project_id: str | None = None,
+        run_id: str | None = None,
+        expires_at: str | None = None,
     ) -> ContextEntry:
-        """用户设置页直接写入已确认条目；外部来源不得调用此入口。"""
+        """用户设置页直接写入 active 条目。"""
         previous = self._entries.get(entry_id)
         timestamp = _now()
         return self.put(
@@ -87,11 +96,14 @@ class ContextMemoryStore:
                 content=content,
                 source="user",
                 version=(previous.version + 1) if previous else 1,
-                confirmed=True,
+                state="active",
                 enabled=True,
                 name=name,
                 description=description,
                 scope=scope,
+                project_id=project_id,
+                run_id=run_id,
+                expires_at=expires_at,
                 created_at=previous.created_at if previous else timestamp,
                 updated_at=timestamp,
             )
@@ -111,14 +123,14 @@ class ContextMemoryStore:
         return tuple(
             replace(item, content=_sanitize_for_harness(item.content))
             for item in self.list()
-            if item.enabled and item.confirmed
+            if item.enabled and item.state == "active" and not self._expired(item)
         )
 
     def disable(self, entry_id: str) -> ContextEntry:
         target = self.get(entry_id)
-        if not target.enabled:
+        if not target.enabled and target.state == "disabled":
             return target
-        return self.put(replace(target, enabled=False, version=target.version + 1, updated_at=_now()))
+        return self.put(replace(target, enabled=False, state="disabled", version=target.version + 1, updated_at=_now()))
 
     def config(self) -> dict[str, bool]:
         path = self.root / "config.json"
@@ -194,7 +206,7 @@ class ContextMemoryStore:
             scope=proposal.patch.get("scope", target.scope),
             enabled=proposal.patch.get("enabled", target.enabled),
             version=target.version + 1,
-            confirmed=True,
+            state="active",
             updated_at=_now(),
         )
         self.put(updated)
@@ -210,13 +222,18 @@ class ContextMemoryStore:
             not isinstance(entry.version, int)
             or isinstance(entry.version, bool)
             or entry.version < 1
-            or not isinstance(entry.confirmed, bool)
+            or entry.state not in {"active", "disabled", "deleted"}
             or not isinstance(entry.enabled, bool)
             or not isinstance(entry.content, str)
             or not isinstance(entry.source, str)
             or not isinstance(entry.name, str)
             or not isinstance(entry.description, str)
             or not isinstance(entry.scope, str)
+            or (entry.scope == "project" and not entry.project_id)
+            or (entry.scope == "run" and (not entry.run_id or not entry.expires_at))
+            or not isinstance(entry.confidence, (int, float))
+            or isinstance(entry.confidence, bool)
+            or not 0 <= entry.confidence <= 1
             or not isinstance(entry.created_at, str)
             or not isinstance(entry.updated_at, str)
             or not entry.content.strip()
@@ -272,11 +289,21 @@ class ContextMemoryStore:
             values["entry_id"] = values.pop("id")
         if "type" in values:
             values["entry_type"] = values.pop("type")
+        # 兼容旧版 confirmed 字段：仅用于一次性迁移，不再写回。
+        if "confirmed" in values and "state" not in values:
+            values["state"] = "active" if values.pop("confirmed") else "disabled"
         defaults = {
             "enabled": True,
+            "state": "active",
             "name": "",
             "description": "",
             "scope": "global",
+            "project_id": None,
+            "run_id": None,
+            "expires_at": None,
+            "source_event_id": None,
+            "confidence": 1.0,
+            "evidence": "",
             "created_at": _now(),
             "updated_at": _now(),
         }
@@ -291,6 +318,74 @@ class ContextMemoryStore:
             raise ValueError("Context 条目摘要不匹配")
         return entry
 
+    def auto_put(self, candidate: "object") -> ContextEntry | None:
+        """经过 MemoryGate 后自动写入；重复候选不产生新版本。"""
+        from .memory_gate import MemoryCandidate, MemoryGate
+
+        if not isinstance(candidate, MemoryCandidate):
+            raise TypeError("candidate 必须是 MemoryCandidate")
+        decision = MemoryGate().evaluate(candidate, self.list())
+        if decision.action == "merge":
+            return self.get(decision.duplicate_id) if decision.duplicate_id else None
+        if decision.action not in {"write", "downgrade"} or decision.candidate is None:
+            return None
+        item = decision.candidate
+        previous = self._entries.get(item.entry_id)
+        now = _now()
+        return self.put(
+            ContextEntry(
+                entry_id=item.entry_id,
+                entry_type=item.entry_type,
+                content=item.content,
+                source=item.source,
+                state="active",
+                version=(previous.version + 1) if previous else 1,
+                name=item.name,
+                description=item.description,
+                scope=item.scope,
+                project_id=item.project_id,
+                run_id=item.run_id,
+                expires_at=item.expires_at,
+                source_event_id=item.source_event_id,
+                confidence=item.confidence,
+                evidence=item.evidence,
+                created_at=previous.created_at if previous else now,
+                updated_at=now,
+            )
+        )
+
+    def retrieve(self, query: "object", *, embedding_index: "object | None" = None) -> tuple[object, ...]:
+        """使用 HybridMemoryRetriever 召回当前 active 条目。"""
+        from .memory_retrieval import HybridMemoryRetriever, RecallQuery
+
+        if not isinstance(query, RecallQuery):
+            raise TypeError("query 必须是 RecallQuery")
+        if not self.config()["enabled"]:
+            return ()
+        if self.config()["embedding_enabled"]:
+            from .memory_embeddings import EmbeddingUnavailable, LocalEmbeddingIndex
+
+            index = embedding_index or LocalEmbeddingIndex(self.root / "vector-index")
+            if not isinstance(index, LocalEmbeddingIndex):
+                raise TypeError("embedding_index 必须是 LocalEmbeddingIndex")
+            try:
+                embeddings = index.sync(self.list())
+                return HybridMemoryRetriever().retrieve(
+                    self.list(), query, embed_query=index.embed_query, embeddings=embeddings
+                )
+            except EmbeddingUnavailable:
+                pass
+        return HybridMemoryRetriever().retrieve(self.list(), query)
+
+    @staticmethod
+    def _expired(entry: ContextEntry) -> bool:
+        if not entry.expires_at:
+            return False
+        try:
+            return datetime.fromisoformat(entry.expires_at) <= datetime.now(timezone.utc)
+        except ValueError:
+            return True
+
     def _write_index(self) -> None:
         payload = {
             "schema_version": 1,
@@ -301,7 +396,7 @@ class ContextMemoryStore:
                     "version": item.version,
                     "content_hash": item.content_hash,
                     "enabled": item.enabled,
-                    "confirmed": item.confirmed,
+                    "state": item.state,
                 }
                 for item in self.list()
             ],
