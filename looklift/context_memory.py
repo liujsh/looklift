@@ -354,6 +354,16 @@ class ContextMemoryStore:
             )
         )
 
+    def retrieve(self, query: "object") -> tuple[object, ...]:
+        """使用 HybridMemoryRetriever 召回当前 active 条目。"""
+        from .memory_retrieval import HybridMemoryRetriever, RecallQuery
+
+        if not isinstance(query, RecallQuery):
+            raise TypeError("query 必须是 RecallQuery")
+        if not self.config()["enabled"]:
+            return ()
+        return HybridMemoryRetriever().retrieve(self.list(), query)
+
     @staticmethod
     def _expired(entry: ContextEntry) -> bool:
         if not entry.expires_at:
