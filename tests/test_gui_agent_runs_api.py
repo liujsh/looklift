@@ -29,7 +29,7 @@ def test_agent_run_recovery_api_lists_details_and_starts_new_attempt(tmp_path, m
         baseline_hash=hash_text(session.current_version_id),
         photo_hash=hash_text("photo"),
         attempt_id="attempt-1",
-        runtime_id="pydantic-api",
+        runtime_id="openai-api",
         session_id=session.id,
         context_sources=({"id": "rule-natural", "version": 2, "hash": "a" * 64, "status": "used"},),
     )

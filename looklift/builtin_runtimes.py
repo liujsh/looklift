@@ -93,16 +93,6 @@ _DEFINITIONS = (
         event_parser="openai-sse-events",
     ),
     RuntimeDefinition(
-        runtime_id="pydantic-api",
-        kind="api",
-        endpoint="provider://configured",
-        input_transport="provider_message",
-        stream_format="pydantic_events",
-        capabilities=frozenset({"proxy_image", "structured_terminal"}),
-        permission_profile=frozenset({"proxy_image", "structured_terminal"}),
-        selectable=False,
-    ),
-    RuntimeDefinition(
         runtime_id="fake",
         kind="fake",
         capabilities=frozenset({"proxy_image", "structured_terminal"}),

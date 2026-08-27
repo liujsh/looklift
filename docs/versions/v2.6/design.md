@@ -43,7 +43,7 @@ Claude/Codex/OpenCode/Pi 等 CLI 使用自身 Harness。Adapter 只描述探测�
 
 ### 模型 API
 
-> 迁移说明：本节是 v2.6-A–C 已实现的 Pydantic-AI API Harness 基线。后续 `docs/specs/260826-runtime-harness-provider/` 作为增量规格，定义替换实现层的理由、迁移门和兼容范围；迁移完成前，本节仍是当前实现契约。
+> 历史说明：本节保留 v2.6-A–C 当时实现的 Pydantic-AI API Harness 基线；该实现随后已由 `docs/specs/260826-runtime-harness-provider/` 替换并从当前代码、依赖和打包配置中删除，不再代表当前架构。
 
 API 路径首选 `pydantic-ai-slim` 作为唯一内嵌 Harness，在现有 Python sidecar 内运行。它只承担模型—工具循环、
 消息/图片转换、工具参数解析、流事件、用量限制和取消；不引入其通用文件、代码执行或多智能体能力。

@@ -103,8 +103,6 @@ def test_builtin_registry_keeps_user_and_compatibility_harnesses():
         "pi-cli",
         "deepseek-cli",
         "openai-api",
-        "pydantic-api",
         "fake",
     ]
     assert registry.get("pi-cli").supports_resume is True
-    assert registry.get("pydantic-api").input_transport == "provider_message"

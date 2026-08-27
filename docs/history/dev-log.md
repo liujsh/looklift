@@ -412,3 +412,9 @@
 - 需求方补充的两张 `1264×861` 浅色桌面图分别是 CLI/API 状态，而非宽屏/窄屏；原图已以 `references/provider-settings-cli.jpg` 与 `references/provider-settings-api.jpg` 纳入规格，窄屏和深色只按 LookLift Token 验收，不虚构缺失基准。
 - 设置页按状态基准重排为全宽模式切换、CLI 纵向主卡与紧凑条目、Provider 胶囊及单列配置卡；前端全量 `177 passed`，production build 与 TypeScript 通过。内置浏览器安全策略拒绝访问本机开发地址，因此实际桌面截图、`390×844` 窄屏和深色观感仍保持待人工门禁，不据此宣称视觉通过。
 - 设置页进一步改为设置专用双栏：进入设置后全局导航替换为左侧设置导航，顶部提供“回到应用”，右侧按分区单独渲染内容；窄屏导航改为顶部横向标签。设置页与 PlatformShell 定向测试 `12 passed`，TypeScript 与 production build 通过。
+
+## 2026-08-27：移除 Pydantic-AI 兼容层
+
+- OpenAI-compatible 已由自研 `OpenAiApiAdapter`、HTTP 传输和 SSE/JSON Parser 承载，删除不可选择的 `pydantic-api` Runtime、Pydantic Adapter/模型构造、依赖、打包元数据和专属测试。
+- Anthropic 官方 SDK Provider 独立保留；旧 Run Manifest 中的 Runtime ID 继续按普通字符串读取，不要求对应 Runtime 注册。
+- 验证证据：后端全量 `727 passed, 1 skipped`；前端全量 `177 passed`，TypeScript 与 production build 通过。

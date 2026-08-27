@@ -8,7 +8,7 @@
 
 ## 范围与归属
 
-本规格是 `260825-runtime-registry` 与 `260825-settings-plugin-run-ui` 的增量扩展，不新增第二个 Runtime Registry 或 UI 真相源。它迁移 v2.6 中 OpenAI-compatible/Ollama API Harness 的实现层（保留 `AgentEvent`、CandidateRuntime、Verifier、Run Manifest 与 Provider 能力契约），并规定迁移、兼容和验收边界；Anthropic 在新的直连 Definition 或明确产品决策完成前继续使用旧兼容 Adapter。
+本规格是 `260825-runtime-registry` 与 `260825-settings-plugin-run-ui` 的增量扩展，不新增第二个 Runtime Registry 或 UI 真相源。它迁移 v2.6 中 OpenAI-compatible/Ollama API Harness 的实现层（保留 `AgentEvent`、CandidateRuntime、Verifier、Run Manifest 与 Provider 能力契约），并规定迁移、兼容和验收边界。迁移收口后删除不可选择的 `pydantic-api` 兼容 Runtime 与 Pydantic-AI 依赖；既有 Anthropic 官方 SDK Provider 不属于该兼容 Runtime，继续独立保留。
 
 ## 需求
 
@@ -83,6 +83,7 @@
 2. 当测试涉及 Provider、CLI、取消、晚到、恢复或权限时，测试应该不触网、不调用真实模型、不读取真实用户目录。
 3. 当上下文、Skill、Connector 或模型输出包含 Prompt 注入、原图路径、Home 路径、EXIF 或密钥时，系统应该在进入模型或日志前脱敏或拒绝。
 4. 当升级 Runtime Definition 或 Provider 配置格式时，系统应该保留旧 Run Manifest 的读取能力，并拒绝不兼容的隐式迁移。
+5. 当 Runtime Harness 迁移完成时，系统应该删除 Pydantic-AI Adapter、模型构造、隐藏 Runtime、打包元数据和专属测试；历史 Run 中的旧 Runtime ID 仍作为普通字符串可读取。
 
 ### 需求 7 - Runtime 支持等级
 
