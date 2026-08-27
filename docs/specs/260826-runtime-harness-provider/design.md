@@ -37,7 +37,7 @@ flowchart TB
 - 候选执行：复用 `CandidateRuntime`、参数契约、Verifier、Run Manifest 和 User Review Gate，不复制 Patch 校验或渲染实现。
 - 设置页：复用现有 React/TypeScript 平台壳、API Client 和主题 Token；交互结构采用模型/提供商双模式页面。
 
-替换 Pydantic-AI 专属 Loop 的原因是让 Provider 协议、流解析、取消和错误分类服从同一声明式 Runtime 契约，避免框架内部 Agent Loop 与 LookLift 通用生命周期形成第二套状态语义。迁移不是直接删除既有能力：OpenAI-compatible 必须先通过请求、图片、Tool Call、SSE、取消和错误分类等价门；Ollama 必须通过受控 loopback 与无密钥门；Anthropic 在本规格中不新增直连实现，迁移期间继续由旧兼容 Adapter 承载。只有后续直连 Definition 通过同等级门禁，或产品需求明确移除 Anthropic 后，才允许删除最后的 Pydantic-AI 兼容依赖。
+替换 Pydantic-AI 专属 Loop 的原因是让 Provider 协议、流解析、取消和错误分类服从同一声明式 Runtime 契约，避免框架内部 Agent Loop 与 LookLift 通用生命周期形成第二套状态语义。OpenAI-compatible 已通过请求、图片、Tool Call、SSE、取消和错误分类等价门，Ollama 通过受控 loopback 与无密钥门；迁移收口删除 `pydantic-api`、Pydantic Agent Adapter、模型构造和打包依赖。Anthropic 官方 SDK Provider 独立保留，但不再通过隐藏 Pydantic Runtime 暴露。
 
 ## Runtime Definition 契约
 

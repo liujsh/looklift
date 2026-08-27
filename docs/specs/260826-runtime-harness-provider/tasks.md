@@ -56,3 +56,9 @@
   - 更新架构实况、任务状态、运行时兼容矩阵和离线测试证据
   - 记录未进入默认 CI 的真实 Provider/CLI 和人工视觉验收边界
   - _需求：需求 1 至需求 9_
+
+- [x] 10. 删除 Pydantic-AI 兼容层
+  - 删除隐藏 `pydantic-api` Runtime、Adapter、模型构造、打包元数据、依赖和专属测试
+  - 保留 Anthropic 官方 SDK Provider与旧 Run Manifest 字符串兼容
+  - 更新产品架构实况与文档导航，不重写历史 Spike 记录
+  - _需求：需求 1、需求 3、需求 6_

@@ -16,7 +16,6 @@ dependencies = [
     "numpy>=1.26",
     "httpx>=0.27",
     "numba>=0.60",
-    "pydantic-ai-slim[anthropic,openai]>=2.32,<2.33",
 ]
 keywords = ["lightroom", "photography", "color-grading", "preset", "xmp", "claude"]
 

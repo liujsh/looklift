@@ -17,7 +17,7 @@ def test_repository_lists_recoverable_runs_and_reconciles_startup(tmp_path):
         baseline_hash=hash_text("baseline"),
         photo_hash=hash_text("photo"),
         attempt_id="attempt-1",
-        runtime_id="pydantic-api",
+        runtime_id="openai-api",
         provider="anthropic",
         model="claude-test",
     )

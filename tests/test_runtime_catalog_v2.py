@@ -23,7 +23,6 @@ def test_builtin_catalog_exposes_five_user_runtimes_and_hides_compatibility_entr
         "openai-api",
     ]
     assert registry.get("pi-cli").support_level is RuntimeSupportLevel.STABLE
-    assert registry.get("pydantic-api").selectable is False
     assert registry.get("fake").selectable is False
     assert all(item.contract_version == 2 for item in registry.list(selectable_only=True))
 

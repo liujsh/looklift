@@ -474,7 +474,7 @@ Tauri 原生窗口
 
 ## v2.6-A–C 新增设计
 
-> 迁移说明：本节记录 v2.6-A–C 已实现的 Pydantic-AI API Harness 基线。后续 `docs/specs/260826-runtime-harness-provider/` 作为增量规格，定义替换实现层的理由、迁移门和兼容范围；迁移完成前，本节仍是当前实现实况。
+> 迁移说明：v2.6-A–C 的 Pydantic-AI 基线已由 `docs/specs/260826-runtime-harness-provider/` 完成替换；当前实现不再包含 Pydantic-AI Runtime 或依赖。
 
 > 原规格：[v2.6/](../versions/v2.6/)；这里只记录已实现的 API 候选闭环与首条受控 CLI Adapter。
 
@@ -484,16 +484,15 @@ Tauri 原生窗口
   元数据和本轮目标，并生成内容 Hash；快照可在原始来源变化后复现同一 Attempt 输入。
 - `agent_adapter.py` 把 Harness 收敛为 `start/cancel/dispose` 和八种有限事件。模型只接收编译文本与无 EXIF
   JPEG 代理图，不接收 Run、Attempt、Lease、正式版本 ID、原图路径或数据库信息。
-- API 路径使用 `pydantic-ai-slim 2.32.x`；Anthropic、OpenAI-compatible 和 Ollama 只共享构造与事件适配层，
-  一个 Attempt 内不自动切换 Provider。Fake/FunctionModel 测试全程离线。
+- API 路径使用自研 `OpenAiApiAdapter`、标准 HTTP 传输和 SSE/JSON 协议解析器；OpenAI-compatible 与明确选择的本地 Ollama 共用声明式 Runtime 契约，一个 Attempt 内不自动切换 Provider。Anthropic 官方 SDK Provider 保留在既有分析入口，不通过隐藏 Agent Runtime 暴露。
 
-> 迁移边界：上述为 v2.6-A–C 当前实现实况。新规格规划将 API Harness 迁移到声明式 Runtime Definition；Anthropic、OpenAI-compatible 与 Ollama 的协议能力在迁移门通过后按兼容矩阵保留或调整，未完成前不视为已迁移。
+> 迁移边界：旧 `pydantic-api` Runtime、Adapter、模型构造、打包元数据和专属测试已经删除；旧 Run Manifest 中的 Runtime ID 仍按普通字符串读取，不要求对应 Runtime 继续注册。
 
 ### 28. 受控候选 Runtime
 
 ```
-Domain Pack + 代理图 → Pydantic AI Agent
-                         │ render_candidate（白盒 Patch）
+Domain Pack + 代理图 → API/CLI Runtime Adapter
+                         │ Tool Call（白盒 Patch）
                          ▼
 Run/Attempt/Lease 守卫 → 唯一渲染引擎 → JPEG + 参数差异 + 指标
                          │ 真实结果回灌，可再修改
