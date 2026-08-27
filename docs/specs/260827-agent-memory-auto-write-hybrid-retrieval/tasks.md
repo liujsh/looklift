@@ -17,7 +17,7 @@
 
 - [ ] 建立可重建的规范化 searchable text、标签、主题组和 Hash 派生索引。 _需求：需求 3_
 - [ ] 实现 SQLite FTS5 BM25 索引，覆盖中文分词/字符 n-gram、参数路径和字段权重。 _需求：需求 3_
-- [ ] 实现可选本地 embedding 索引和无 embedding 降级。 _需求：需求 3、需求 6_
+- [x] 实现 BGE 本地 embedding 索引、内容 Hash 增量缓存和无 embedding 降级。 _需求：需求 3、需求 6_
 
 ## 4. Hybrid Retriever
 

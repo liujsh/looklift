@@ -57,7 +57,7 @@ class ContextMemoryStore:
         {"profile", "rule", "fact", "preference", "project", "reference", "feedback"}
     )
     SCOPES = frozenset({"global", "project", "run"})
-    DEFAULT_CONFIG = {"enabled": True, "auto_extract": False}
+    DEFAULT_CONFIG = {"enabled": True, "auto_extract": False, "embedding_enabled": True}
 
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
@@ -354,7 +354,7 @@ class ContextMemoryStore:
             )
         )
 
-    def retrieve(self, query: "object") -> tuple[object, ...]:
+    def retrieve(self, query: "object", *, embedding_index: "object | None" = None) -> tuple[object, ...]:
         """使用 HybridMemoryRetriever 召回当前 active 条目。"""
         from .memory_retrieval import HybridMemoryRetriever, RecallQuery
 
@@ -362,6 +362,19 @@ class ContextMemoryStore:
             raise TypeError("query 必须是 RecallQuery")
         if not self.config()["enabled"]:
             return ()
+        if self.config()["embedding_enabled"]:
+            from .memory_embeddings import EmbeddingUnavailable, LocalEmbeddingIndex
+
+            index = embedding_index or LocalEmbeddingIndex(self.root / "vector-index")
+            if not isinstance(index, LocalEmbeddingIndex):
+                raise TypeError("embedding_index 必须是 LocalEmbeddingIndex")
+            try:
+                embeddings = index.sync(self.list())
+                return HybridMemoryRetriever().retrieve(
+                    self.list(), query, embed_query=index.embed_query, embeddings=embeddings
+                )
+            except EmbeddingUnavailable:
+                pass
         return HybridMemoryRetriever().retrieve(self.list(), query)
 
     @staticmethod

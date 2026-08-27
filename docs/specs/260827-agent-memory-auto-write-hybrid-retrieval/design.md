@@ -34,7 +34,7 @@ Agent、LLM 和 Connector 可以直接写入并激活正式 Memory，采用 Open
 
 - `features.json`：规范化文本、标签、主题组、重要度、置信度、使用统计和更新时间；
 - `bm25` 索引：首选 SQLite FTS5；中文采用分词与字符 n-gram 的组合；
-- `embeddings`：可选本地 embedding 缓存，条目更新后按内容 Hash 增量重建。
+- `embeddings`：使用 FastEmbed + ONNX Runtime 加载 `BAAI/bge-small-zh-v1.5` 本地中文向量模型；向量按条目内容 Hash 增量更新并持久化缓存，模型缺失或加载失败时自动降级到 BM25。
 
 embedding 不发送原始路径、EXIF、密钥或未脱敏内容到外部 provider。无 embedding 模型时系统降级为 BM25，不影响主流程。
 

@@ -64,7 +64,7 @@ def test_context_config_defaults_to_no_automatic_extraction(tmp_path, monkeypatc
 
     status, current = api.ROUTES[("GET", "/api/memory/config")]({})
     assert status == 200
-    assert current == {"enabled": True, "auto_extract": False}
+    assert current == {"enabled": True, "auto_extract": False, "embedding_enabled": True}
 
     status, updated = api.ROUTES[("PATCH", "/api/memory/config")](
         _ctx(body={"auto_extract": True})
