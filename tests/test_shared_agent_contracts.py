@@ -105,9 +105,9 @@ def test_manifest_appends_normalized_agent_events_and_resets_attempt_sequence(tm
     assert manifest.last_sequence == 1
 
 
-def test_context_memory_requires_proposal_for_updates(tmp_path):
+def test_context_memory_proposal_remains_optional_audit_path(tmp_path):
     store = ContextMemoryStore(tmp_path)
-    entry = store.put(ContextEntry("fact-a", "fact", "原始事实", "user", confirmed=True))
+    entry = store.put(ContextEntry("fact-a", "fact", "原始事实", "user", state="active"))
     proposal = store.proposal(target_id="fact-a", content="更新事实", base_hash=entry.content_hash)
     store.proposals.confirm(proposal.proposal_id)
     applied = store.apply_proposal(proposal.proposal_id)
@@ -115,12 +115,12 @@ def test_context_memory_requires_proposal_for_updates(tmp_path):
     assert store.get("fact-a").content == "更新事实"
 
 
-def test_unconfirmed_context_never_enters_compiler_snapshot(tmp_path):
+def test_disabled_context_never_enters_compiler_snapshot(tmp_path):
     store = ContextMemoryStore(tmp_path)
-    store.put(ContextEntry("fact-confirmed", "fact", "已确认", "user", confirmed=True))
-    store.put(ContextEntry("fact-proposed", "fact", "未确认", "connector"))
+    store.put(ContextEntry("fact-active", "fact", "已激活", "user", state="active"))
+    store.put(ContextEntry("fact-disabled", "fact", "已停用", "connector", state="disabled"))
 
-    assert [entry.entry_id for entry in store.snapshot()] == ["fact-confirmed"]
+    assert [entry.entry_id for entry in store.snapshot()] == ["fact-active"]
 
 
 def test_plugin_manifest_and_connector_boundaries():

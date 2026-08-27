@@ -265,9 +265,14 @@ def _context_entry_dict(entry: ContextEntry) -> dict:
         "content": entry.content,
         "source": entry.source,
         "scope": entry.scope,
+        "state": entry.state,
+        "project_id": entry.project_id,
+        "run_id": entry.run_id,
+        "expires_at": entry.expires_at,
+        "confidence": entry.confidence,
+        "evidence": entry.evidence,
         "name": entry.name,
         "description": entry.description,
-        "confirmed": entry.confirmed,
         "enabled": entry.enabled,
         "version": entry.version,
         "content_hash": entry.content_hash,
@@ -304,7 +309,7 @@ def _put_memory(ctx: dict) -> tuple[int, dict]:
     if err is not None:
         return err
     try:
-        for key in ("type", "content", "name", "description", "scope"):
+        for key in ("type", "content", "name", "description", "scope", "project_id", "run_id", "expires_at"):
             if key in payload and not isinstance(payload[key], str):
                 raise ValueError(f"Context 字段 {key} 必须是字符串")
         entry = _context_store().user_put(
@@ -314,6 +319,9 @@ def _put_memory(ctx: dict) -> tuple[int, dict]:
             name=payload.get("name", ""),
             description=payload.get("description", ""),
             scope=payload.get("scope", "global"),
+            project_id=payload.get("project_id"),
+            run_id=payload.get("run_id"),
+            expires_at=payload.get("expires_at"),
         )
         return 200, _context_entry_dict(entry)
     except KeyError as exc:

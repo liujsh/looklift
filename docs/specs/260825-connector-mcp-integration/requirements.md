@@ -22,7 +22,7 @@
 #### 验收标准
 
 1. 当 Connector 返回事实、引用或建议时，系统应该封装为带来源和摘要的 Source Packet。
-2. 当 Source Packet 试图写入 Memory、ProjectContext、Skill、Template 或 Reference 时，系统应该先生成 Proposal，未经用户确认不得应用。
+2. 当 Source Packet 试图写入 Memory 或 ProjectContext 时，系统应该先经过 Memory Gate；低风险内容可自动写入，高风险、敏感或冲突内容应该生成 Proposal。Skill、Template 和 Reference 仍须经过 Proposal 生命周期。
 
 ### 需求 3 - Provider 数据边界
 

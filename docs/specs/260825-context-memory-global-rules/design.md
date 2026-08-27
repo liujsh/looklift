@@ -16,13 +16,13 @@ flowchart LR
 
 ## 数据模型
 
-`MemoryEntry` 与 `GlobalRule` 采用统一来源字段：`id`、`name`、`description`、`type`、`scope`、`source`、`confirmed`、`enabled`、`version`、`content_hash`、`created_at`、`updated_at`。Memory 类型首批固定为 `profile`、`fact`、`preference`、`project`、`reference`、`rule`、`feedback`。
+`MemoryEntry` 与 `GlobalRule` 采用统一来源字段：`id`、`name`、`description`、`type`、`scope`、`source`、`state`、`enabled`、`version`、`content_hash`、`created_at`、`updated_at`、`confidence`、`evidence`。不再使用 `confirmed` 作为激活条件；`state=active` 即可进入新 Run。Memory 类型首批固定为 `profile`、`fact`、`preference`、`project`、`reference`、`rule`、`feedback`。
 
 存储采用可审查的 Markdown 条目加索引；设置开关单独保存。所有进入 Run 的条目必须生成不可变快照，删除或修改不会改变历史 Run。
 
 ## Context Compiler 2.0
 
-编译顺序固定为：代码硬策略 → 系统安全与隐私边界 → Capability/Permission Gate → Tool Contract → PHOTO_EDITING 契约 → 已确认全局规则与 Memory → Project Context → StyleProfile → 当前目标 → Skill → Template → Reference。Tool Contract 是后端生成的 Domain Pack 安全边界，任何 Memory、Skill、Template、Connector 或 MCP 内容都不能新增工具、扩大能力或覆盖它。当前目标只能覆盖普通偏好，不能覆盖安全边界。
+编译顺序固定为：代码硬策略 → 系统安全与隐私边界 → Capability/Permission Gate → Tool Contract → PHOTO_EDITING 契约 → active 全局规则与 Memory → Project Context → StyleProfile → 当前目标 → Skill → Template → Reference。Tool Contract 是后端生成的 Domain Pack 安全边界，任何 Memory、Skill、Template、Connector 或 MCP 内容都不能新增工具、扩大能力或覆盖它。当前目标只能覆盖普通偏好，不能覆盖安全边界。
 
 编译结果新增 `source_snapshots`、`used_memory_ids`、`used_rule_ids`、`omitted_sources`、`omission_reasons`、`content_hash` 和 Token 估计。所有结构化用户内容进入独立分区并转义边界字符。
 
@@ -30,7 +30,7 @@ flowchart LR
 
 - `GET/PATCH /api/memory/config`：启用状态、自动提取、模型提取配置。
 - `GET /api/memory/tree`、`GET/PUT/DELETE /api/memory/:id`：条目管理。
-- `POST /api/proposals`、`POST /api/proposals/:id/{confirm,reject,apply}`：跨 Memory、ProjectContext、Skill、Template 和 Reference 的统一提案生命周期。
+- `POST /api/proposals`、`POST /api/proposals/:id/{confirm,reject,apply}`：高风险 Memory/ProjectContext 变更及 Skill、Template、Reference 的统一提案生命周期；低风险自动记忆不以 Proposal 为生效前置条件。
 - `GET/PUT /api/rules`：全局规则管理。
 - 设置页增加“全局规则”“记忆树”“自动提取与隐私”三个分区。
 - Run 详情增加“本次上下文”面板，显示来源、版本、Hash、冲突和省略原因。

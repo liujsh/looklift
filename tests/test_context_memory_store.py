@@ -10,8 +10,8 @@ from looklift.proposal import ProposalError, ProposalService
 
 def test_context_store_restart_restores_entries_config_and_confirmed_snapshot(tmp_path):
     store = ContextMemoryStore(tmp_path)
-    store.put(ContextEntry("rule-natural", "rule", "禁止过度锐化", "user", confirmed=True))
-    store.put(ContextEntry("fact-draft", "fact", "尚未确认", "agent"))
+    store.put(ContextEntry("rule-natural", "rule", "禁止过度锐化", "user", state="active"))
+    store.put(ContextEntry("fact-draft", "fact", "尚未确认", "agent", state="disabled"))
     store.update_config(auto_extract=True)
 
     restored = ContextMemoryStore(tmp_path)
@@ -27,14 +27,14 @@ def test_context_store_rejects_unsafe_entry_ids(tmp_path, entry_id):
     store = ContextMemoryStore(tmp_path)
 
     with pytest.raises(ValueError, match="ID"):
-        store.put(ContextEntry(entry_id, "fact", "内容", "user", confirmed=True))
+        store.put(ContextEntry(entry_id, "fact", "内容", "user", state="active"))
 
     assert list(tmp_path.glob("*.md")) == []
 
 
 def test_disable_creates_new_version_and_keeps_historical_file_auditable(tmp_path):
     store = ContextMemoryStore(tmp_path)
-    original = store.put(ContextEntry("preference-warm", "preference", "偏暖", "user", confirmed=True))
+    original = store.put(ContextEntry("preference-warm", "preference", "偏暖", "user", state="active"))
 
     disabled = store.disable(original.entry_id)
 
@@ -47,7 +47,7 @@ def test_disable_creates_new_version_and_keeps_historical_file_auditable(tmp_pat
 def test_snapshot_redacts_paths_keys_and_exif_without_rewriting_source(tmp_path):
     store = ContextMemoryStore(tmp_path)
     content = "原图 C:\\Users\\name\\photo.raw\napi_key=sk-secret-value\nEXIF: GPS=31,121\n保持自然"
-    store.put(ContextEntry("project-private", "project", content, "user", confirmed=True))
+    store.put(ContextEntry("project-private", "project", content, "user", state="active", project_id="p1"))
 
     snapshot = store.snapshot()[0]
 
@@ -56,6 +56,23 @@ def test_snapshot_redacts_paths_keys_and_exif_without_rewriting_source(tmp_path)
     assert "GPS" not in snapshot.content
     assert snapshot.content.count("[已脱敏]") == 3
     assert store.get("project-private").content == content
+
+
+def test_scope_requires_project_or_run_identity(tmp_path):
+    store = ContextMemoryStore(tmp_path)
+    with pytest.raises(ValueError):
+        store.put(ContextEntry("project-missing", "project", "内容", "agent", scope="project"))
+    with pytest.raises(ValueError):
+        store.put(ContextEntry("run-missing", "fact", "内容", "agent", scope="run"))
+
+    run = store.put(
+        ContextEntry(
+            "run-scoped", "fact", "临时调整", "agent", scope="run",
+            run_id="run-1", expires_at="2999-01-01T00:00:00+00:00",
+        )
+    )
+    assert run.state == "active"
+    assert [item.entry_id for item in store.snapshot()] == ["run-scoped"]
 
 
 def test_persistent_proposal_lifecycle_is_idempotent_and_detects_conflict(tmp_path):
