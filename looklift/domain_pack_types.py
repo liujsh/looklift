@@ -81,3 +81,5 @@ class CompiledDomainPack:
     omitted_sources: tuple[str, ...]
     content_hash: str
     estimated_tokens: int
+    memory_used: tuple[str, ...] = field(default_factory=tuple)
+    memory_omitted: tuple[tuple[str, str], ...] = field(default_factory=tuple)
