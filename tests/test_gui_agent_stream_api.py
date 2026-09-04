@@ -171,6 +171,26 @@ def test_stream_route_requires_session_for_openai(tmp_path, monkeypatch):
     assert "session_id" in body["error"]
 
 
+def test_stream_route_api_mode_rejects_cli_runtime_without_fallback(tmp_path, monkeypatch):
+    """API 模式显式传 CLI Runtime 必须拒绝，不得回退到本机 CLI。"""
+    monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.toml")
+    status, body = api.ROUTES[("POST", "/api/agent/runs/<id>/stream")](
+        {
+            "params": {"id": "run-openai"},
+            "body": json.dumps(_body(
+                run_id="run-openai",
+                runtime_id="claude-code",
+                execution_mode="api",
+                cli_available=True,
+            )).encode(),
+            "content_type": "application/json",
+            "query": {},
+        }
+    )
+    assert status == 400
+    assert "不一致" in body["error"]
+
+
 def test_stream_route_wires_openai_from_session(tmp_path, monkeypatch):
     """openai-api 从会话解析基线/图片/版本，并走装配好的工厂流式执行。"""
     monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.toml")

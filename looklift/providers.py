@@ -87,6 +87,9 @@ class AnthropicProvider:
 
     name = "api"
 
+    def __init__(self, model: str | None = None):
+        self.model = model
+
     def complete(self, system: str, blocks: list[dict], schema: dict) -> dict:
         import anthropic
 
@@ -103,7 +106,7 @@ class AnthropicProvider:
             base_url=cfg["base_url"] or None,
             timeout=config.provider_timeout("api", cfg["timeout"]),
         )
-        model = cfg["model"] or MODEL
+        model = self.model or cfg["model"] or MODEL
         with client.messages.stream(
             model=model,
             max_tokens=16000,

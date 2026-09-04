@@ -28,6 +28,7 @@ class AgentEventKind(StrEnum):
     TOOL_COMPLETED = "tool_completed"
     CANDIDATE_CREATED = "candidate_created"
     USAGE_UPDATED = "usage_updated"
+    CONTEXT_COMPACTION = "context_compaction"
     RUN_FINISHED = "run_finished"
     RUN_FAILED = "run_failed"
 
