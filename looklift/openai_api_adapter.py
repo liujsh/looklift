@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
@@ -9,6 +10,7 @@ from typing import Any, Protocol
 
 from .agent_adapter import AgentEvent, AgentEventKind, AgentRunInput
 from .candidate_runtime import CandidateRuntime
+from .context_budget import prepare_messages
 from .openai_protocol import OpenAiSseParser, build_openai_request
 from .provider_snapshot import ProviderSnapshot
 from .scoped_tool_gateway import ScopedToolGateway, agent_tool_definitions
@@ -114,10 +116,13 @@ class OpenAiApiAdapter:
             tools=agent_tool_definitions(),
         )
         try:
-            for _round in range(8):
+            for _round in range(3):
                 if active.cancelled:
-                    yield event(AgentEventKind.RUN_FINISHED, {"outcome": "cancelled"})
+                    yield event(AgentEventKind.RUN_FAILED, {"code": "cancelled", "message": "API Harness 已取消"})
                     return
+                request["messages"], compaction = prepare_messages(request["messages"])
+                if compaction:
+                    yield event(AgentEventKind.CONTEXT_COMPACTION, compaction)
                 parser = OpenAiSseParser()
                 protocol_events = []
                 async for chunk in self._transport.stream(
@@ -147,7 +152,10 @@ class OpenAiApiAdapter:
                             {"tool_name": name, "call_id": call_id, "result": payload},
                         )
                         if name == "render_candidate" and payload.get("ok") is True:
-                            yield event(AgentEventKind.CANDIDATE_CREATED, payload)
+                            yield event(
+                                AgentEventKind.CANDIDATE_CREATED,
+                                _candidate_payload(runtime, payload),
+                            )
                         if name == "finish_candidate" and payload.get("ok") is True:
                             if payload.get("outcome") == "candidate_ready":
                                 try:
@@ -168,7 +176,10 @@ class OpenAiApiAdapter:
                                         },
                                     )
                                     return
-                            yield event(AgentEventKind.RUN_FINISHED, payload)
+                            yield event(
+                                AgentEventKind.RUN_FINISHED,
+                                _candidate_payload(runtime, payload),
+                            )
                             return
                         request["messages"].extend(
                             [
@@ -195,11 +206,19 @@ class OpenAiApiAdapter:
                             ]
                         )
                 if not tool_called:
-                    break
+                    yield event(
+                        AgentEventKind.RUN_FAILED,
+                        {"code": "missing_terminal", "message": "模型未返回合法终态"},
+                    )
+                    return
             yield event(
                 AgentEventKind.RUN_FAILED,
-                {"code": "missing_terminal", "message": "模型未返回合法终态"},
+                {"code": "tool_loop_limit", "message": "工具循环已达到 3 轮上限"},
             )
+        except TimeoutError:
+            yield event(AgentEventKind.RUN_FAILED, {"code": "timeout", "message": "API Harness 请求超时"})
+        except asyncio.CancelledError:
+            yield event(AgentEventKind.RUN_FAILED, {"code": "cancelled", "message": "API Harness 已取消"})
         except Exception:
             yield event(
                 AgentEventKind.RUN_FAILED,
@@ -218,3 +237,23 @@ class OpenAiApiAdapter:
 
     async def dispose(self, run_id: str) -> None:
         await self.cancel(run_id)
+
+
+def _candidate_payload(runtime: CandidateRuntime, payload: Mapping[str, Any]) -> dict[str, Any]:
+    """把最新候选的白盒参数与差异并入事件，供前端对话状态直接消费。"""
+    merged = dict(payload)
+    latest = getattr(runtime, "latest_candidate", None)
+    if latest is None:
+        return merged
+    analysis = getattr(latest, "analysis", None)
+    changes = getattr(latest, "changes", None)
+    if isinstance(analysis, dict):
+        merged["analysis"] = analysis
+    if changes is not None:
+        merged["changes"] = [
+            item.model_dump(mode="json") if hasattr(item, "model_dump") else dict(item)
+            for item in changes
+        ]
+    if getattr(latest, "candidate_id", None):
+        merged.setdefault("candidate_id", latest.candidate_id)
+    return merged

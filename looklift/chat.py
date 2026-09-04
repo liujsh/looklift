@@ -51,12 +51,17 @@ def chat_step(
     history: list[dict],
     include_metadata: bool,
     provider: VisionProvider | None = None,
+    runtime_id: str | None = None,
+    model: str | None = None,
 ) -> ChatStepResult:
     """执行一次无状态模型建议，并把原始输出限制在本地白盒参数契约内。"""
     selected = provider
     if selected is None:
         try:
-            selected = get_provider("auto")
+            backend = {"claude-code": "cli", "openai-api": "openai_compat"}.get(runtime_id or "", "auto")
+            selected = get_provider(backend)
+            if model and hasattr(selected, "model"):
+                setattr(selected, "model", model)
         except Exception as exc:  # provider 配置错误也必须转换成稳定文案
             raise _map_provider_error(exc) from None
 

@@ -1,9 +1,17 @@
-import type { ChatMessage, ChatStepRequest, ChatStepResponse } from "../../api/types";
+import type { ChatChange, ChatMessage, ChatStepRequest, ChatStepResponse, HarnessEvent, StreamAgentRunInput } from "../../api/types";
 import type { EditorStore } from "../../store/editorStore";
 
 type ChatClient = {
   chatStep(payload: ChatStepRequest, signal?: AbortSignal): Promise<ChatStepResponse>;
+  streamAgentRun?(input: StreamAgentRunInput, onEvent: (event: HarnessEvent) => void, signal?: AbortSignal): Promise<void>;
+  cancelAgentRunStream?(runId: string): Promise<void>;
 };
+
+export type ExecutionSelection = Readonly<{
+  mode: "cli" | "api";
+  runtimeId: string;
+  model: string;
+}>;
 
 export type ChatStopReason = "done" | "no_changes" | "cancelled" | "round_limit" | null;
 export type ChatWorkflowState = Readonly<{
@@ -22,6 +30,7 @@ export type ChatWorkflow = {
   refine(): Promise<void>;
   cancel(): void;
   setIncludeMetadata(include: boolean): void;
+  setExecutionSelection?(selection: ExecutionSelection | null): void;
   restoreMessages(messages: readonly ChatMessage[]): void;
   settlePending(): void;
   dispose(): void;
@@ -29,6 +38,7 @@ export type ChatWorkflow = {
 
 type ChatWorkflowHooks = {
   onMessagesOnly?(exchange: readonly ChatMessage[]): Promise<void> | void;
+  getSessionId?(): string | null;
 };
 
 const INITIAL: ChatWorkflowState = Object.freeze({
@@ -46,6 +56,7 @@ export function createChatWorkflow(
   let activeLockId: number | null = null;
   let requestId = store.getSnapshot().pendingPreview?.requestId ?? 0;
   let includeMetadata = true;
+  let executionSelection: ExecutionSelection | null = null;
   let disposed = false;
   const listeners = new Set<() => void>();
 
@@ -68,15 +79,34 @@ export function createChatWorkflow(
     const user: ChatMessage = { role: "user", content: message };
     publish({ phase: "requesting", error: null, round, stopReason: null });
     let response: ChatStepResponse;
+    const runId = `run-${activeRequestId}`;
     try {
-      response = await client.chatStep({
-        path: editor.imagePath,
-        current_analysis: editor.displayAnalysis,
-        factor: editor.factor,
-        message,
-        history: [...state.messages],
-        include_metadata: includeMetadata,
-      }, active.signal);
+      if (executionSelection?.mode === "api" && client.streamAgentRun) {
+        response = await streamChatStep(client, {
+          runId,
+          attemptId: `attempt-${activeRequestId}`,
+          runtimeId: executionSelection.runtimeId,
+          executionMode: "api",
+          model: executionSelection.model,
+          instructions: "只生成白盒候选，禁止正式提交。",
+          userMessage: message,
+          sessionId: hooks.getSessionId?.() ?? null,
+        }, active.signal);
+      } else {
+        response = await client.chatStep({
+          path: editor.imagePath,
+          current_analysis: editor.displayAnalysis,
+          factor: editor.factor,
+          message,
+          history: [...state.messages],
+          include_metadata: includeMetadata,
+          ...(executionSelection ? {
+            execution_mode: executionSelection.mode,
+            runtime_id: executionSelection.runtimeId,
+            model: executionSelection.model,
+          } : {}),
+        }, active.signal);
+      }
     } catch (reason) {
       store.endAiRequest(activeRequestId);
       if (disposed) return null;
@@ -183,11 +213,16 @@ export function createChatWorkflow(
     },
     cancel() {
       if (!controller) return;
+      const runId = activeLockId !== null ? `run-${activeLockId}` : null;
       controller.abort();
+      if (runId) void client.cancelAgentRunStream?.(runId);
       if (activeLockId !== null) store.endAiRequest(activeLockId);
     },
     setIncludeMetadata(include) {
       includeMetadata = include;
+    },
+    setExecutionSelection(selection) {
+      executionSelection = selection;
     },
     restoreMessages(messages) {
       publish({
@@ -207,5 +242,63 @@ export function createChatWorkflow(
       activeLockId = null;
       listeners.clear();
     },
+  };
+}
+
+async function streamChatStep(
+  client: ChatClient,
+  input: StreamAgentRunInput,
+  signal?: AbortSignal,
+): Promise<ChatStepResponse> {
+  if (!client.streamAgentRun) throw new Error("当前客户端不支持 SSE 流式运行");
+  let explanation = "";
+  let analysis: ChatStepResponse["analysis"] | null = null;
+  let changes: ChatChange[] = [];
+  let limitations: string[] = [];
+  let done = false;
+  let provider = input.model;
+  let failed: string | null = null;
+  await client.streamAgentRun(input, (event) => {
+    if (event.type === "text_delta") {
+      const text = typeof event.payload.text === "string" ? event.payload.text : "";
+      explanation += text;
+    } else if (event.type === "run_started") {
+      if (typeof event.payload.provider === "string") provider = event.payload.provider;
+    } else if (event.type === "candidate_created" || event.type === "run_finished") {
+      if (event.payload.analysis && typeof event.payload.analysis === "object") {
+        analysis = event.payload.analysis as ChatStepResponse["analysis"];
+      }
+      if (Array.isArray(event.payload.changes)) {
+        changes = event.payload.changes as ChatChange[];
+      }
+      if (typeof event.payload.summary === "string" && event.payload.summary) {
+        explanation = event.payload.summary;
+      }
+      if (Array.isArray(event.payload.limitations)) {
+        limitations = event.payload.limitations.filter((item): item is string => typeof item === "string");
+      }
+      if (event.type === "run_finished") {
+        done = event.payload.outcome === "no_change_needed" || event.payload.outcome === "candidate_ready";
+      }
+    } else if (event.type === "run_failed") {
+      const code = typeof event.payload.code === "string" ? event.payload.code : "provider_failed";
+      const message = typeof event.payload.message === "string" ? event.payload.message : "AI 服务调用失败";
+      failed = code === "cancelled" ? "cancelled" : message;
+    }
+  }, signal);
+  if (failed === "cancelled") throw new DOMException("aborted", "AbortError");
+  if (failed) throw new Error(failed);
+  return {
+    analysis: analysis ?? ({} as ChatStepResponse["analysis"]),
+    changes,
+    rejected: [],
+    explanation: explanation || "本轮已完成。",
+    limitations,
+    approximation: "",
+    manual_steps: [],
+    done,
+    provider,
+    proxy_count: 1,
+    metadata_sent: false,
   };
 }

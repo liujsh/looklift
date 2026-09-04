@@ -41,15 +41,18 @@ from ..builtin_runtimes import builtin_runtime_registry
 from ..cli_runtime_detection import detect_cli_runtime
 from ..context_memory import ContextEntry, ContextMemoryStore
 from ..capabilities import CapabilityGrant
-from ..plugin_registry import PluginManifest, PluginManifestError, PluginRegistry
 from ..credential_store import CredentialStoreError, DpapiCredentialStore
+from ..execution_selection import ExecutionSelectionError, resolve_runtime_id
+from ..plugin_registry import PluginManifest, PluginManifestError, PluginRegistry
 from ..provider_config_store import ProviderConfigStore
 from ..provider_detection import detect_provider
+from ..runtime_settings import load_runtime_settings, save_runtime_settings
 from ..proposal import ProposalError
 from ..run_manifest import ManifestError, RunManifestRepository, hash_text
 from ..library_store import LibraryStore
 from ..render import contract as render_contract
 from ..session_store import DatabaseRecoveryRequired, SessionSnapshot, SessionStore
+from . import agent_stream
 from . import lookstore, template_catalog
 from . import tasks
 from . import upload
@@ -143,6 +146,7 @@ def _get_runtimes(_ctx: dict) -> tuple[int, dict]:
 
 
 def _runtime_payload(definition, detection=None) -> dict:
+    settings = load_runtime_settings()
     payload = {
         "id": definition.runtime_id,
         "kind": definition.kind,
@@ -152,6 +156,9 @@ def _runtime_payload(definition, detection=None) -> dict:
         "models": list(definition.models),
         "display_name": definition.display_name,
         "support_level": definition.support_level.value,
+        "enabled": bool(settings["enabled"].get(definition.runtime_id, True)),
+        "is_default": settings.get("default_runtime_id") == definition.runtime_id,
+        "default_model": settings.get("default_model") if settings.get("default_runtime_id") == definition.runtime_id else None,
     }
     if detection is not None:
         payload.update(
@@ -175,12 +182,44 @@ def _detect_runtimes(_ctx: dict) -> tuple[int, dict]:
     return 200, {"runtimes": values}
 
 
+def _patch_runtime_settings(ctx: dict) -> tuple[int, dict]:
+    runtime_id = str(ctx.get("params", {}).get("id", ""))
+    try:
+        definition = builtin_runtime_registry().get(runtime_id)
+    except Exception:
+        definition = None
+    if definition is None or definition.kind != "cli":
+        return 404, {"error": "未找到 CLI Runtime"}
+    try:
+        payload = json.loads(ctx.get("body") or b"{}")
+    except (TypeError, ValueError):
+        return 400, {"error": "Runtime 设置格式无效"}
+    settings = load_runtime_settings()
+    if "enabled" in payload:
+        settings["enabled"][runtime_id] = bool(payload["enabled"])
+    if payload.get("default") is True:
+        model = payload.get("model")
+        if model is not None and str(model) not in definition.models:
+            return 400, {"error": "默认模型不属于该 CLI"}
+        settings["default_runtime_id"] = runtime_id
+        settings["default_model"] = str(model) if model is not None else None
+    if settings.get("default_runtime_id") == runtime_id and settings["enabled"].get(runtime_id) is False:
+        settings["default_runtime_id"] = None
+        settings["default_model"] = None
+    return 200, save_runtime_settings(settings)
+
+
 def _provider_store() -> ProviderConfigStore:
     root = config.CONFIG_PATH.parent
     return ProviderConfigStore(
         root / "providers.json",
         credentials=DpapiCredentialStore(root / "credentials"),
     )
+
+
+def _provider_configured() -> bool:
+    """只看本地配置文件是否存在，不触发凭据存储初始化。"""
+    return (config.CONFIG_PATH.parent / "providers.json").is_file()
 
 
 def _get_provider_config(_ctx: dict) -> tuple[int, dict]:
@@ -463,6 +502,116 @@ def _resume_agent_run(ctx: dict) -> tuple[int, dict]:
 def reconcile_agent_runs_on_startup() -> None:
     """应用启动时执行一次；普通列表请求不得中断正在运行的 Attempt。"""
     _run_manifests().reconcile_startup()
+
+
+def _stream_agent_run(ctx: dict):
+    """`POST /api/agent/runs/<id>/stream`：SSE 流式执行一次 Attempt。
+
+    返回 `(status, content_type, streamer)`；`streamer` 是
+    `(write: Callable[[bytes], None]) -> None`，由 server.py 按流式出口写入。
+    """
+    try:
+        body = json.loads((ctx.get("body") or b"{}").decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return 400, {"error": "请求体必须是 JSON"}
+    if not isinstance(body, dict):
+        return 400, {"error": "请求体必须是 JSON 对象"}
+    execution_mode = body.get("execution_mode")
+    runtime_id = body.get("runtime_id")
+    if execution_mode is not None or runtime_id == "openai-api" or runtime_id in (None, ""):
+        try:
+            runtime_id = resolve_runtime_id(
+                execution_mode=str(execution_mode or "api"),
+                runtime_id=str(runtime_id) if runtime_id not in (None, "") else None,
+                cli_available=bool(body.get("cli_available", False)),
+                provider_configured=_provider_configured(),
+                registry=builtin_runtime_registry(),
+            )
+        except (ExecutionSelectionError, ValueError) as exc:
+            return 400, {"error": str(exc)}
+    elif not isinstance(runtime_id, str) or not runtime_id.strip():
+        return 400, {"error": "runtime_id 必须是非空字符串"}
+
+    factories = None
+    proxy_jpeg = None
+    if runtime_id == "openai-api":
+        session = _stream_session_context(body)
+        if isinstance(session, dict):  # 错误响应
+            return session["status"], {"error": session["error"]}
+        image_path, baseline_analysis, base_version_id = session
+        factories = {
+            "openai-api": _wire_openai_factory(
+                image_path=image_path,
+                baseline_analysis=baseline_analysis,
+                base_version_id=base_version_id,
+            )
+        }
+        if not body.get("proxy_jpeg"):
+            proxy_jpeg = _proxy_jpeg_from_session(image_path, baseline_analysis)
+            if proxy_jpeg is None:
+                return 409, {"error": "无法从会话生成代理图"}
+    try:
+        run_input = agent_stream.build_run_input(body, proxy_jpeg=proxy_jpeg)
+    except ValueError as exc:
+        return 400, {"error": str(exc)}
+    streamer = agent_stream.make_streamer(
+        runtime_id, run_input, factories=factories
+    )
+    return 200, "text/event-stream", streamer
+
+
+def _stream_session_context(body: dict):
+    """解析会话事实，返回 `(image_path, baseline_analysis, base_version_id)`。
+
+    返回 dict 表示错误响应 `{"status", "error"}`。
+    """
+    session_id = body.get("session_id")
+    if not isinstance(session_id, str) or not session_id.strip():
+        return {"status": 400, "error": "openai-api 运行必须携带 session_id"}
+    try:
+        session = SessionStore().load(session_id)
+    except (KeyError, DatabaseRecoveryRequired) as exc:
+        return {"status": 404, "error": str(exc)}
+    if not session.image_path or not session.current_analysis:
+        return {"status": 409, "error": "会话缺少成片或基线参数，无法启动 Attempt"}
+    return (
+        session.image_path,
+        session.current_analysis,
+        session.current_version_id,
+    )
+
+
+def _wire_openai_factory(*, image_path, baseline_analysis, base_version_id):
+    """绑定 ProviderConfigStore 与会话事实，生成真实 openai-api Adapter 工厂。"""
+    from ..agent_assembly import wire_openai_adapter_factory
+
+    return wire_openai_adapter_factory(
+        _provider_store(),
+        baseline_analysis=baseline_analysis,
+        image_path=image_path,
+        base_version_id=base_version_id,
+    )
+
+
+def _proxy_jpeg_from_session(image_path: str, analysis: dict) -> bytes | None:
+    """用会话成片生成 2048px 无 EXIF 代理图，失败返回 None。"""
+    try:
+        with ai_proxy.prepare_ai_proxy(
+            Path(image_path),
+            analysis=analysis,
+            factor=1.0,
+            include_metadata=False,
+        ) as proxy:
+            return proxy.path.read_bytes()
+    except Exception:
+        return None
+
+
+def _cancel_agent_run(ctx: dict) -> tuple[int, dict]:
+    """`POST /api/agent/runs/<id>/cancel`：请求取消正在流式执行的 Attempt。"""
+    run_id = ctx["params"]["id"]
+    agent_stream.request_cancel(run_id)
+    return 202, {"ok": True, "cancelled": run_id}
 
 
 def _validate_image_path(path: Any) -> "tuple[Path, None] | tuple[None, tuple[int, dict]]":
@@ -1036,6 +1185,25 @@ def _chat_step(ctx: dict) -> tuple[int, dict]:
     factor, factor_error = _validate_factor(payload["factor"])
     if factor_error is not None:
         return factor_error
+    runtime_id = payload.get("runtime_id")
+    model = payload.get("model")
+    execution_mode = payload.get("execution_mode")
+    if runtime_id is not None:
+        if not isinstance(runtime_id, str) or not runtime_id.strip():
+            return 400, {"error": "runtime_id 必须是非空字符串"}
+        try:
+            runtime = builtin_runtime_registry().get(runtime_id)
+        except Exception:
+            return 400, {"error": "所选 Runtime 不存在"}
+        settings = load_runtime_settings()
+        if settings["enabled"].get(runtime_id, True) is False:
+            return 409, {"error": "所选 Runtime 已停用，请重新选择入口"}
+        if execution_mode is not None and execution_mode not in {"cli", "api"}:
+            return 400, {"error": "execution_mode 必须是 cli 或 api"}
+        if model is not None and (not isinstance(model, str) or not model.strip()):
+            return 400, {"error": "model 必须是非空字符串"}
+        if model and runtime.models and model not in runtime.models:
+            return 400, {"error": "所选模型不属于该 Runtime"}
     try:
         result = chat.chat_step(
             image_path=image_path,
@@ -1044,6 +1212,8 @@ def _chat_step(ctx: dict) -> tuple[int, dict]:
             message=message.strip(),
             history=history,
             include_metadata=include_metadata,
+            runtime_id=runtime_id,
+            model=model,
         )
     except chat.ChatStepError as exc:
         status = {"timeout": 504, "cancelled": 499, "image_error": 400}.get(exc.code, 502)
@@ -1512,6 +1682,7 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/config"): _get_config,
     ("GET", "/api/runtimes"): _get_runtimes,
     ("POST", "/api/runtimes/detect"): _detect_runtimes,
+    ("PATCH", "/api/runtimes/<id>/settings"): _patch_runtime_settings,
     ("GET", "/api/providers/config"): _get_provider_config,
     ("POST", "/api/providers/config"): _post_provider_config,
     ("DELETE", "/api/providers/config"): _delete_provider_config,
@@ -1519,6 +1690,8 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/agent/runs/recoverable"): _get_recoverable_agent_runs,
     ("GET", "/api/agent/runs/<id>"): _get_agent_run,
     ("POST", "/api/agent/runs/<id>/resume"): _resume_agent_run,
+    ("POST", "/api/agent/runs/<id>/stream"): _stream_agent_run,
+    ("POST", "/api/agent/runs/<id>/cancel"): _cancel_agent_run,
     ("GET", "/api/plugins"): _get_plugins,
     ("POST", "/api/plugins/<id>/grant"): _grant_plugin,
     ("DELETE", "/api/plugins/<id>/grant"): _revoke_plugin,

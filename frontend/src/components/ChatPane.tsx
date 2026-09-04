@@ -1,6 +1,6 @@
 import { useSyncExternalStore, useState } from "react";
 import type { LookliftClient } from "../api/client";
-import type { Analysis, TemplateCard } from "../api/types";
+import type { Analysis, RuntimeSummary, TemplateCard } from "../api/types";
 import type { ChatWorkflow } from "../features/chat/chatWorkflow";
 import type { SessionCoordinator } from "../features/sessions/sessionCoordinator";
 import type { RenderStatus } from "../store/editorStore";
@@ -16,6 +16,7 @@ type ChatPaneProps = {
   renderStatus?: RenderStatus;
   client?: LookliftClient;
   onHome?(): void;
+  onOpenSettings?(): void;
 };
 
 export type TemplatePromptAttachment = { template: TemplateCard; analysis: Analysis };
@@ -54,9 +55,11 @@ export function ChatPane({
   enabled,
   workflow,
   coordinator,
+  providerLabel,
   renderStatus = "ready",
   client,
   onHome,
+  onOpenSettings,
 }: ChatPaneProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [input, setInput] = useState("");
@@ -68,11 +71,25 @@ export function ChatPane({
   const [templateLoading, setTemplateLoading] = useState(false);
   const [attachment, setAttachment] = useState<TemplatePromptAttachment | null>(null);
   const [skillAttachment, setSkillAttachment] = useState<SkillAttachment | null>(null);
+  const [runtimePickerOpen, setRuntimePickerOpen] = useState(false);
+  const [runtimeOptions, setRuntimeOptions] = useState<RuntimeSummary[]>([]);
+  const [selectedRuntime, setSelectedRuntime] = useState<{ id: string; name: string; model: string; kind: "cli" | "api" } | null>(null);
+  const [pickerKind, setPickerKind] = useState<"cli" | "api">("cli");
   const skills: SkillAttachment[] = [
     { id: "abstract-collage", name: "抽象风格拼接", description: "生成照片衍生的抽象拼接参考" },
     { id: "zine-layout", name: "Zine / 小志排版", description: "整理照片叙事与版式建议" },
     { id: "film-look", name: "胶片质感", description: "模拟胶片色彩、颗粒与对比" },
   ];
+  const loadRuntimeOptions = async (kind: "cli" | "api" = pickerKind) => {
+    if (!client) return;
+    try {
+      setRuntimeOptions(
+        (await client.runtimes()).filter((item) => item.enabled !== false && item.available !== false && (item.kind === "api" ? "api" : "cli") === kind),
+      );
+    } catch { setRuntimeOptions([]); }
+  };
+  const canSend = Boolean(selectedRuntime?.id && selectedRuntime.model);
+  const sendHint = canSend ? null : "请先选择可用入口和模型";
   const state = useSyncExternalStore(
     workflow?.subscribe ?? emptySubscribe,
     workflow?.getSnapshot ?? (() => EMPTY),
@@ -181,6 +198,7 @@ export function ChatPane({
         <form className="chat-composer" onSubmit={(event) => {
           event.preventDefault();
           if (!workflow || !input.trim()) return;
+          if (!canSend) { setActionError(sendHint); return; }
           const value = input;
           setInput("");
           void act(async () => {
@@ -205,10 +223,13 @@ export function ChatPane({
           <button type="button" aria-label="添加技能或模板" title="添加技能或模板" onClick={() => { setPickerOpen((current) => !current); setPickerMode(null); }}>
             <Icon name="add" />
           </button>
+          <button type="button" className="chat-runtime-trigger" aria-label="选择模型" onClick={() => { setRuntimePickerOpen((current) => !current); void loadRuntimeOptions(pickerKind); }}><span aria-hidden="true">{selectedRuntime?.kind === "api" ? "◇" : "◉"}</span>{selectedRuntime ? `${selectedRuntime.name} · ${selectedRuntime.model}` : "未配置"}</button>
+          {runtimePickerOpen && <div className="chat-template-picker chat-runtime-picker" role="dialog" aria-label="选择模型"><strong>选择入口与模型</strong><div className="chat-runtime-modes" role="tablist"><button type="button" role="tab" aria-selected={pickerKind === "cli"} onClick={() => { setPickerKind("cli"); void loadRuntimeOptions("cli"); }}>本机 CLI</button><button type="button" role="tab" aria-selected={pickerKind === "api"} onClick={() => { setPickerKind("api"); void loadRuntimeOptions("api"); }}>API 提供商</button></div>{runtimeOptions.length === 0 && <span>暂无可用入口，请先在设置中配置。</span>}{runtimeOptions.map((runtime) => <div key={runtime.id}><button type="button" disabled={runtime.models.length === 0} onClick={() => { const model = runtime.models[0] ?? ""; const kind: "cli" | "api" = runtime.kind === "api" ? "api" : "cli"; const next = { id: runtime.id, name: runtime.display_name, model, kind }; setSelectedRuntime(next); workflow?.setExecutionSelection?.(model ? { mode: kind, runtimeId: runtime.id, model } : null); setRuntimePickerOpen(false); }}>{runtime.display_name} · {runtime.models.length} 个模型</button>{runtime.models.slice(0, 8).map((model) => <button type="button" key={`${runtime.id}-${model}`} onClick={() => { const kind: "cli" | "api" = runtime.kind === "api" ? "api" : "cli"; const next = { id: runtime.id, name: runtime.display_name, model, kind }; setSelectedRuntime(next); workflow?.setExecutionSelection?.({ mode: kind, runtimeId: runtime.id, model }); setRuntimePickerOpen(false); }}>　{model}</button>)}</div>)}<button type="button" onClick={() => { setRuntimePickerOpen(false); onOpenSettings?.(); }}>设置</button></div>}
           <textarea value={input} onChange={(event) => setInput(event.currentTarget.value)} placeholder="说说你想怎么调整…" rows={2} disabled={!workflow || state.phase === "requesting"} />
-          <button type="submit" className="send" aria-label="发送" disabled={!workflow || !input.trim() || state.phase === "requesting"}>
+          <button type="submit" className="send" aria-label="发送" disabled={!workflow || !input.trim() || !canSend || state.phase === "requesting"} title={sendHint ?? undefined}>
             <Icon name="arrow-up" />
           </button>
+          <small className="chat-privacy-summary">1 张安全代理图 · 供应商：{selectedRuntime?.name ?? providerLabel ?? "未选择"} · 发送元数据</small>
         </form>
       </>}
     </aside>

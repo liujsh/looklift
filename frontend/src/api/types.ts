@@ -163,6 +163,9 @@ export type ChatStepRequest = {
   message: string;
   history: ChatMessage[];
   include_metadata: boolean;
+  execution_mode?: "cli" | "api";
+  runtime_id?: string;
+  model?: string;
 };
 
 export type ChatStepResponse = {
@@ -347,6 +350,9 @@ export type RuntimeSummary = {
   authenticated?: boolean;
   version?: string | null;
   error?: string | null;
+  enabled?: boolean;
+  is_default?: boolean;
+  default_model?: string | null;
 };
 
 export type ProviderSettings = {
@@ -412,6 +418,44 @@ export type AgentCandidatesResponse = {
   candidates: AgentCandidate[];
   latest_candidate_id: string | null;
   review: { can_confirm: boolean; confirmed_candidate_id: string | null };
+};
+
+/**
+ * Daemon SSE 出口统一 Harness 事件（对齐 AgentEventKind 的有限集合）。
+ * `type` 取值为 `run_started` / `text_delta` / `tool_started` /
+ * `tool_completed` / `candidate_created` / `usage_updated` /
+ * `context_compaction` / `run_finished` / `run_failed`。
+ */
+export type HarnessEventType =
+  | "run_started"
+  | "text_delta"
+  | "tool_started"
+  | "tool_completed"
+  | "candidate_created"
+  | "usage_updated"
+  | "context_compaction"
+  | "run_finished"
+  | "run_failed";
+
+export type HarnessEvent = {
+  type: HarnessEventType;
+  run_id: string;
+  attempt_id: string;
+  sequence: number;
+  payload: Record<string, unknown>;
+};
+
+export type StreamAgentRunInput = {
+  runId: string;
+  attemptId: string;
+  runtimeId: string;
+  executionMode: "cli" | "api";
+  cliAvailable?: boolean;
+  model: string;
+  instructions: string;
+  userMessage: string;
+  proxyJpegBase64?: string;
+  sessionId?: string | null;
 };
 
 export type ContextEntryType = "profile" | "rule" | "fact" | "preference" | "project" | "reference" | "feedback";

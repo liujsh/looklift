@@ -26,6 +26,7 @@ type EditorShellProps = {
   coordinator?: SessionCoordinator | null;
   workflow?: ChatWorkflow | null;
   onHome?(): void;
+  onOpenSettings?(): void;
 };
 
 export function EditorShell({
@@ -38,6 +39,7 @@ export function EditorShell({
   coordinator: providedCoordinator,
   workflow: providedWorkflow,
   onHome,
+  onOpenSettings,
 }: EditorShellProps) {
   const editor = useEditorState(store);
   const [exporting, setExporting] = useState(false);
@@ -64,6 +66,7 @@ export function EditorShell({
   const ownedWorkflow = useMemo(
     () => providedWorkflow === undefined && client ? createChatWorkflow(client, store, {
       onMessagesOnly: (exchange) => sessionCoordinator?.recordMessages(exchange),
+      getSessionId: () => sessionCoordinator?.getSessionId() ?? null,
     }) : null,
     [client, providedWorkflow, sessionCoordinator, store],
   );
@@ -236,6 +239,7 @@ export function EditorShell({
           renderStatus={editor.render.status}
           client={client}
           onHome={onHome}
+          onOpenSettings={onOpenSettings}
         />
         <CanvasPane
           active={active}

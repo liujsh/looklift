@@ -34,6 +34,8 @@ import type {
   TaskResult,
   AgentRunManifest,
   AgentCandidatesResponse,
+  HarnessEvent,
+  StreamAgentRunInput,
   RuntimeSummary,
   ProviderSettings,
   PluginSummary,
@@ -48,6 +50,32 @@ type FetchLike = typeof fetch;
 type InvokeLike = <T>(command: string) => Promise<T>;
 
 const defaultFetch: FetchLike = (...args) => globalThis.fetch(...args);
+
+/**
+ * 解析 Daemon SSE 出口的一个数据块（不含末尾 `\n\n`），返回统一 Harness
+ * 事件；无法解析或不是 harness 帧时返回 `null`。纯函数，可离线测试。
+ */
+export function parseSseBlock(block: string): HarnessEvent | null {
+  const lines = block.split("\n");
+  let dataLine = "";
+  for (const line of lines) {
+    if (line.startsWith("event:")) {
+      if (line.slice("event:".length).trim() !== "harness") return null;
+    } else if (line.startsWith("data:")) {
+      dataLine = line.slice("data:".length).trim();
+    }
+  }
+  if (!dataLine) return null;
+  try {
+    const raw = JSON.parse(dataLine) as HarnessEvent;
+    if (typeof raw?.type !== "string" || typeof raw?.sequence !== "number") {
+      return null;
+    }
+    return raw;
+  } catch {
+    return null;
+  }
+}
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number | null = null) {
@@ -94,6 +122,10 @@ export class LookliftClient {
   async detectRuntimes(): Promise<RuntimeSummary[]> {
     const result = await this.json<{ runtimes: RuntimeSummary[] }>("/api/runtimes/detect", { method: "POST" });
     return result.runtimes;
+  }
+
+  async updateRuntimeSettings(id: string, payload: { enabled?: boolean; default?: boolean; model?: string }): Promise<{ enabled: Record<string, boolean>; default_runtime_id: string | null; default_model: string | null }> {
+    return this.json(`/api/runtimes/${encodeURIComponent(id)}/settings`, { method: "PATCH", body: JSON.stringify(payload) });
   }
 
   providerConfig(): Promise<ProviderSettings> {
@@ -345,6 +377,59 @@ export class LookliftClient {
 
   cancelAgentRun(id: string): Promise<AgentRunManifest> {
     return this.json(`/api/agent/runs/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+  }
+
+  /**
+   * 通过 Daemon SSE 出口流式执行一次 Attempt，把统一 Harness 事件逐帧
+   * 交给 `onEvent`；遇终态（`run_finished`/`run_failed`）或连接断开时返回。
+   */
+  async streamAgentRun(
+    input: StreamAgentRunInput,
+    onEvent: (event: HarnessEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const response = await this.request(
+      `/api/agent/runs/${encodeURIComponent(input.runId)}/stream`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          run_id: input.runId,
+          attempt_id: input.attemptId,
+          runtime_id: input.runtimeId,
+          execution_mode: input.executionMode,
+          cli_available: input.cliAvailable ?? false,
+          model: input.model,
+          session_id: input.sessionId ?? null,
+          domain_pack: {
+            instructions: input.instructions,
+            user_message: input.userMessage,
+          },
+          proxy_jpeg: input.proxyJpegBase64,
+        }),
+        signal,
+      },
+    );
+    if (!response.body) throw new ApiError("本地引擎未返回流式响应");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let boundary: number;
+      while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+        const block = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        const parsed = parseSseBlock(block);
+        if (parsed) onEvent(parsed);
+      }
+    }
+  }
+
+  /** 请求取消正在流式执行的 Attempt（Daemon SSE 出口）。 */
+  async cancelAgentRunStream(runId: string): Promise<void> {
+    await this.request(`/api/agent/runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" });
   }
 
   agentCandidates(id: string): Promise<AgentCandidatesResponse> {

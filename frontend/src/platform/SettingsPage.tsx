@@ -42,6 +42,8 @@ export function SettingsPage({ client, onBack }: { client: LookliftClient; onBac
   const [runtimes, setRuntimes] = useState<RuntimeSummary[]>([]);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("providers");
   const [diagnosticBusy, setDiagnosticBusy] = useState(false);
+  const [modelRuntime, setModelRuntime] = useState<RuntimeSummary | null>(null);
+  const [apiEditorOpen, setApiEditorOpen] = useState(false);
 
   const loadContext = async () => {
     const tree = await client.contextTree();
@@ -81,6 +83,17 @@ export function SettingsPage({ client, onBack }: { client: LookliftClient; onBac
     setStatus("正在重新扫描 Runtime…");
     try { setRuntimes(await client.detectRuntimes()); setStatus("Runtime 扫描完成"); }
     catch (reason) { setStatus(reason instanceof Error ? reason.message : "Runtime 扫描失败"); }
+  };
+
+  const updateRuntime = async (runtime: RuntimeSummary, payload: { enabled?: boolean; default?: boolean; model?: string }) => {
+    try {
+      if (typeof client.updateRuntimeSettings !== "function") {
+        throw new Error("客户端版本较旧，请重启 LookLift 后再操作");
+      }
+      await client.updateRuntimeSettings(runtime.id, payload);
+      setRuntimes(await client.runtimes());
+      setStatus(payload.default ? `已选择 ${runtime.display_name}` : payload.enabled === false ? `${runtime.display_name} 已停用` : `${runtime.display_name} 已启用`);
+    } catch (reason) { setStatus(reason instanceof Error ? reason.message : "CLI 设置更新失败"); }
   };
 
   const deleteProvider = async () => {
@@ -158,8 +171,9 @@ export function SettingsPage({ client, onBack }: { client: LookliftClient; onBac
       <div className="provider-mode" role="tablist"><button type="button" role="tab" aria-selected={runtimeMode === "cli"} onClick={() => setRuntimeMode("cli")}>本机 CLI</button><button type="button" role="tab" aria-selected={runtimeMode === "api"} onClick={() => setRuntimeMode("api")}>API 提供商</button></div>
       {runtimeMode === "cli" ? <div className="runtime-panel" role="tabpanel">
         <div className="runtime-titlebar"><div><h3>你的 CLI <span>({cliRuntimes.length})</span></h3><p>已检测的入口会共享同一套候选版本与安全校验。</p></div><button type="button" onClick={() => void rescanRuntimes()}>↻ 重新扫描</button></div>
-        <div className="runtime-list">{cliRuntimes.map((runtime, index) => <RuntimeCard key={runtime.id} runtime={runtime} primary={index === 0} />)}{cliRuntimes.length === 0 && <p className="runtime-empty">没有检测到本机 CLI。安装后点击“重新扫描”。</p>}</div>
+        <div className="runtime-list">{cliRuntimes.map((runtime, index) => <RuntimeCard key={runtime.id} runtime={runtime} primary={index === 0} onToggle={(enabled) => void updateRuntime(runtime, { enabled })} onModels={() => setModelRuntime(runtime)} onDefault={(model) => void updateRuntime(runtime, { default: true, model })} />)}{cliRuntimes.length === 0 && <p className="runtime-empty">没有检测到本机 CLI。安装后点击“重新扫描”。</p>}</div>
       </div> : <div className="provider-panel" role="tabpanel">
+        <div className="provider-summary"><div><strong>{providerId === "ollama" ? "本机 Ollama" : "OpenAI / 兼容接口"}</strong><p>{provider.model || "尚未配置模型"}</p></div><button type="button" onClick={() => setApiEditorOpen(true)}>编辑配置</button></div>
         <div className="provider-capsules" aria-label="Provider 选择"><button type="button" aria-pressed={providerId === "openai"} onClick={() => setProviderId("openai")}>OpenAI / 兼容接口</button><button type="button" aria-pressed={providerId === "ollama"} onClick={() => setProviderId("ollama")}>本机 Ollama</button></div>
         <form className="settings-provider-form" onSubmit={saveProvider}>
           <div className="provider-form-heading"><div><h3>{providerId === "ollama" ? "Ollama API" : "OpenAI API"}</h3><p>{providerId === "ollama" ? "仅连接本机回环地址，不经过外部代理。" : "适用于 OpenAI 和采用 OpenAI 协议的 HTTPS 提供商。"}</p></div><span>{providerId === "ollama" ? "本机" : "远程"}</span></div>
@@ -172,6 +186,8 @@ export function SettingsPage({ client, onBack }: { client: LookliftClient; onBac
           <div className="provider-form-actions"><button type="button" onClick={() => void detectProvider()}>测试连接</button><button className="provider-delete" type="button" onClick={() => void deleteProvider()}>删除配置</button><button className="provider-save" type="submit">保存模型配置</button></div>
         </form>
       </div>}
+      {modelRuntime && <div className="settings-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModelRuntime(null); }}><section className="settings-modal" role="dialog" aria-modal="true" aria-label={`${modelRuntime.display_name} 模型`}><header><h3>{modelRuntime.display_name}</h3><button type="button" onClick={() => setModelRuntime(null)}>×</button></header><p>已发现 {modelRuntime.models.length} 个模型</p><div className="model-list">{modelRuntime.models.length ? modelRuntime.models.map((model) => <button type="button" key={model} data-selected={model === modelRuntime.default_model} onClick={() => { void updateRuntime(modelRuntime, { default: true, model }); setModelRuntime(null); }}>{model}{model === modelRuntime.default_model ? " ✓" : ""}</button>) : <p>暂未发现模型，请重新扫描。</p>}</div></section></div>}
+      {apiEditorOpen && <div className="settings-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setApiEditorOpen(false); }}><section className="settings-modal" role="dialog" aria-modal="true" aria-label="编辑 API 配置"><header><h3>编辑模型配置</h3><button type="button" onClick={() => setApiEditorOpen(false)}>×</button></header><form onSubmit={async (event) => { await saveProvider(event); setApiEditorOpen(false); }}><label>Base URL<input value={provider.base_url} onChange={(event) => updateProvider({ base_url: event.target.value })} /></label><label>模型<input value={provider.model} onChange={(event) => updateProvider({ model: event.target.value })} /></label><label>最大 Token<input inputMode="numeric" value={provider.max_tokens} onChange={(event) => updateProvider({ max_tokens: event.target.value })} /></label>{providerId !== "ollama" && <label>API Key<input type="password" value={provider.api_key} onChange={(event) => updateProvider({ api_key: event.target.value })} placeholder="留空则保留现有密钥" /></label>}<div className="provider-form-actions"><button type="button" onClick={() => setApiEditorOpen(false)}>取消</button><button className="provider-save" type="submit">保存配置</button></div></form></section></div>}
     </section>}
 
     {sectionVisible("privacy") && <section className="settings-section" aria-labelledby="privacy-settings">
@@ -201,12 +217,13 @@ export function SettingsPage({ client, onBack }: { client: LookliftClient; onBac
   </main>;
 }
 
-function RuntimeCard({ runtime, primary }: { runtime: RuntimeSummary; primary: boolean }) {
+function RuntimeCard({ runtime, primary, onToggle, onModels, onDefault }: { runtime: RuntimeSummary; primary: boolean; onToggle(enabled: boolean): void; onModels(): void; onDefault(model: string): void }) {
   const state = runtime.available === false ? "未检测到" : runtime.authenticated === false ? "需要认证" : "可用";
   return <article className="runtime-card" data-primary={primary} data-available={runtime.available !== false}>
     <div className="runtime-mark" aria-hidden="true">{runtime.display_name.slice(0, 2)}</div>
-    <div className="runtime-card-main"><header><div><strong>{runtime.display_name}</strong><small>{runtime.version ?? runtime.id}</small></div><div className="runtime-badges"><span data-state={runtime.available === false ? "missing" : "ready"}>{state}</span><span data-level={runtime.support_level}>{runtime.support_level === "stable" ? "正式" : "实验性"}</span></div></header>
+    <div className="runtime-card-main"><header><div><strong>{runtime.display_name}</strong><small>{runtime.version ?? runtime.id}</small></div><div className="runtime-badges"><span data-state={runtime.available === false ? "missing" : "ready"}>{state}</span><span data-level={runtime.support_level}>{runtime.support_level === "stable" ? "正式" : "实验性"}</span><label><input type="checkbox" checked={runtime.enabled !== false} onChange={(event) => onToggle(event.target.checked)} />启用</label></div></header>
       {primary && <><div className="runtime-capabilities">{runtime.capabilities.map((capability) => <span key={capability}>{CAPABILITY_LABELS[capability] ?? capability}</span>)}</div><p>{runtime.available === false ? runtime.error ?? "未找到可执行文件" : `${runtime.supports_mcp ? "支持 MCP" : "不支持 MCP"} · ${runtime.supports_resume ? "支持原生续接" : "使用事实恢复"}${runtime.models.length ? ` · ${runtime.models.length} 个模型` : ""}`}</p></>}
+      <div className="runtime-card-actions"><button type="button" onClick={onModels}>查看模型</button>{runtime.models.length > 0 && <button type="button" onClick={() => onDefault(runtime.models[0])}>{runtime.is_default ? `默认：${runtime.default_model ?? runtime.models[0]}` : "设为默认"}</button>}</div>
     </div>
   </article>;
 }
