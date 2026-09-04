@@ -7,8 +7,10 @@ import json
 import threading
 
 from looklift.agent_adapter import AgentEvent, AgentEventKind, ScriptedAgentEvent
+from looklift.agent_assembly import make_openai_adapter_factory
 from looklift.fake_agent_adapter import FakeAgentAdapter
 from looklift.gui import agent_stream, api, server as gui_server
+from looklift.provider_snapshot import ProviderProtocol, ProviderSnapshot
 
 
 def _body(**overrides):
@@ -31,6 +33,10 @@ def _collect(streamer):
     frames: list[bytes] = []
     streamer(frames.append)
     return frames
+
+
+def _sse(value: dict) -> bytes:
+    return f"data: {json.dumps(value)}\n\n".encode()
 
 
 def test_stream_route_emits_unique_terminal_via_sse(tmp_path, monkeypatch):
@@ -195,3 +201,62 @@ def test_stream_route_over_http(tmp_path, monkeypatch):
     assert parsed[0]["type"] == "run_started"
     assert parsed[-1]["type"] == "run_finished"
     assert sum(t in {"run_finished", "run_failed"} for t in [p["type"] for p in parsed]) == 1
+
+
+def test_stream_route_runs_openai_adapter_factory_with_fake_transport(tmp_path, monkeypatch):
+    """8.1 装配：make_openai_adapter_factory + fake transport 走通 stream 闭环。"""
+    snapshot = ProviderSnapshot(
+        "openai",
+        "https://api.openai.com/v1",
+        "gpt-test",
+        "credential://openai/default",
+        ProviderProtocol.OPENAI_CHAT_COMPLETIONS,
+        4096,
+        3,
+    )
+
+    class FakeTransport:
+        async def stream(self, _snapshot, request, *, api_key):
+            assert api_key == "sk-test"
+            yield _sse(
+                {
+                    "choices": [
+                        {
+                            "delta": {"content": "正在分析…"},
+                            "finish_reason": "stop",
+                        }
+                    ]
+                }
+            )
+
+    factory = make_openai_adapter_factory(
+        snapshot_resolver=lambda _run_input: snapshot,
+        credential_resolver=lambda _ref: "sk-test",
+        baseline_analysis={"summary": "初始", "basic": {}, "tone_curve": [], "hsl": [], "color_grading": {}, "effects": {}},
+        image_path=str(tmp_path / "photo.jpg"),
+        base_version_id="v" * 64,
+        transport=FakeTransport(),
+    )
+    agent_stream.clear_runtime_factories()
+    agent_stream.register_openai_adapter_factory(factory)
+    try:
+        status, content_type, streamer = api.ROUTES[
+            ("POST", "/api/agent/runs/<id>/stream")
+        ]({"params": {"id": "run-openai"}, "body": json.dumps(_body(run_id="run-openai", runtime_id="openai-api")).encode(), "content_type": "application/json", "query": {}})
+        assert status == 200
+        assert content_type == "text/event-stream"
+        frames = _collect(streamer)
+    finally:
+        agent_stream.clear_runtime_factories()
+
+    parsed = [
+        json.loads(line[len("data: "):])
+        for frame in frames
+        for line in frame.decode().splitlines()
+        if line.startswith("data: ")
+    ]
+    types = [item["type"] for item in parsed]
+    assert types[0] == "run_started"
+    assert "text_delta" in types
+    assert types[-1] in {"run_finished", "run_failed"}
+    assert sum(t in {"run_finished", "run_failed"} for t in types) == 1

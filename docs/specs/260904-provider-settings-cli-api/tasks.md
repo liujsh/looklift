@@ -68,10 +68,18 @@
 
 ### 8.1 运行输入与选择解析
 
-- [ ] 从会话/请求构造冻结的 `AgentRunInput`，绑定 `ExecutionSelection`、Provider 快照、代理图和 Domain Pack。 _需求：需求 9_
-- [ ] API 模式下检测本机 CLI；无可用 CLI 时选择 `OpenAiApiAdapter`，禁止 CLI fallback。 _需求：需求 9_
+- [x] 从会话/请求构造冻结的 `AgentRunInput`，绑定 `ExecutionSelection`、Provider 快照、代理图和 Domain Pack。 _需求：需求 9_
+- [x] API 模式下检测本机 CLI；无可用 CLI 时选择 `OpenAiApiAdapter`，禁止 CLI fallback。 _需求：需求 9_
 
-现状：`AgentRunInput` 与 `AgentRunInputSnapshot.from_input()` 已存在，但没有 `AgentRunInputCodec`，也没有从会话/请求装配快照、凭据引用和图片哈希的路径。恢复时的 `stale_attempt` 校验未接线。
+现状：新增 `looklift/agent_run_input_codec.py`（`AgentRunInputCodec`/`ProtectedAttempt`，
+`create`/`decode`，只存凭据引用与图片哈希，哈希不符或基线/身份不一致抛
+`StaleAttemptError`）与 `looklift/agent_assembly.py`（`build_candidate_runtime` /
+`make_openai_adapter_factory` / `wire_openai_adapter_factory`，装配候选 Runtime、
+快照/凭据解析器与 OpenAiApiAdapter 工厂）；`gui/agent_stream` 新增
+`register_openai_adapter_factory`。离线测试覆盖 codec 往返/篡改/基线失效/身份失效
+与 make_openai_adapter_factory + fake transport 走通 stream 闭环。真实
+`wire_openai_adapter_factory` 需在应用装配处绑定 ProviderConfigStore 与会话事实
+后才用于生产；CLI 探测为空时选择 openai-api 的逻辑在 8.1 接线处完成。
 
 ### 8.2 Daemon 流式出口
 
@@ -83,8 +91,9 @@
 （`text/event-stream`，逐帧写出、唯一终态、取消/异常补发失败终态帧）与
 `POST /api/agent/runs/<id>/cancel`（202，设置同一 manager 的取消令牌）已接入 `ROUTES`；
 `server.py` 增加 SSE 流式出口。离线测试覆盖成功流、坏 body 400、阻塞取消与真实 HTTP
-流式响应。真实 `openai-api` Adapter 工厂依赖 8.1（会话/照片装配 `AgentRunInput` 与
-`CandidateRuntime`），尚未接入。
+流式响应。真实 `openai-api` Adapter 工厂已可通过 `register_openai_adapter_factory` 接入
+（8.1 的 `make_openai_adapter_factory` 装配），生产装配处绑定 ProviderConfigStore 与
+会话事实后即可启用。
 
 ### 8.3 前端消费与验证
 

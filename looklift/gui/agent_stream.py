@@ -6,10 +6,10 @@
 （`threading.Event`，同一 manager 的取消令牌）通知 stream 线程停止。
 
 Adapter 工厂按 `runtime_id` 注册，测试可注入 fake factory；真实 `openai-api`
-工厂依赖 8.1（从会话/照片装配 `AgentRunInput` 与 `CandidateRuntime`），
-落地后再接入本模块。终态唯一性由 `RuntimeLifecycleEngine` 保证；本模块只负责
-在流意外中止（取消 / 异常 / 未产生终态）时补发一个失败终态帧，避免客户端
-只看到连接关闭而没有终态。
+工厂经 `register_openai_adapter_factory` 接入（8.1 的 `make_openai_adapter_factory`
+装配候选 Runtime、快照/凭据解析器与传输）。终态唯一性由
+`RuntimeLifecycleEngine` 保证；本模块只负责在流意外中止（取消 / 异常 /
+未产生终态）时补发一个失败终态帧，避免客户端只看到连接关闭而没有终态。
 """
 from __future__ import annotations
 
@@ -51,6 +51,11 @@ def register_runtime_factory(runtime_id: str, factory: AdapterFactory) -> None:
         raise ValueError("Runtime ID 与 Adapter Factory 不能为空")
     with _FACTORY_LOCK:
         _FACTORIES[runtime_id] = factory
+
+
+def register_openai_adapter_factory(factory: AdapterFactory) -> None:
+    """把真实 `openai-api` Adapter 工厂注册进 Factory 表（spec 8.1 接线）。"""
+    register_runtime_factory("openai-api", factory)
 
 
 def clear_runtime_factories() -> None:
