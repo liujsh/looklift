@@ -8,9 +8,11 @@ import threading
 
 from looklift.agent_adapter import AgentEvent, AgentEventKind, ScriptedAgentEvent
 from looklift.agent_assembly import make_openai_adapter_factory
+from looklift import config
 from looklift.fake_agent_adapter import FakeAgentAdapter
 from looklift.gui import agent_stream, api, server as gui_server
 from looklift.provider_snapshot import ProviderProtocol, ProviderSnapshot
+from looklift.session_store import SessionStore
 
 
 def _body(**overrides):
@@ -158,6 +160,55 @@ def test_cancel_route_interrupts_blocking_stream_with_terminal(tmp_path, monkeyp
     assert sum(t in {"run_finished", "run_failed"} for t in [p["type"] for p in parsed]) == 1
 
 
+def test_stream_route_requires_session_for_openai(tmp_path, monkeypatch):
+    """openai-api 运行必须携带 session_id，缺失或会话无效时拒绝。"""
+    monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.toml")
+
+    status, body = api.ROUTES[("POST", "/api/agent/runs/<id>/stream")](
+        {"params": {"id": "run-openai"}, "body": json.dumps(_body(run_id="run-openai", runtime_id="openai-api")).encode(), "content_type": "application/json", "query": {}}
+    )
+    assert status == 400
+    assert "session_id" in body["error"]
+
+
+def test_stream_route_wires_openai_from_session(tmp_path, monkeypatch):
+    """openai-api 从会话解析基线/图片/版本，并走装配好的工厂流式执行。"""
+    monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.toml")
+    session = SessionStore().create_or_resume(
+        str(tmp_path / "photo.jpg"),
+        {"summary": "初始", "basic": {}, "tone_curve": [], "hsl": [], "color_grading": {}, "effects": {}},
+    )
+
+    captured = {}
+
+    def fake_wire(**kwargs):
+        captured.update(kwargs)
+        return lambda: FakeAgentAdapter(
+            [ScriptedAgentEvent(AgentEventKind.RUN_FINISHED, {"outcome": "completed"})]
+        )
+
+    monkeypatch.setattr(api, "_wire_openai_factory", fake_wire)
+    body = _body(run_id="run-openai", runtime_id="openai-api", session_id=session.id)
+    status, content_type, streamer = api.ROUTES[("POST", "/api/agent/runs/<id>/stream")](
+        {"params": {"id": "run-openai"}, "body": json.dumps(body).encode(), "content_type": "application/json", "query": {}}
+    )
+    assert status == 200
+    assert content_type == "text/event-stream"
+    # 装配函数收到会话事实
+    assert captured["baseline_analysis"]["summary"] == "初始"
+    assert captured["base_version_id"] == session.current_version_id
+    assert captured["image_path"] == session.image_path
+    frames = _collect(streamer)
+    parsed = [
+        json.loads(line[len("data: "):])
+        for frame in frames
+        for line in frame.decode().splitlines()
+        if line.startswith("data: ")
+    ]
+    assert parsed[0]["type"] == "run_started"
+    assert parsed[-1]["type"] == "run_finished"
+
+
 def test_stream_route_over_http(tmp_path, monkeypatch):
     """真实起 server，POST stream 路由应返回 text/event-stream 且含唯一终态。"""
     agent_stream.clear_runtime_factories()
@@ -203,8 +254,8 @@ def test_stream_route_over_http(tmp_path, monkeypatch):
     assert sum(t in {"run_finished", "run_failed"} for t in [p["type"] for p in parsed]) == 1
 
 
-def test_stream_route_runs_openai_adapter_factory_with_fake_transport(tmp_path, monkeypatch):
-    """8.1 装配：make_openai_adapter_factory + fake transport 走通 stream 闭环。"""
+def test_make_streamer_runs_openai_adapter_factory_with_fake_transport(tmp_path, monkeypatch):
+    """8.1 装配：make_openai_adapter_factory + fake transport 走通 make_streamer 闭环。"""
     snapshot = ProviderSnapshot(
         "openai",
         "https://api.openai.com/v1",
@@ -237,17 +288,11 @@ def test_stream_route_runs_openai_adapter_factory_with_fake_transport(tmp_path, 
         base_version_id="v" * 64,
         transport=FakeTransport(),
     )
-    agent_stream.clear_runtime_factories()
-    agent_stream.register_openai_adapter_factory(factory)
-    try:
-        status, content_type, streamer = api.ROUTES[
-            ("POST", "/api/agent/runs/<id>/stream")
-        ]({"params": {"id": "run-openai"}, "body": json.dumps(_body(run_id="run-openai", runtime_id="openai-api")).encode(), "content_type": "application/json", "query": {}})
-        assert status == 200
-        assert content_type == "text/event-stream"
-        frames = _collect(streamer)
-    finally:
-        agent_stream.clear_runtime_factories()
+    run_input = agent_stream.build_run_input(_body(run_id="run-openai", runtime_id="openai-api"))
+    streamer = agent_stream.make_streamer(
+        "openai-api", run_input, factories={"openai-api": factory}
+    )
+    frames = _collect(streamer)
 
     parsed = [
         json.loads(line[len("data: "):])

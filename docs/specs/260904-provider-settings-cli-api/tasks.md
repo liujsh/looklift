@@ -76,10 +76,13 @@
 `StaleAttemptError`）与 `looklift/agent_assembly.py`（`build_candidate_runtime` /
 `make_openai_adapter_factory` / `wire_openai_adapter_factory`，装配候选 Runtime、
 快照/凭据解析器与 OpenAiApiAdapter 工厂）；`gui/agent_stream` 新增
-`register_openai_adapter_factory`。离线测试覆盖 codec 往返/篡改/基线失效/身份失效
-与 make_openai_adapter_factory + fake transport 走通 stream 闭环。真实
-`wire_openai_adapter_factory` 需在应用装配处绑定 ProviderConfigStore 与会话事实
-后才用于生产；CLI 探测为空时选择 openai-api 的逻辑在 8.1 接线处完成。
+`register_openai_adapter_factory` 与按请求显式工厂的 `make_streamer(factories=...)`。
+`api.py` 的 stream 路由对 `openai-api` 从会话解析 `image_path` / 基线分析 /
+`current_version_id`，经 `wire_openai_adapter_factory` 绑定 ProviderConfigStore 装配
+真实工厂（显式传入避免并发覆盖全局表）。离线测试覆盖 codec 往返/篡改/基线失效/身份
+失效、make_openai_adapter_factory + fake transport 走通 make_streamer 闭环，以及
+stream 路由从会话装配工厂。剩余：无 CLI 选择算法（CLI 探测为空/不可用时选择
+openai-api 并禁止 fallback）尚未接线。
 
 ### 8.2 Daemon 流式出口
 
@@ -91,9 +94,8 @@
 （`text/event-stream`，逐帧写出、唯一终态、取消/异常补发失败终态帧）与
 `POST /api/agent/runs/<id>/cancel`（202，设置同一 manager 的取消令牌）已接入 `ROUTES`；
 `server.py` 增加 SSE 流式出口。离线测试覆盖成功流、坏 body 400、阻塞取消与真实 HTTP
-流式响应。真实 `openai-api` Adapter 工厂已可通过 `register_openai_adapter_factory` 接入
-（8.1 的 `make_openai_adapter_factory` 装配），生产装配处绑定 ProviderConfigStore 与
-会话事实后即可启用。
+流式响应。真实 `openai-api` 路径已在 stream 路由按会话装配工厂并显式传入
+（8.1 的 `wire_openai_adapter_factory`），可真实调用。
 
 ### 8.3 前端消费与验证
 

@@ -64,11 +64,15 @@ def clear_runtime_factories() -> None:
         _FACTORIES.clear()
 
 
-def _runtime_engine() -> RuntimeLifecycleEngine:
+def _runtime_engine(
+    factories: Mapping[str, AdapterFactory] | None = None,
+) -> RuntimeLifecycleEngine:
     registry: RuntimeRegistry = builtin_runtime_registry()
+    if factories is not None:
+        return RuntimeLifecycleEngine(registry, factories=dict(factories))
     with _FACTORY_LOCK:
-        factories = dict(_FACTORIES)
-    return RuntimeLifecycleEngine(registry, factories=factories)
+        global_factories = dict(_FACTORIES)
+    return RuntimeLifecycleEngine(registry, factories=global_factories)
 
 
 def request_cancel(run_id: str) -> None:
@@ -128,12 +132,19 @@ def _terminal_failed(
 
 
 def make_streamer(
-    runtime_id: str, run_input: AgentRunInput
+    runtime_id: str,
+    run_input: AgentRunInput,
+    *,
+    factories: Mapping[str, AdapterFactory] | None = None,
 ) -> Callable[[Callable[[bytes], None]], None]:
-    """返回 `(write: Callable[[bytes], None]) -> None` 的流式执行器。"""
+    """返回 `(write: Callable[[bytes], None]) -> None` 的流式执行器。
+
+    `factories` 为本次 Attempt 的显式工厂表（避免多线程并发时覆盖全局注册表，
+    生产 API 路径使用）；缺省时回退到全局注册表（测试/CLI 用）。
+    """
 
     def stream(write: Callable[[bytes], None]) -> None:
-        asyncio.run(_emit(runtime_id, run_input, write))
+        asyncio.run(_emit(runtime_id, run_input, write, factories=factories))
 
     return stream
 
@@ -142,6 +153,8 @@ async def _emit(
     runtime_id: str,
     run_input: AgentRunInput,
     write: Callable[[bytes], None],
+    *,
+    factories: Mapping[str, AdapterFactory] | None = None,
 ) -> None:
     """在请求线程内消费一次 Attempt 事件并逐帧写出，保证唯一终态。
 
@@ -149,7 +162,7 @@ async def _emit(
     消费被放进独立 task，主协程轮询令牌，令牌置位时取消该 task（能打断阻塞在
     await 上的 Adapter），从而对任何 Adapter 都能及时响应取消。
     """
-    engine = _runtime_engine()
+    engine = _runtime_engine(factories=factories)
     token = _cancel_event(run_input.run_id)
     terminal_sent = False
     last_sequence = 0

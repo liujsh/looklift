@@ -453,6 +453,7 @@ export type StreamAgentRunInput = {
   instructions: string;
   userMessage: string;
   proxyJpegBase64: string;
+  sessionId?: string | null;
 };
 
 export type ContextEntryType = "profile" | "rule" | "fact" | "preference" | "project" | "reference" | "feedback";

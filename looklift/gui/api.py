@@ -510,14 +510,65 @@ def _stream_agent_run(ctx: dict):
         return 400, {"error": "请求体必须是 JSON"}
     if not isinstance(body, dict):
         return 400, {"error": "请求体必须是 JSON 对象"}
-    if "runtime_id" not in body or not isinstance(body["runtime_id"], str) or not body["runtime_id"].strip():
+    runtime_id = body.get("runtime_id")
+    if not isinstance(runtime_id, str) or not runtime_id.strip():
         return 400, {"error": "runtime_id 必须是非空字符串"}
     try:
         run_input = agent_stream.build_run_input(body)
     except ValueError as exc:
         return 400, {"error": str(exc)}
-    streamer = agent_stream.make_streamer(body["runtime_id"], run_input)
+
+    # 真实 openai-api 路径：按会话事实装配 Adapter 工厂，显式传入避免并发覆盖全局表
+    factories = None
+    if runtime_id == "openai-api":
+        session = _stream_session_context(body)
+        if isinstance(session, dict):  # 错误响应
+            return session["status"], {"error": session["error"]}
+        image_path, baseline_analysis, base_version_id = session
+        factories = {
+            "openai-api": _wire_openai_factory(
+                image_path=image_path,
+                baseline_analysis=baseline_analysis,
+                base_version_id=base_version_id,
+            )
+        }
+    streamer = agent_stream.make_streamer(
+        runtime_id, run_input, factories=factories
+    )
     return 200, "text/event-stream", streamer
+
+
+def _stream_session_context(body: dict):
+    """解析会话事实，返回 `(image_path, baseline_analysis, base_version_id)`。
+
+    返回 dict 表示错误响应 `{"status", "error"}`。
+    """
+    session_id = body.get("session_id")
+    if not isinstance(session_id, str) or not session_id.strip():
+        return {"status": 400, "error": "openai-api 运行必须携带 session_id"}
+    try:
+        session = SessionStore().load(session_id)
+    except (KeyError, DatabaseRecoveryRequired) as exc:
+        return {"status": 404, "error": str(exc)}
+    if not session.image_path or not session.current_analysis:
+        return {"status": 409, "error": "会话缺少成片或基线参数，无法启动 Attempt"}
+    return (
+        session.image_path,
+        session.current_analysis,
+        session.current_version_id,
+    )
+
+
+def _wire_openai_factory(*, image_path, baseline_analysis, base_version_id):
+    """绑定 ProviderConfigStore 与会话事实，生成真实 openai-api Adapter 工厂。"""
+    from ..agent_assembly import wire_openai_adapter_factory
+
+    return wire_openai_adapter_factory(
+        _provider_store(),
+        baseline_analysis=baseline_analysis,
+        image_path=image_path,
+        base_version_id=base_version_id,
+    )
 
 
 def _cancel_agent_run(ctx: dict) -> tuple[int, dict]:
