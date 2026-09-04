@@ -449,6 +449,8 @@ export type StreamAgentRunInput = {
   runId: string;
   attemptId: string;
   runtimeId: string;
+  executionMode: "cli" | "api";
+  cliAvailable?: boolean;
   model: string;
   instructions: string;
   userMessage: string;

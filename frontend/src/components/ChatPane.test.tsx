@@ -96,6 +96,13 @@ describe("ChatPane", () => {
     expect(current.send).toHaveBeenCalledWith("提亮一点");
   });
 
+  it("未选择模型时阻止发送", () => {
+    const html = renderToStaticMarkup(<ChatPane enabled workflow={workflow()} coordinator={coordinator} onOpenSettings={vi.fn()} />);
+    expect(html).toContain("未配置");
+    expect(html).toContain('aria-label="发送" disabled=""');
+    expect(html).toContain("请先选择可用入口和模型");
+  });
+
   it("模板附件生成自适应白盒请求，不选模板时保持原消息", () => {
     expect(buildTemplatePrompt("提亮人物")).toBe("提亮人物");
     const prompt = buildTemplatePrompt("提亮人物", {

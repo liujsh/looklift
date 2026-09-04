@@ -25,9 +25,9 @@
 
 - [x] 在加号右侧增加当前 CLI/API 图标与模型摘要。 _需求：需求 3_
 - [x] 实现入口→模型两级选择器，过滤停用/不可用入口并更新当前会话运行上下文。 _需求：需求 3、需求 4_
-- [ ] 增加未选择、模型失效和入口不可用时的阻止发送提示。 _需求：需求 3、需求 4_
+- [x] 增加未选择、模型失效和入口不可用时的阻止发送提示。 _需求：需求 3、需求 4_
 
-现状：发送按钮只校验空输入与请求中状态；未选择模型仍可提交，后端会落入 `get_provider("auto")`。
+现状：发送按钮在未选择入口/模型时禁用，并给出中文提示，不再静默回退。
 
 ## 5. 验证与人工门禁
 
@@ -38,10 +38,10 @@
 ## 6. OpenDesign 对齐交互
 
 - [x] 将“本机 CLI / API 提供商”分段按钮实现为即时模式切换，并保持两套草稿和默认选择隔离。 _需求：需求 6_
-- [ ] 重做输入框入口按钮：显示当前模式图标/模型，弹窗提供当前模式模型选择和“设置”跳转。 _需求：需求 7_
-- [ ] 为模式切换、弹窗选择、设置跳转补充前端交互测试。 _需求：需求 6、需求 7_
+- [x] 重做输入框入口按钮：显示当前模式图标/模型，弹窗提供当前模式模型选择和“设置”跳转。 _需求：需求 7_
+- [x] 为模式切换、弹窗选择、设置跳转补充前端交互测试。 _需求：需求 6、需求 7_
 
-现状：入口按钮已显示当前摘要；弹窗列出全部可用 Runtime，不按当前模式过滤。“设置”只关闭弹窗，不跳转设置页 `providers` 分区。相关 ChatPane 交互测试尚未补。
+现状：入口按钮显示当前摘要或“未配置”；弹窗按本机 CLI / API 提供商过滤；“设置”跳转平台设置页。
 
 ## 7. BYOK API Loop
 
@@ -56,7 +56,7 @@
 ## 8. 无 CLI BYOK Harness 实施
 
 - [x] 抽取并冻结 `ByokApiHarness`、`ProviderTransport`、`ToolGuard`、`ContextBudget`、`CandidateNormalizer` 接口及 Attempt 状态机。 _需求：需求 9_
-- [ ] 实现 API 模式下的无 CLI 选择算法：CLI 缺失/不可用时直接进入 BYOK Harness，禁止 CLI fallback、安装和进程启动。 _需求：需求 9_
+- [x] 实现 API 模式下的无 CLI 选择算法：CLI 缺失/不可用时直接进入 BYOK Harness，禁止 CLI fallback、安装和进程启动。 _需求：需求 9_
 - [x] 将 Provider 快照、凭据引用、SSE Parser 和取消令牌接入 Harness；实现唯一终态和迟到事件丢弃。 _需求：需求 9_
 - [x] 将 `ScopedToolGateway` 包装为 ToolGuard，补齐工具允许列表、Schema/路径/大小校验及稳定错误码。 _需求：需求 9_
 - [x] 实现上下文预算、旧历史摘要、工具结果摘要/硬截断和 `ContextCompactionEvent` 审计；原始上下文仅保存在本地受控日志。 _需求：需求 9_
@@ -79,10 +79,9 @@
 `register_openai_adapter_factory` 与按请求显式工厂的 `make_streamer(factories=...)`。
 `api.py` 的 stream 路由对 `openai-api` 从会话解析 `image_path` / 基线分析 /
 `current_version_id`，经 `wire_openai_adapter_factory` 绑定 ProviderConfigStore 装配
-真实工厂（显式传入避免并发覆盖全局表）。离线测试覆盖 codec 往返/篡改/基线失效/身份
-失效、make_openai_adapter_factory + fake transport 走通 make_streamer 闭环，以及
-stream 路由从会话装配工厂。剩余：无 CLI 选择算法（CLI 探测为空/不可用时选择
-openai-api 并禁止 fallback）尚未接线。
+真实工厂（显式传入避免并发覆盖全局表）。新增 `execution_selection.resolve_runtime_id`：
+API 模式固定选 `openai-api`，CLI 缺失不是错误，也不回退到 CLI；模式与 Runtime 不一致
+直接拒绝。离线测试覆盖 codec、stream 会话装配、API 模式拒绝 CLI fallback。
 
 ### 8.2 Daemon 流式出口
 

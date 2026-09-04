@@ -396,6 +396,8 @@ export class LookliftClient {
           run_id: input.runId,
           attempt_id: input.attemptId,
           runtime_id: input.runtimeId,
+          execution_mode: input.executionMode,
+          cli_available: input.cliAvailable ?? false,
           model: input.model,
           session_id: input.sessionId ?? null,
           domain_pack: {

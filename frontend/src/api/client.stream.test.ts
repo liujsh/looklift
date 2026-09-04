@@ -55,6 +55,7 @@ describe("LookliftClient.streamAgentRun", () => {
         runId: "r",
         attemptId: "a",
         runtimeId: "openai-api",
+        executionMode: "api",
         model: "gpt-test",
         instructions: "只生成白盒候选",
         userMessage: "自然提亮",
@@ -67,6 +68,8 @@ describe("LookliftClient.streamAgentRun", () => {
     const call = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
     const body = JSON.parse(String(call[1].body));
     expect(body.runtime_id).toBe("openai-api");
+    expect(body.execution_mode).toBe("api");
+    expect(body.cli_available).toBe(false);
     expect(body.domain_pack.instructions).toBe("只生成白盒候选");
     expect(body.proxy_jpeg).toBe("aGVsbG8=");
     const headers = new Headers(call[1].headers);
@@ -95,6 +98,7 @@ describe("LookliftClient.streamAgentRun", () => {
         runId: "r",
         attemptId: "a",
         runtimeId: "openai-api",
+        executionMode: "api",
         model: "m",
         instructions: "i",
         userMessage: "u",

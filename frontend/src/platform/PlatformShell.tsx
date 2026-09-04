@@ -230,6 +230,7 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
               coordinator={runtime.coordinator}
               workflow={runtime.workflow}
               onHome={() => store.activateTab("home")}
+              onOpenSettings={() => store.openPlatform("settings", "设置与帮助")}
             />
           </div>;
         })}

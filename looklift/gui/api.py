@@ -41,8 +41,9 @@ from ..builtin_runtimes import builtin_runtime_registry
 from ..cli_runtime_detection import detect_cli_runtime
 from ..context_memory import ContextEntry, ContextMemoryStore
 from ..capabilities import CapabilityGrant
-from ..plugin_registry import PluginManifest, PluginManifestError, PluginRegistry
 from ..credential_store import CredentialStoreError, DpapiCredentialStore
+from ..execution_selection import ExecutionSelectionError, resolve_runtime_id
+from ..plugin_registry import PluginManifest, PluginManifestError, PluginRegistry
 from ..provider_config_store import ProviderConfigStore
 from ..provider_detection import detect_provider
 from ..runtime_settings import load_runtime_settings, save_runtime_settings
@@ -510,8 +511,20 @@ def _stream_agent_run(ctx: dict):
         return 400, {"error": "请求体必须是 JSON"}
     if not isinstance(body, dict):
         return 400, {"error": "请求体必须是 JSON 对象"}
+    execution_mode = body.get("execution_mode")
     runtime_id = body.get("runtime_id")
-    if not isinstance(runtime_id, str) or not runtime_id.strip():
+    if execution_mode is not None or runtime_id == "openai-api" or runtime_id in (None, ""):
+        try:
+            runtime_id = resolve_runtime_id(
+                execution_mode=str(execution_mode or "api"),
+                runtime_id=str(runtime_id) if runtime_id not in (None, "") else None,
+                cli_available=bool(body.get("cli_available", False)),
+                provider_configured=_provider_store().load() is not None,
+                registry=builtin_runtime_registry(),
+            )
+        except (ExecutionSelectionError, ValueError) as exc:
+            return 400, {"error": str(exc)}
+    elif not isinstance(runtime_id, str) or not runtime_id.strip():
         return 400, {"error": "runtime_id 必须是非空字符串"}
     try:
         run_input = agent_stream.build_run_input(body)
