@@ -12,14 +12,20 @@
   --color-accent: #b65d3d;
   --color-accent-hover: #9f4d32;
   --color-accent-soft: #edd8cc;
+  --color-accent-ink: #a04f30;
   --color-success: #587b63;
+  --color-success-soft: #e3ecdf;
+  --color-success-ink: #4c6d57;
   --color-danger: #984a38;
   --color-focus: #367fa3;
   --color-stage: #1b1a18;
   --color-stage-raised: #242320;
+  --color-stage-panel: #211f1d;
   --color-stage-line: #3c3934;
+  --color-stage-line-strong: #4a463f;
   --color-stage-text: #d7d0c6;
   --color-stage-muted: #938d84;
+  --color-stage-faint: #6b665f;
   --color-red: #ad493e;
   --color-orange: #bd7138;
   --color-yellow: #aa9038;
@@ -33,12 +39,17 @@
   --font-body: "Segoe UI Variable", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
   --font-data: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
 
-  --text-utility: 9px;
-  --text-caption: 10px;
+  /* 原型字号阶：34 / 30 / 22 / 18 / 16 / 15 / 13 / 12 / 11 / 10 */
+  --text-utility: 10px;
+  --text-caption: 11px;
   --text-ui: 12px;
-  --text-body: 14px;
+  --text-body: 13px;
+  --text-lead: 15px;
+  --text-h4: 16px;
+  --text-h3: 18px;
   --text-title: 22px;
-  --text-display: 36px;
+  --text-h1: 30px;
+  --text-display: 34px;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -47,14 +58,23 @@
   --space-5: 20px;
   --space-6: 24px;
 
-  --radius-xs: 3px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
+  --radius-xs: 5px;
+  --radius-sm: 9px;
+  --radius-md: 12px;
+  --radius-card: 14px;
+  --radius-panel: 18px;
   --radius-pill: 999px;
-  --shadow-panel: 0 8px 26px rgba(45, 37, 29, .08);
+
+  --shadow-panel: 0 8px 26px rgba(45, 37, 29, .06);
+  --shadow-card: 0 8px 24px rgba(45, 37, 29, .07);
+  --shadow-soft: 0 6px 18px rgba(45, 37, 29, .05);
+  --shadow-lift: 0 18px 40px rgba(45, 37, 29, .13);
   --shadow-bar: 0 1px 12px rgba(45, 37, 29, .05);
-  --shadow-handle: 0 3px 10px rgba(0, 0, 0, .2);
-  --shadow-stage: inset 0 0 0 1px rgba(255, 255, 255, .025), inset 0 18px 48px rgba(0, 0, 0, .24);
+  --shadow-accent: 0 2px 8px rgba(182, 93, 61, .28);
+  --shadow-handle: 0 3px 12px rgba(0, 0, 0, .35);
+  --shadow-photo: 0 12px 30px rgba(0, 0, 0, .4);
+  --shadow-photo-lg: 0 18px 44px rgba(0, 0, 0, .45);
+  --shadow-stage: none;
   --focus-ring: 0 0 0 3px rgba(54, 127, 163, .28);
   --motion-fast: 140ms;
   --motion-base: 220ms;

@@ -3,7 +3,10 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { Analysis, CreateSessionRequest, SessionSnapshot } from "../api/types";
 
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/tiff";
-const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "tif", "tiff"];
+const IMAGE_EXTENSIONS = [
+  "jpg", "jpeg", "png", "webp", "tif", "tiff",
+  "3fr", "arw", "cr2", "cr3", "dng", "nef", "nrw", "orf", "pef", "raf", "rw2", "srw",
+];
 
 export type QuickEditDependencies = {
   initialAnalysis: Analysis;

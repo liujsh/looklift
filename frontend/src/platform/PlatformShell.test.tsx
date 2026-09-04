@@ -31,7 +31,7 @@ function session(): SessionSnapshot {
   return {
     id: "session-1", image_path: "C:/照片/a.jpg",
     created_at: "2026-07-20T00:00:00Z", updated_at: "2026-07-20T00:00:00Z",
-    messages: [], versions: [], current_version_id: "v1", current_analysis: current,
+    messages: [], versions: [], exports: [], current_version_id: "v1", current_analysis: current,
   };
 }
 
@@ -44,7 +44,7 @@ describe("PlatformShell", () => {
     expect(html).toContain("LookLift");
     expect(html).toContain('data-tab-id="home"');
     expect(html).not.toContain('data-tab-id="home" data-closable="true"');
-    for (const label of ["首页", "我的图库", "大师模板", "自动化技能", "插件", "设置与帮助"]) {
+    for (const label of ["首页", "我的图库", "大师模板", "技能", "插件", "设置与帮助"]) {
       expect(html).toContain(label);
     }
     expect(html).toContain('aria-label="新建工作上下文"');

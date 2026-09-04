@@ -5,6 +5,8 @@ describe("canvasModel", () => {
   it("从真实拖放路径中选择第一个受支持图片", () => {
     expect(firstSupportedImage(["C:/notes.txt", "C:/PHOTO.TIFF", "C:/other.jpg"]))
       .toBe("C:/PHOTO.TIFF");
+    expect(firstSupportedImage(["C:/notes.txt", "C:/CAMERA.CR3"]))
+      .toBe("C:/CAMERA.CR3");
     expect(firstSupportedImage(["C:/notes.txt", "C:/archive.zip"])).toBeNull();
   });
 

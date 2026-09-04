@@ -13,9 +13,10 @@ const PAGE_SIZE = 48;
 type LibraryPageProps = {
   client: LookliftClient;
   onOpen(path: string): Promise<void> | void;
+  onBatchAutomation?(): void;
 };
 
-export function LibraryPage({ client, onOpen }: LibraryPageProps) {
+export function LibraryPage({ client, onOpen, onBatchAutomation }: LibraryPageProps) {
   const [roots, setRoots] = useState<LibraryRoot[]>([]);
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [path, setPath] = useState("");
@@ -229,34 +230,45 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
       setError(message(reason, "图库翻页失败"));
     }
   };
+
   return (
     <main className="library-page" aria-label="我的图库">
       <header className="library-heading">
         <div>
-          <p className="pane-kicker">LIBRARY</p>
+          <p className="pane-kicker">Library</p>
           <h1>我的图库</h1>
         </div>
-        <p>只建立本地索引，不复制、移动或删除原文件。</p>
+        <div className="library-heading-actions">
+          <p>只建立本地索引，不复制、移动或删除原文件。</p>
+          {onBatchAutomation && (
+            <button type="button" className="primary" onClick={onBatchAutomation}>
+              <Icon name="template" />批量处理照片
+            </button>
+          )}
+        </div>
       </header>
 
+      {/* 原型：把四个输入拆成 ADD ROOT / SEARCH 两组。 */}
       <section className="library-toolbar" aria-label="图库管理">
         <form onSubmit={add} data-form="add-root">
           <input value={path} onChange={(event) => setPath(event.target.value)} placeholder="输入本地文件夹路径" required />
-          <button type="button" onClick={() => void chooseRoot()}><Icon name="folder" className="go-ic" />选择文件夹</button>
-          <button type="submit" className="primary" disabled={Boolean(scan)}><Icon name="folder-plus" className="go-ic" />加入图库</button>
+          <button type="button" onClick={() => void chooseRoot()}><Icon name="folder-search" />选择文件夹</button>
+          <button type="submit" className="primary" disabled={Boolean(scan)}><Icon name="folder-plus" />加入图库</button>
         </form>
         <form onSubmit={search} data-form="search">
           <input value={keywordInput} onChange={(event) => setKeywordInput(event.target.value)} placeholder="搜索文件名或路径" />
           <input value={tagInput} onChange={(event) => setTagInput(event.target.value)} placeholder="标签" />
-          <button type="submit"><Icon name="search" className="go-ic" />搜索</button>
+          <button type="submit" aria-label="搜索"><Icon name="search" /></button>
         </form>
       </section>
 
       {browsing && currentFolder === null && roots.length > 0 && <section className="library-roots" aria-label="索引文件夹">
         {roots.map((root) => <div key={root.id}>
-          <span className="library-root-path" title={root.path}><Icon name="folder" className="go-ic" />{root.path}</span>
-          <button type="button" className="quiet" disabled={Boolean(scan)} onClick={() => void runScan(root.id)}><Icon name="refresh" className="go-ic" />刷新</button>
-          <button type="button" className="quiet" disabled={Boolean(scan)} onClick={() => void removeRoot(root.id)}><Icon name="trash" className="go-ic" />移除索引</button>
+          <Icon name="drive" />
+          <span className="library-root-path" title={root.path}>{root.path}</span>
+          <span className="library-root-count">已索引 {total} 张</span>
+          <button type="button" className="quiet" disabled={Boolean(scan)} onClick={() => void runScan(root.id)}><Icon name="refresh" />刷新</button>
+          <button type="button" className="quiet" data-danger="true" disabled={Boolean(scan)} onClick={() => void removeRoot(root.id)}><Icon name="trash" />移除索引</button>
         </div>)}
       </section>}
 
@@ -268,6 +280,7 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
       {status && <div className="library-message" role="status">{status}</div>}
 
       {browsing && <nav className="library-breadcrumb" aria-label="文件夹路径">
+        <Icon name="reveal" />
         {folderCrumbs(currentFolder, roots).map((crumb, index, all) => {
           const isLast = index === all.length - 1;
           return isLast
@@ -303,8 +316,12 @@ export function LibraryPage({ client, onOpen }: LibraryPageProps) {
 
       <footer className="library-pagination">
         <span>共 {total} 张 · 第 {page}/{lastPage} 页</span>
-        <button type="button" disabled={page <= 1} onClick={() => void changePage(page - 1)}>上一页</button>
-        <button type="button" data-action="next-page" disabled={page >= lastPage} onClick={() => void changePage(page + 1)}>下一页</button>
+        <button type="button" disabled={page <= 1} aria-label="上一页" title="上一页" onClick={() => void changePage(page - 1)}>
+          <Icon name="chevron-left" />
+        </button>
+        <button type="button" data-action="next-page" disabled={page >= lastPage} aria-label="下一页" title="下一页" onClick={() => void changePage(page + 1)}>
+          <Icon name="chevron-right" />
+        </button>
       </footer>
     </main>
   );
@@ -321,8 +338,6 @@ function FolderCard({ folder, client, onOpen }: FolderCardProps) {
   return (
     <button type="button" className="library-folder-card" data-folder={folder.path} onClick={onOpen}>
       <div className="library-folder-thumb-wrap">
-        <span className="sprocket tl" aria-hidden="true" />
-        <span className="sprocket tr" aria-hidden="true" />
         <div className="library-folder-thumb">
           {coverUrl ? <img src={coverUrl} alt="" /> : <span className="library-folder-thumb-fallback" aria-hidden="true" />}
         </div>

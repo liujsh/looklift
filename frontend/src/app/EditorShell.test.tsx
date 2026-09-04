@@ -4,6 +4,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { createEditorStore } from "../store/editorStore";
 import type { ChatWorkflow } from "../features/chat/chatWorkflow";
+import type { SessionCoordinator } from "../features/sessions/sessionCoordinator";
+import type { Analysis } from "../api/types";
+import type { LookliftClient } from "../api/client";
 import { EditorShell } from "./EditorShell";
 
 describe("EditorShell", () => {
@@ -14,7 +17,6 @@ describe("EditorShell", () => {
     expect(html).toContain('data-pane="chat"');
     expect(html).toContain('data-pane="canvas"');
     expect(html).toContain('data-pane="controls"');
-    expect(html).toContain('data-pane="gallery"');
   });
 
   it("聊天功能默认开启且仍可通过 seam 故障回退", () => {
@@ -54,6 +56,29 @@ describe("EditorShell", () => {
     const html = renderToStaticMarkup(<EditorShell store={createEditorStore()} workflow={workflow} />);
 
     expect(html).toContain("来自所属运行时");
+  });
+
+  it("把当前成片作为主导出，并在候选未确认时阻止混淆正式版本", () => {
+    const coordinator = { getSessionId: () => "session-1" } as unknown as SessionCoordinator;
+    const client = {} as LookliftClient;
+    const analysis = { summary: "正式版本", steps: [] } as unknown as Analysis;
+    const ready = createEditorStore();
+    ready.restoreSession("C:/照片/旅途.jpg", analysis);
+
+    const readyHtml = renderToStaticMarkup(
+      <EditorShell store={ready} client={client} coordinator={coordinator} />,
+    );
+    expect(readyHtml).toMatch(/<button[^>]*class="export-button"[^>]*>导出成片<\/button>/);
+    expect(readyHtml).not.toMatch(/class="export-button"[^>]*disabled/);
+    expect(readyHtml).toContain("选择位置导出成片…");
+
+    const pending = createEditorStore();
+    pending.restoreSession("C:/照片/旅途.jpg", analysis);
+    pending.beginPendingPreview(analysis, [], [], 1);
+    const pendingHtml = renderToStaticMarkup(
+      <EditorShell store={pending} client={client} coordinator={coordinator} />,
+    );
+    expect(pendingHtml).toMatch(/class="export-button"[^>]*disabled[^>]*>先确认候选<\/button>/);
   });
 
   it("布局轨道允许画布收缩且各工作区自行处理溢出", () => {

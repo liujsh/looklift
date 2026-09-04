@@ -19,7 +19,10 @@ type AutomationPageProps = {
 
 const IMAGE_FILTERS = [{
   name: "照片",
-  extensions: ["jpg", "jpeg", "png", "webp", "tif", "tiff"],
+  extensions: [
+    "jpg", "jpeg", "png", "webp", "tif", "tiff",
+    "3fr", "arw", "cr2", "cr3", "dng", "nef", "nrw", "orf", "pef", "raf", "rw2", "srw",
+  ],
 }];
 
 export function AutomationPage({ client, chooseInputs, chooseOutput }: AutomationPageProps) {

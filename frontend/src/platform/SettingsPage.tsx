@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { LookliftClient } from "../api/client";
-import type { ContextEntryType, ContextEntryView, ContextTreeView, ProposalView, RuntimeSummary } from "../api/types";
+import type { ContextEntryType, ContextEntryView, ContextTreeView, RuntimeSummary } from "../api/types";
 
 const EMPTY_CONTEXT: ContextTreeView = {
   schema_version: 1,
@@ -28,7 +28,7 @@ const CAPABILITY_LABELS: Record<string, string> = {
   mcp: "MCP",
 };
 
-type SettingsSection = "providers" | "privacy" | "memory" | "proposals";
+type SettingsSection = "providers" | "privacy" | "memory";
 
 export function SettingsPage({ client, onBack }: { client: LookliftClient; onBack?(): void }) {
   const [providerId, setProviderId] = useState<"openai" | "ollama">("openai");
@@ -36,17 +36,16 @@ export function SettingsPage({ client, onBack }: { client: LookliftClient; onBac
   const provider = providerDrafts[providerId];
   const updateProvider = (patch: Partial<ProviderDraft>) => setProviderDrafts((current) => ({ ...current, [providerId]: { ...current[providerId], ...patch } }));
   const [context, setContext] = useState(EMPTY_CONTEXT);
-  const [proposals, setProposals] = useState<ProposalView[]>([]);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [status, setStatus] = useState("正在读取设置…");
   const [runtimeMode, setRuntimeMode] = useState<"cli" | "api">("cli");
   const [runtimes, setRuntimes] = useState<RuntimeSummary[]>([]);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("providers");
+  const [diagnosticBusy, setDiagnosticBusy] = useState(false);
 
   const loadContext = async () => {
-    const [tree, nextProposals] = await Promise.all([client.contextTree(), client.proposals()]);
+    const tree = await client.contextTree();
     setContext(tree);
-    setProposals(nextProposals);
   };
 
   useEffect(() => {
@@ -120,19 +119,6 @@ export function SettingsPage({ client, onBack }: { client: LookliftClient; onBac
     }
   };
 
-  const review = async (proposal: ProposalView, action: "confirm" | "reject" | "apply") => {
-    setStatus("正在更新提案…");
-    try {
-      if (action === "confirm") await client.confirmProposal(proposal.proposal_id);
-      else if (action === "reject") await client.rejectProposal(proposal.proposal_id);
-      else await client.applyProposal(proposal.proposal_id);
-      await loadContext();
-      setStatus("提案状态已更新");
-    } catch (reason) {
-      setStatus(reason instanceof Error ? reason.message : "提案更新失败");
-    }
-  };
-
   const toggleAutoExtract = async (enabled: boolean) => {
     try {
       const next = await client.updateContextConfig({ auto_extract: enabled });
@@ -143,15 +129,28 @@ export function SettingsPage({ client, onBack }: { client: LookliftClient; onBac
     }
   };
 
+  const exportDiagnostics = async () => {
+    setDiagnosticBusy(true);
+    setStatus("正在生成脱敏诊断信息…");
+    try {
+      const result = await client.exportDiagnostics();
+      setStatus(`诊断信息已导出：${result.path}`);
+    } catch (reason) {
+      setStatus(reason instanceof Error ? reason.message : "诊断信息导出失败");
+    } finally {
+      setDiagnosticBusy(false);
+    }
+  };
+
   const sectionVisible = (section: SettingsSection) => settingsSection === section;
   return <main className="settings-page settings-layout" aria-label="设置与帮助">
     <aside className="settings-nav" aria-label="设置导航">
       <button type="button" className="settings-back" onClick={onBack}>← 回到应用</button>
       <p className="pane-kicker">SETTINGS</p><h1>设置</h1>
-      <nav>{([['providers', '模型与提供商'], ['privacy', '通用与隐私'], ['memory', '指令与记忆'], ['proposals', '待审核提案']] as const).map(([id, label]) => <button key={id} type="button" data-active={settingsSection === id} onClick={() => setSettingsSection(id)}>{label}</button>)}</nav>
+      <nav>{([['providers', '模型与提供商'], ['privacy', '通用与隐私'], ['memory', '指令与记忆']] as const).map(([id, label]) => <button key={id} type="button" data-active={settingsSection === id} onClick={() => setSettingsSection(id)}>{label}</button>)}</nav>
     </aside>
     <section className="settings-content">
-    <header><p className="pane-kicker">SETTINGS / {settingsSection.toUpperCase()}</p><h2>{settingsSection === "providers" ? "模型与提供商" : settingsSection === "privacy" ? "通用与隐私" : settingsSection === "memory" ? "指令与记忆" : "待审核提案"}</h2><p>设置保存在本地，并在每次运行前冻结版本。</p></header>
+    <header><p className="pane-kicker">SETTINGS / {settingsSection.toUpperCase()}</p><h2>{settingsSection === "providers" ? "模型与提供商" : settingsSection === "privacy" ? "通用与隐私" : "指令与记忆"}</h2><p>设置保存在本地，并在每次运行前冻结版本。</p></header>
     {status && <p role="status" className="settings-status">{status}</p>}
 
     {sectionVisible("providers") && <section className="settings-section provider-settings" aria-labelledby="provider-settings">
@@ -176,7 +175,8 @@ export function SettingsPage({ client, onBack }: { client: LookliftClient; onBac
     </section>}
 
     {sectionVisible("privacy") && <section className="settings-section" aria-labelledby="privacy-settings">
-      <div className="settings-heading"><div><h2 id="privacy-settings">自动提取与隐私</h2><p>默认关闭。开启后也只生成待审核 Proposal，不会静默写入正式记忆。</p></div><label className="settings-switch"><input name="auto_extract" type="checkbox" checked={context.config.auto_extract} onChange={(event) => void toggleAutoExtract(event.target.checked)} />允许生成记忆提案</label></div>
+      <div className="settings-heading"><div><h2 id="privacy-settings">自动提取与隐私</h2><p>Agent 会在满足记忆门槛时静默写入；你仍可随时查看、编辑或停用。</p></div><label className="settings-switch"><input name="auto_extract" type="checkbox" checked={context.config.auto_extract} onChange={(event) => void toggleAutoExtract(event.target.checked)} />允许自动写入记忆</label></div>
+      <div className="diagnostic-actions"><div><strong>遇到问题？</strong><p>导出脱敏运行记录，便于排查启动、渲染和任务失败。</p></div><button type="button" onClick={() => void exportDiagnostics()} disabled={diagnosticBusy}>{diagnosticBusy ? "生成中…" : "导出诊断信息"}</button></div>
     </section>}
 
     {sectionVisible("memory") && <section className="settings-section" aria-labelledby="context-editor">
@@ -197,16 +197,6 @@ export function SettingsPage({ client, onBack }: { client: LookliftClient; onBac
       <ContextGroup title="项目上下文" entries={grouped.projects} onEdit={setDraft} onDisable={disable} />
     </div>}
 
-    {sectionVisible("proposals") && <section className="settings-section" aria-labelledby="proposal-review">
-      <h2 id="proposal-review">待审核 Proposal</h2>
-      {proposals.filter((item) => !["applied", "rejected"].includes(item.status)).length === 0 && <p>没有待审核提案。</p>}
-      <div className="proposal-list">{proposals.filter((item) => !["applied", "rejected"].includes(item.status)).map((item) => <article key={item.proposal_id} className="proposal-card">
-        <header><strong>{item.target_id}</strong><span>{item.status}</span></header>
-        <div className="proposal-diff"><div><small>当前</small><p>{context.entries.find((entry) => entry.id === item.target_id)?.content ?? "（目标不可见）"}</p></div><div><small>提议</small><p>{String(item.patch.content ?? "（无正文变更）")}</p></div></div>
-        <small>来源：{item.source_packet_ids.join("、") || "Agent"} · 基线 {item.base_hash.slice(0, 12)}</small>
-        <div>{item.status === "preview" && <><button type="button" onClick={() => void review(item, "confirm")}>确认提案</button><button type="button" onClick={() => void review(item, "reject")}>拒绝</button></>}{item.status === "confirmed" && <button type="button" onClick={() => void review(item, "apply")}>应用到正式上下文</button>}</div>
-      </article>)}</div>
-    </section>}
     </section>
   </main>;
 }
@@ -229,7 +219,7 @@ function ContextGroup({ title, entries, onEdit, onDisable }: {
 }) {
   return <section className="settings-section context-group"><h2>{title}</h2>{entries.length === 0 && <p>暂无条目。</p>}{entries.map((entry) => <article key={entry.id} data-enabled={entry.enabled}>
     <header><strong>{entry.name || entry.id}</strong><span>{TYPE_LABELS[entry.type]}</span></header>
-    <p>{entry.content}</p><small>{entry.source} · v{entry.version} · {entry.confirmed ? "已确认" : "待确认"} · {entry.content_hash.slice(0, 12)}</small>
+    <p>{entry.content}</p><small>{entry.source} · v{entry.version} · {entry.state === "active" ? "已启用" : entry.state === "disabled" ? "已停用" : "已删除"} · {entry.content_hash.slice(0, 12)}</small>
     <div><button type="button" onClick={() => onEdit({ id: entry.id, type: entry.type, name: entry.name, content: entry.content, scope: entry.scope })}>编辑</button>{entry.enabled && <button type="button" onClick={() => void onDisable(entry.id)}>停用</button>}</div>
   </article>)}</section>;
 }

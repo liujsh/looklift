@@ -97,6 +97,7 @@ export type ProviderConfig = {
   provider: string;
   model: string;
   base_url: string;
+  export_dir: string;
   timeout: number;
   has_key: boolean;
 };
@@ -194,6 +195,16 @@ export type EditVersion = {
   created_at: string;
 };
 
+export type ExportRecord = {
+  id: string;
+  session_id: string;
+  version_id: string;
+  path: string;
+  format: "jpeg";
+  quality: number;
+  created_at: string;
+};
+
 export type SessionSnapshot = {
   id: string;
   image_path: string;
@@ -201,6 +212,7 @@ export type SessionSnapshot = {
   updated_at: string;
   messages: SessionMessage[];
   versions: EditVersion[];
+  exports: ExportRecord[];
   current_version_id: string;
   current_analysis: Analysis;
 };
@@ -223,6 +235,12 @@ export type CommitSessionRequest = {
 };
 
 export type RecordSessionMessagesRequest = { exchange: ChatMessage[] };
+
+export type ExportSessionRequest = {
+  format?: "jpeg";
+  quality?: number;
+  output_dir?: string;
+};
 
 export type LookSummary = {
   name: string;
@@ -359,7 +377,7 @@ export type PluginSummary = {
 
 export type AgentRunManifest = {
   run_id: string;
-  status: "starting" | "running" | "cancelling" | "interrupted" | "stale" | "completed" | "failed";
+  status: "starting" | "running" | "cancelling" | "interrupted" | "stale" | "completed" | "failed" | "cancelled";
   baseline_hash: string;
   photo_hash: string;
   attempt_id: string | null;
@@ -371,7 +389,29 @@ export type AgentRunManifest = {
   model: string | null;
   domain_pack_hash: string | null;
   session_id: string | null;
+  user_goal: string | null;
+  confirmed_candidate_id: string | null;
   context_sources: Array<{ id: string; version: number; hash: string; status: "used" | "omitted"; reason?: string }>;
+};
+
+export type AgentCandidate = {
+  candidate_id: string;
+  revision: string;
+  analysis: Analysis;
+  changes: Array<Record<string, unknown>>;
+  summary: string;
+  uncertainties: string[];
+  limitations: string[];
+  evidence_hash: string;
+  preview_available: boolean;
+};
+
+export type AgentCandidatesResponse = {
+  run_id: string;
+  status: AgentRunManifest["status"];
+  candidates: AgentCandidate[];
+  latest_candidate_id: string | null;
+  review: { can_confirm: boolean; confirmed_candidate_id: string | null };
 };
 
 export type ContextEntryType = "profile" | "rule" | "fact" | "preference" | "project" | "reference" | "feedback";
@@ -382,9 +422,14 @@ export type ContextEntryView = {
   content: string;
   source: string;
   scope: "global" | "project" | "run";
+  state: "active" | "disabled" | "deleted";
+  project_id: string | null;
+  run_id: string | null;
+  expires_at: string | null;
+  confidence: number;
+  evidence: string;
   name: string;
   description: string;
-  confirmed: boolean;
   enabled: boolean;
   version: number;
   content_hash: string;

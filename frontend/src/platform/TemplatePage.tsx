@@ -4,6 +4,7 @@ import type { ParamContract, TemplateCard } from "../api/types";
 import { countTemplates, filterTemplates, type TemplateCategoryFilter, visibleTemplateCategories } from "./templateCatalog";
 import { TemplateContactCard } from "./TemplateContactCard";
 import { TemplateDetailPage, type TemplateCurrentPhoto } from "./TemplateDetailPage";
+import { Icon } from "./icons";
 import "./template-page.css";
 
 export { templateParameterLabel } from "./templateCatalog";
@@ -91,19 +92,28 @@ export function TemplatePage({ client, contract, canApply, currentPhoto = null, 
     <main className="template-library-page" aria-label="大师模板">
       <section className="template-browse-pane">
         <header className="template-browse-header">
-          <div className="template-title-line"><h1>大师模板</h1><p>浏览预设、看懂参数，再应用到当前照片。</p><span />
+          <div className="template-title-line">
+            <div>
+              <p className="pane-kicker">Master Looks</p>
+              <h1>大师模板</h1>
+              <p>浏览预设、看懂参数，再应用到当前照片。</p>
+            </div>
             <small className={currentPhoto ? "is-on" : ""}><i />{currentPhoto ? `当前照片：${currentPhoto.title}` : "未打开照片"}</small>
           </div>
+
           <div className="template-filter-line">
             <nav className="template-source-switch" aria-label="模板来源">
               <button type="button" data-source="built_in" aria-pressed={source === "built_in"} onClick={() => chooseSource("built_in")}>官方模板</button>
               <button type="button" data-source="user" aria-pressed={source === "user"} onClick={() => chooseSource("user")}>我的模板</button>
             </nav>
-            <label className="template-search"><span aria-hidden="true">⌕</span><input aria-label="搜索模板" type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="搜索名称、摘要、分类或场景" />
-              {query && <button type="button" aria-label="清除搜索" onClick={() => setQuery("")}>×</button>}
+            <label className="template-search">
+              <span aria-hidden="true"><Icon name="search" /></span>
+              <input aria-label="搜索模板" type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="搜索名称、摘要、分类或场景" />
+              {query && <button type="button" aria-label="清除搜索" onClick={() => setQuery("")}><Icon name="close" /></button>}
             </label>
             <strong>{loading ? "载入中" : query ? `命中 ${visible.length} 个` : `${visible.length} 个模板`}</strong>
           </div>
+
           <nav className="template-category-nav" aria-label="模板分类">
             {categories.map((item) => <button type="button" key={item.id} data-category={item.id} aria-pressed={category === item.id} onClick={() => setCategory(item.id)}>{item.label}<span>{countTemplates(templates, source, item.id)}</span></button>)}
           </nav>
@@ -116,7 +126,6 @@ export function TemplatePage({ client, contract, canApply, currentPhoto = null, 
             : <div className="template-catalog-message"><h2>{query ? "没有匹配的模板" : "这个分类还是空的"}</h2><p>{query ? `“${query}”在当前来源与分类下没有命中。` : source === "user" ? "在修图页保存喜欢的效果后，它会带着完整白盒参数出现在这里。" : "该分类下暂时没有官方模板。"}</p>{query && <button type="button" onClick={() => setQuery("")}>清除搜索</button>}</div>}
         </div>
       </section>
-
     </main>
   );
 }

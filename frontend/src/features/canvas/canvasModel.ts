@@ -1,6 +1,10 @@
 import type { JsonObject } from "../../api/types";
 
-export const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"] as const;
+export const IMAGE_EXTENSIONS = [
+  ".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff",
+  ".3fr", ".arw", ".cr2", ".cr3", ".dng", ".nef", ".nrw",
+  ".orf", ".pef", ".raf", ".rw2", ".srw",
+] as const;
 
 export type CanvasApi = {
   preview(

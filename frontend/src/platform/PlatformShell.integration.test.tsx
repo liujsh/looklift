@@ -27,7 +27,7 @@ function snapshot(id: string, path: string, exposure = 0): SessionSnapshot {
   return {
     id, image_path: path,
     created_at: "2026-07-20T00:00:00Z", updated_at: "2026-07-20T01:00:00Z",
-    messages: [], versions: [], current_version_id: `${id}-v1`, current_analysis: current,
+    messages: [], versions: [], exports: [], current_version_id: `${id}-v1`, current_analysis: current,
   };
 }
 

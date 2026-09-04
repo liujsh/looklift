@@ -22,6 +22,7 @@ import type { EditorState } from "../store/editorStore";
 
 import { AutomationPage } from "./AutomationPage";
 import { AgentRunsPage } from "./AgentRunsPage";
+import { SkillsPage } from "./SkillsPage";
 
 type PlatformShellProps = {
   client: LookliftClient;
@@ -35,6 +36,7 @@ const PLATFORM_TITLES: Record<PlatformPage, string> = {
   library: "我的图库",
   import: "从设备导入",
   templates: "大师模板",
+  skills: "技能",
   automation: "自动化技能",
   plugins: "插件",
   runs: "运行恢复",
@@ -202,7 +204,7 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
         quickEditBusy={quickEditBusy}
         onFuture={openFuture}
       />
-      {!(activeTab.kind === "platform" && activeTab.page === "settings") && <NavigationRail
+      {activeTab.kind !== "studio" && !(activeTab.kind === "platform" && activeTab.page === "settings") && <NavigationRail
           collapsed={navigationCollapsed}
           activeTarget={activeTarget}
           onToggle={() => store.setNavigationCollapsed(!platform.navigationCollapsed)}
@@ -211,10 +213,10 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
       <section className="platform-content" inert={closeDialog ? true : undefined}>
         {shellError && <div className="platform-error" role="alert">{shellError}</div>}
         {activeTab.kind === "home" && <HomePage client={client} onResume={resume} onQuickEdit={quickEdit} quickEditBusy={quickEditBusy} onFuture={openFuture} />}
-        {activeTab.kind === "platform" && (activeTab.page === "settings" ? <SettingsPage client={client} onBack={() => store.activateTab("home")} /> : activeTab.page === "plugins" ? <PluginPage client={client} /> : activeTab.page === "runs" ? <AgentRunsPage client={client} /> : activeTab.page === "templates" ? <TemplatePage client={client} contract={contract} canApply={Boolean(recentRuntime && recentEditor.activeAiRequestId === null && recentEditor.pendingPreview === null && canApplyTemplateToStudio(recentRuntime))} currentPhoto={currentTemplatePhoto} onApply={applyTemplate} /> : activeTab.page === "import" ? <ImportPage client={client} /> : activeTab.page === "automation" ? <AutomationPage client={client} /> : activeTab.page === "library" ? <LibraryPage client={client} onOpen={async (path) => {
+        {activeTab.kind === "platform" && (activeTab.page === "settings" ? <SettingsPage client={client} onBack={() => store.activateTab("home")} /> : activeTab.page === "plugins" ? <PluginPage client={client} /> : activeTab.page === "runs" ? <AgentRunsPage client={client} /> : activeTab.page === "skills" ? <SkillsPage client={client} /> : activeTab.page === "templates" ? <TemplatePage client={client} contract={contract} canApply={Boolean(recentRuntime && recentEditor.activeAiRequestId === null && recentEditor.pendingPreview === null && canApplyTemplateToStudio(recentRuntime))} currentPhoto={currentTemplatePhoto} onApply={applyTemplate} /> : activeTab.page === "import" ? <ImportPage client={client} /> : activeTab.page === "automation" ? <AutomationPage client={client} /> : activeTab.page === "library" ? <LibraryPage client={client} onOpen={async (path) => {
           if (!contract) throw new Error("参数契约尚未就绪");
           openSnapshot(await client.createSession({ path, initial_analysis: createNeutralAnalysis(contract) }));
-        }} /> : <ComingSoonPage page={activeTab.page} />)}
+          }} onBatchAutomation={() => openPage("automation")} /> : <ComingSoonPage page={activeTab.page} />)}
         {platform.tabs.filter((tab) => tab.kind === "studio").map((tab) => {
           const active = tab.id === platform.activeTabId;
           const runtime = tab.runtime as ReturnType<typeof createStudioRuntime>;
@@ -227,6 +229,7 @@ export function PlatformShell({ client, contract, engineLabel, store: providedSt
               engineLabel={engineLabel}
               coordinator={runtime.coordinator}
               workflow={runtime.workflow}
+              onHome={() => store.activateTab("home")}
             />
           </div>;
         })}

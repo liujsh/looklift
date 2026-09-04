@@ -12,6 +12,8 @@ import type {
   CreateAutomationWorkflowRequest,
   EngineProbe,
   ExportLookRequest,
+  ExportRecord,
+  ExportSessionRequest,
   JsonObject,
   ImageInfo,
   LookSummary,
@@ -31,6 +33,7 @@ import type {
   SessionSummary,
   TaskResult,
   AgentRunManifest,
+  AgentCandidatesResponse,
   RuntimeSummary,
   ProviderSettings,
   PluginSummary,
@@ -107,6 +110,10 @@ export class LookliftClient {
 
   detectProvider(): Promise<{ available: boolean; models: string[] }> {
     return this.json("/api/providers/detect", { method: "POST" });
+  }
+
+  exportDiagnostics(): Promise<{ ok: boolean; path: string; event_count: number }> {
+    return this.json("/api/diagnostics/export", { method: "POST" });
   }
 
   async plugins(): Promise<PluginSummary[]> {
@@ -315,6 +322,44 @@ export class LookliftClient {
     payload: RecordSessionMessagesRequest,
   ): Promise<SessionSnapshot> {
     return this.json(`/api/sessions/${encodeURIComponent(id)}/messages`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  createAgentRun(payload: {
+    session_id: string;
+    user_goal: string;
+    runtime_id: string;
+    model: string;
+    provider?: string;
+    context_sources?: Array<Record<string, unknown>>;
+    domain_pack_hash?: string;
+  }): Promise<AgentRunManifest> {
+    return this.json("/api/agent/runs", { method: "POST", body: JSON.stringify(payload) });
+  }
+
+  startAgentRun(id: string): Promise<AgentRunManifest> {
+    return this.json(`/api/agent/runs/${encodeURIComponent(id)}/start`, { method: "POST" });
+  }
+
+  cancelAgentRun(id: string): Promise<AgentRunManifest> {
+    return this.json(`/api/agent/runs/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+  }
+
+  agentCandidates(id: string): Promise<AgentCandidatesResponse> {
+    return this.json(`/api/agent/runs/${encodeURIComponent(id)}/candidates`);
+  }
+
+  confirmAgentCandidate(id: string, candidateId: string): Promise<AgentRunManifest> {
+    return this.json(`/api/agent/runs/${encodeURIComponent(id)}/confirm`, {
+      method: "POST",
+      body: JSON.stringify({ candidate_id: candidateId }),
+    });
+  }
+
+  exportSession(id: string, payload: ExportSessionRequest = {}): Promise<ExportRecord> {
+    return this.json(`/api/sessions/${encodeURIComponent(id)}/exports`, {
       method: "POST",
       body: JSON.stringify(payload),
     });

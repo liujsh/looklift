@@ -190,6 +190,7 @@ describe("LookliftClient", () => {
       Response.json(snapshot),
       Response.json(snapshot),
       Response.json(snapshot),
+      Response.json({ id: "export-1", path: "C:/导出/a.jpg" }),
     ]);
     const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
     const controller = new AbortController();
@@ -216,6 +217,7 @@ describe("LookliftClient", () => {
     await client.recordSessionMessages("session-1", {
       exchange: [{ role: "assistant", content: "失败", status: "failed" }],
     });
+    await client.exportSession("session-1", { quality: 88 });
 
     expect(queue.requests.map((item) => item.url)).toEqual([
       "http://127.0.0.1:9/api/chat/step",
@@ -223,9 +225,11 @@ describe("LookliftClient", () => {
       "http://127.0.0.1:9/api/sessions/session-1",
       "http://127.0.0.1:9/api/sessions/session-1/commit",
       "http://127.0.0.1:9/api/sessions/session-1/messages",
+      "http://127.0.0.1:9/api/sessions/session-1/exports",
     ]);
     expect(queue.requests[0].init.signal).toBe(controller.signal);
     expect(JSON.parse(String(queue.requests[3].init.body)).source).toBe("chat");
+    expect(JSON.parse(String(queue.requests[5].init.body))).toEqual({ quality: 88 });
     for (const request of queue.requests) {
       expect(new Headers(request.init.headers).get("X-Looklift-Token")).toBe("token");
     }
@@ -268,6 +272,27 @@ describe("LookliftClient", () => {
       attempt_id: "attempt-2",
       runtime_id: "pi-cli",
     });
+  });
+
+  it("通过客户端完成 Agent Run 的创建、启动、候选查询和确认", async () => {
+    const queue = responseQueue([
+      Response.json({ run_id: "run-1", status: "starting" }),
+      Response.json({ run_id: "run-1", status: "starting" }, { status: 202 }),
+      Response.json({ run_id: "run-1", candidates: [], review: { can_confirm: false, confirmed_candidate_id: null } }),
+      Response.json({ run_id: "run-1", status: "completed" }),
+    ]);
+    const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
+    await client.createAgentRun({ session_id: "session-1", user_goal: "提亮主体", runtime_id: "openai-api", model: "gpt-test" });
+    await client.startAgentRun("run/1");
+    await client.agentCandidates("run/1");
+    await client.confirmAgentCandidate("run/1", "candidate/1");
+    expect(queue.requests.map((request) => request.url)).toEqual([
+      "http://127.0.0.1:9/api/agent/runs",
+      "http://127.0.0.1:9/api/agent/runs/run%2F1/start",
+      "http://127.0.0.1:9/api/agent/runs/run%2F1/candidates",
+      "http://127.0.0.1:9/api/agent/runs/run%2F1/confirm",
+    ]);
+    expect(JSON.parse(String(queue.requests[3].init.body))).toEqual({ candidate_id: "candidate/1" });
   });
 
   it("覆盖图库分页、异步扫描、标签和 Explorer 端点", async () => {

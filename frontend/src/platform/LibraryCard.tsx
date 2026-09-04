@@ -16,8 +16,6 @@ export function LibraryCard({ item, loadThumbnail, onOpen, onReveal, onTags }: L
   const thumbnailUrl = useThumbnail(item, loadThumbnail);
   return <article className="library-card" data-available={item.available}>
     <div className="library-thumb-wrap">
-      <span className="sprocket tl" aria-hidden="true" />
-      <span className="sprocket tr" aria-hidden="true" />
       <div className="library-thumb">
         {thumbnailUrl
           ? <img src={thumbnailUrl} alt="" />
