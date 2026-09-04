@@ -217,6 +217,11 @@ def _provider_store() -> ProviderConfigStore:
     )
 
 
+def _provider_configured() -> bool:
+    """只看本地配置文件是否存在，不触发凭据存储初始化。"""
+    return (config.CONFIG_PATH.parent / "providers.json").is_file()
+
+
 def _get_provider_config(_ctx: dict) -> tuple[int, dict]:
     try:
         return 200, _provider_store().query()
@@ -519,7 +524,7 @@ def _stream_agent_run(ctx: dict):
                 execution_mode=str(execution_mode or "api"),
                 runtime_id=str(runtime_id) if runtime_id not in (None, "") else None,
                 cli_available=bool(body.get("cli_available", False)),
-                provider_configured=_provider_store().load() is not None,
+                provider_configured=_provider_configured(),
                 registry=builtin_runtime_registry(),
             )
         except (ExecutionSelectionError, ValueError) as exc:
