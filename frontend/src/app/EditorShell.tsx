@@ -66,6 +66,7 @@ export function EditorShell({
   const ownedWorkflow = useMemo(
     () => providedWorkflow === undefined && client ? createChatWorkflow(client, store, {
       onMessagesOnly: (exchange) => sessionCoordinator?.recordMessages(exchange),
+      getSessionId: () => sessionCoordinator?.getSessionId() ?? null,
     }) : null,
     [client, providedWorkflow, sessionCoordinator, store],
   );

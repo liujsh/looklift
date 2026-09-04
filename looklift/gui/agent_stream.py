@@ -90,7 +90,10 @@ def _clear_cancel(run_id: str) -> None:
         _CANCEL.pop(run_id, None)
 
 
-def build_run_input(payload: Mapping[str, Any]) -> AgentRunInput:
+def build_run_input(
+    payload: Mapping[str, Any], *,
+    proxy_jpeg: bytes | None = None,
+) -> AgentRunInput:
     """从请求体装配冻结的 `AgentRunInput`（不保存 API Key / 原图）。"""
     try:
         run_id = str(payload["run_id"])
@@ -98,7 +101,9 @@ def build_run_input(payload: Mapping[str, Any]) -> AgentRunInput:
         model = str(payload["model"])
         instructions = str(payload["domain_pack"]["instructions"])
         user_message = str(payload["domain_pack"]["user_message"])
-        proxy_jpeg = base64.b64decode(str(payload["proxy_jpeg"]), validate=False)
+        if proxy_jpeg is None:
+            encoded = payload.get("proxy_jpeg")
+            proxy_jpeg = base64.b64decode(str(encoded), validate=False) if encoded else b""
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError("Attempt 输入缺少必要字段") from exc
     if not proxy_jpeg:

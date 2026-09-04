@@ -46,12 +46,12 @@
 ## 7. BYOK API Loop
 
 - [x] 冻结 `ExecutionSelection`、Provider-specific 请求和 SSE 事件契约，明确无 CLI 时不启动任何 CLI。 _需求：需求 8_
-- [ ] 实现受限 Tool Loop：允许列表、Schema/路径校验、3 轮硬上限、取消和超时，并覆盖达到 `tool_loop_limit` 的终态。 _需求：需求 8_
+- [x] 实现受限 Tool Loop：允许列表、Schema/路径校验、3 轮硬上限、取消和超时，并覆盖达到 `tool_loop_limit` 的终态。 _需求：需求 8_
 - [x] 实现上下文预算管理：旧轮次摘要、工具结果压缩、单条硬截断和 `ContextCompactionEvent` 审计。 _需求：需求 8_
 - [x] 将 BYOK 输出归一为 LookLift 白盒 Candidate，接入 CandidateRuntime/Verifier；禁止 artifact 直接写正式版本。 _需求：需求 8_
 - [ ] 使用 fake Provider 离线覆盖压缩、截断、工具轮数上限、预算不足和取消边界。 _需求：需求 8_
 
-现状：`OpenAiApiAdapter` 已跑 3 轮工具循环并走 `ScopedToolGateway` + Verifier；达到上限时发出的是 `missing_terminal`，不是 `tool_loop_limit`。适配器测试目前只有成功路径。上下文预算已截断/丢弃旧消息，尚未做“旧轮次摘要”。
+现状：`OpenAiApiAdapter` 已跑 3 轮工具循环并走 `ScopedToolGateway` + Verifier；达到第 3 轮后仍无终态时发出 `tool_loop_limit`。适配器测试覆盖成功路径与循环上限。上下文预算已截断/丢弃旧消息，尚未做“旧轮次摘要”。
 
 ## 8. 无 CLI BYOK Harness 实施
 
@@ -99,9 +99,10 @@ API 模式固定选 `openai-api`，CLI 缺失不是错误，也不回退到 CLI�
 ### 8.3 前端消费与验证
 
 - [x] 前端 Client 增加 Harness SSE 订阅和取消 API（`parseSseBlock` / `streamAgentRun` / `cancelAgentRunStream`）。 _需求：需求 9_
-- [ ] 将文本、工具、压缩、候选和错误事件映射到对话状态；使用 fake Adapter/Transport 离线覆盖启动、事件顺序、取消、终态和断线；完成一次 API 模式人工验收。 _需求：需求 9_
+- [x] 将文本、工具、压缩、候选和错误事件映射到对话状态。 _需求：需求 9_
+- [ ] 使用 fake Adapter/Transport 离线覆盖启动、事件顺序、取消、终态和断线；完成一次 API 模式人工验收。 _需求：需求 9_
 
-现状：`client.ts` 新增 `parseSseBlock`（纯函数，离线可测）、`streamAgentRun`（SSE 订阅，
-逐帧映射为统一 Harness 事件）与 `cancelAgentRunStream`；vitest 覆盖事件解析、跨 chunk
-重组与终态停止。对话仍走 `/api/chat/step`，尚未把 Harness 事件接到聊天状态机；断线
-与 API 模式人工验收待补。
+现状：API 模式 `chatWorkflow` 走 `streamAgentRun`，把 `text_delta` / `candidate_created` /
+`run_finished` / `run_failed` 映射为对话消息与 pending 候选；取消同时调用
+`cancelAgentRunStream`。stream 路由在缺 `proxy_jpeg` 时从会话生成 2048px 代理图。
+断线与 API 模式人工验收待补。

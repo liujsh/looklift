@@ -454,7 +454,7 @@ export type StreamAgentRunInput = {
   model: string;
   instructions: string;
   userMessage: string;
-  proxyJpegBase64: string;
+  proxyJpegBase64?: string;
   sessionId?: string | null;
 };
 

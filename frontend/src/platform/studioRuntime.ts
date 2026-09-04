@@ -35,6 +35,7 @@ export function createStudioRuntime(
   const coordinator = createSessionCoordinator(client, store, snapshot.id);
   const workflow = createChatWorkflow(client, store, {
     onMessagesOnly: (exchange) => coordinator.recordMessages(exchange),
+    getSessionId: () => snapshot.id,
   });
   workflow.restoreMessages(snapshot.messages);
   let alive = true;

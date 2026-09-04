@@ -36,6 +36,50 @@ describe("chatWorkflow", () => {
     expect(store.getSnapshot().versions).toEqual([]);
   });
 
+  it("发送时携带当前会话的 Runtime 与模型选择", async () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis());
+    const chatStep = vi.fn().mockResolvedValue(response(1));
+    const workflow = createChatWorkflow({ chatStep }, store);
+    workflow.setExecutionSelection?.({ mode: "api", runtimeId: "openai-api", model: "gpt-test" });
+
+    await workflow.send("提亮");
+
+    expect(chatStep.mock.calls[0][0]).toMatchObject({
+      execution_mode: "api", runtime_id: "openai-api", model: "gpt-test",
+    });
+  });
+
+  it("API 模式走 SSE 流并把候选映射到对话状态", async () => {
+    const store = createEditorStore();
+    store.openImage("C:/photo.jpg", analysis());
+    const chatStep = vi.fn();
+    const streamAgentRun = vi.fn(async (input, onEvent) => {
+      expect(input.executionMode).toBe("api");
+      expect(input.sessionId).toBe("session-1");
+      onEvent({ type: "run_started", run_id: input.runId, attempt_id: input.attemptId, sequence: 1, payload: { provider: "openai" } });
+      onEvent({
+        type: "run_finished", run_id: input.runId, attempt_id: input.attemptId, sequence: 2,
+        payload: {
+          outcome: "candidate_ready",
+          summary: "提高曝光",
+          analysis: analysis(0.4),
+          changes: [{ path: "basic.exposure", before: 0, after: 0.4 }],
+        },
+      });
+    });
+    const workflow = createChatWorkflow({ chatStep, streamAgentRun }, store, { getSessionId: () => "session-1" });
+    workflow.setExecutionSelection?.({ mode: "api", runtimeId: "openai-api", model: "gpt-test" });
+
+    await workflow.send("提亮");
+
+    expect(chatStep).not.toHaveBeenCalled();
+    expect(streamAgentRun).toHaveBeenCalledTimes(1);
+    expect(workflow.getSnapshot().lastResponse?.explanation).toBe("提高曝光");
+    expect(store.getSnapshot().displayAnalysis?.basic.exposure).toBe(0.4);
+    expect(store.getSnapshot().pendingPreview).not.toBeNull();
+  });
+
   it("请求期间锁定编辑并丢弃切图后的晚到响应", async () => {
     const store = createEditorStore();
     store.openImage("C:/first.jpg", analysis());

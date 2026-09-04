@@ -109,3 +109,73 @@ def test_openai_adapter_runs_tool_feedback_loop_through_gateway() -> None:
     assert events[-1].kind is AgentEventKind.RUN_FINISHED
     assert events[-1].payload["verifier"]["status"] == "pass"
     assert events[-1].payload["user_review"]["confirmed"] is False
+
+
+def test_openai_adapter_emits_tool_loop_limit_after_three_rounds() -> None:
+    class Runtime:
+        latest_candidate = None
+        binding = SimpleNamespace(base_version_id="a" * 64)
+
+        def cancel(self) -> None:
+            pass
+
+    class Gateway:
+        def bind(self, _runtime) -> ScopedToolGrant:
+            return ScopedToolGrant("token", 999)
+
+        def call(self, _token, name, _arguments) -> GatewayToolResult:
+            return GatewayToolResult({"ok": True, "tool": name})
+
+        def revoke(self, _token) -> None:
+            pass
+
+    class Transport:
+        round = 0
+
+        async def stream(self, _snapshot, request, *, api_key):
+            self.round += 1
+            yield _sse(
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": f"call-{self.round}",
+                                        "function": {
+                                            "name": "render_candidate",
+                                            "arguments": json.dumps({"operations": [], "intent": "检查"}),
+                                        },
+                                    }
+                                ]
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ]
+                }
+            )
+
+    snapshot = ProviderSnapshot(
+        "openai",
+        "https://api.openai.com/v1",
+        "gpt-5",
+        "credential://openai/default",
+        ProviderProtocol.OPENAI_CHAT_COMPLETIONS,
+        4096,
+        1,
+    )
+    adapter = OpenAiApiAdapter(
+        snapshot_resolver=lambda _input: snapshot,
+        credential_resolver=lambda _ref: "sk-test",
+        runtime_resolver=lambda _input: Runtime(),
+        transport=Transport(),
+        tool_gateway=Gateway(),
+    )
+
+    async def exercise():
+        return [event async for event in adapter.start(_run_input())]
+
+    events = asyncio.run(exercise())
+    assert events[-1].kind is AgentEventKind.RUN_FAILED
+    assert events[-1].payload["code"] == "tool_loop_limit"

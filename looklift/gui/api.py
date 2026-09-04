@@ -526,13 +526,9 @@ def _stream_agent_run(ctx: dict):
             return 400, {"error": str(exc)}
     elif not isinstance(runtime_id, str) or not runtime_id.strip():
         return 400, {"error": "runtime_id 必须是非空字符串"}
-    try:
-        run_input = agent_stream.build_run_input(body)
-    except ValueError as exc:
-        return 400, {"error": str(exc)}
 
-    # 真实 openai-api 路径：按会话事实装配 Adapter 工厂，显式传入避免并发覆盖全局表
     factories = None
+    proxy_jpeg = None
     if runtime_id == "openai-api":
         session = _stream_session_context(body)
         if isinstance(session, dict):  # 错误响应
@@ -545,6 +541,14 @@ def _stream_agent_run(ctx: dict):
                 base_version_id=base_version_id,
             )
         }
+        if not body.get("proxy_jpeg"):
+            proxy_jpeg = _proxy_jpeg_from_session(image_path, baseline_analysis)
+            if proxy_jpeg is None:
+                return 409, {"error": "无法从会话生成代理图"}
+    try:
+        run_input = agent_stream.build_run_input(body, proxy_jpeg=proxy_jpeg)
+    except ValueError as exc:
+        return 400, {"error": str(exc)}
     streamer = agent_stream.make_streamer(
         runtime_id, run_input, factories=factories
     )
@@ -582,6 +586,20 @@ def _wire_openai_factory(*, image_path, baseline_analysis, base_version_id):
         image_path=image_path,
         base_version_id=base_version_id,
     )
+
+
+def _proxy_jpeg_from_session(image_path: str, analysis: dict) -> bytes | None:
+    """用会话成片生成 2048px 无 EXIF 代理图，失败返回 None。"""
+    try:
+        with ai_proxy.prepare_ai_proxy(
+            Path(image_path),
+            analysis=analysis,
+            factor=1.0,
+            include_metadata=False,
+        ) as proxy:
+            return proxy.path.read_bytes()
+    except Exception:
+        return None
 
 
 def _cancel_agent_run(ctx: dict) -> tuple[int, dict]:
