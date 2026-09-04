@@ -9,6 +9,7 @@ import hmac
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Callable
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from . import api
@@ -129,10 +130,17 @@ class _RequestHandler(BaseHTTPRequestHandler):
             "query": {key: values[0] for key, values in parse_qs(urlsplit(self.path).query).items()},
         }
         result = handler(context)
-        # 一条干净的分发分支:handler 返回三元组即二进制响应（如
-        # `/api/preview` 的 JPEG 字节），两元组沿用原有 JSON 响应，不为此
-        # 拆两套 Handler 签名或额外的 content-type 协商机制。
-        if len(result) == 3:
+        # 一条干净的分发分支：handler 返回 `(status, content_type, callable)` 且
+        # content_type 为 text/event-stream 时走 SSE 流式出口（逐帧写出、不设
+        # Content-Length）；否则三元组即二进制响应（如 `/api/preview` 的 JPEG
+        # 字节），两元组沿用原有 JSON 响应，不为此拆多套 Handler 签名。
+        if (
+            len(result) == 3
+            and result[1] == "text/event-stream"
+            and callable(result[2])
+        ):
+            self._send_stream(result[2])
+        elif len(result) == 3:
             status, data, content_type = result
             self._send_binary(status, data, content_type)
         else:
@@ -174,6 +182,26 @@ class _RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def _send_stream(self, streamer: Callable[[Callable[[bytes], None]], None]) -> None:
+        """SSE 流式出口：逐帧写出，客户端断开或运行异常时安全收尾。"""
+        self.send_response(HTTPStatus.OK)
+        self._send_cors_headers()
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "close")
+        self.end_headers()
+
+        def write(data: bytes) -> None:
+            self.wfile.write(data)
+            self.wfile.flush()
+
+        try:
+            streamer(write)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass  # 客户端已断开，Attempt 由 streamer 内部收尾
+        except Exception:
+            pass  # 流式运行异常已由 streamer 转为终态帧，这里只保证连接不 500
 
     def _send_json(self, status: int, body: dict) -> None:
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")

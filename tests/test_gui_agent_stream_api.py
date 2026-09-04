@@ -1,0 +1,197 @@
+from __future__ import annotations
+
+import asyncio
+import base64
+import http.client
+import json
+import threading
+
+from looklift.agent_adapter import AgentEvent, AgentEventKind, ScriptedAgentEvent
+from looklift.fake_agent_adapter import FakeAgentAdapter
+from looklift.gui import agent_stream, api, server as gui_server
+
+
+def _body(**overrides):
+    payload = {
+        "run_id": "run-sse",
+        "attempt_id": "attempt-1",
+        "model": "gpt-test",
+        "domain_pack": {
+            "instructions": "只生成白盒候选，禁止正式提交。",
+            "user_message": "自然提亮",
+        },
+        "proxy_jpeg": base64.b64encode(b"\xff\xd8\xff\xe0jpeg").decode(),
+        "runtime_id": "fake",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _collect(streamer):
+    frames: list[bytes] = []
+    streamer(frames.append)
+    return frames
+
+
+def test_stream_route_emits_unique_terminal_via_sse(tmp_path, monkeypatch):
+    agent_stream.clear_runtime_factories()
+    agent_stream.register_runtime_factory(
+        "fake",
+        lambda: FakeAgentAdapter(
+            [ScriptedAgentEvent(AgentEventKind.RUN_FINISHED, {"outcome": "completed"})]
+        ),
+    )
+    try:
+        status, content_type, streamer = api.ROUTES[
+            ("POST", "/api/agent/runs/<id>/stream")
+        ]({"params": {"id": "run-sse"}, "body": json.dumps(_body()).encode(), "content_type": "application/json", "query": {}})
+        assert status == 200
+        assert content_type == "text/event-stream"
+        frames = _collect(streamer)
+    finally:
+        agent_stream.clear_runtime_factories()
+
+    joined = b"".join(frames)
+    assert b"event: harness" in joined
+    parsed = [
+        json.loads(line[len("data: "):])
+        for frame in frames
+        for line in frame.decode().splitlines()
+        if line.startswith("data: ")
+    ]
+    types = [item["type"] for item in parsed]
+    assert types[0] == "run_started"
+    assert types[-1] == "run_finished"
+    # 唯一终态：只有一条 run_finished/run_failed
+    assert sum(t in {"run_finished", "run_failed"} for t in types) == 1
+    assert [item["sequence"] for item in parsed] == list(range(1, len(parsed) + 1))
+
+
+def test_stream_route_returns_400_for_bad_body(tmp_path, monkeypatch):
+    status, body = api.ROUTES[("POST", "/api/agent/runs/<id>/stream")](
+        {"params": {"id": "run-sse"}, "body": json.dumps({"runtime_id": "fake"}).encode(), "content_type": "application/json", "query": {}}
+    )
+    assert status == 400
+    assert "Attempt 输入" in body["error"]
+
+    status, body = api.ROUTES[("POST", "/api/agent/runs/<id>/stream")](
+        {"params": {"id": "run-sse"}, "body": json.dumps(_body(runtime_id="")).encode(), "content_type": "application/json", "query": {}}
+    )
+    assert status == 400
+
+
+def test_cancel_route_returns_202_and_sets_token(tmp_path, monkeypatch):
+    status, body = api.ROUTES[("POST", "/api/agent/runs/<id>/cancel")](
+        {"params": {"id": "run-cancel-token"}, "body": None, "content_type": "", "query": {}}
+    )
+    assert status == 202
+    assert body["cancelled"] == "run-cancel-token"
+
+
+class _BlockingAdapter:
+    """先发出 run_started 后阻塞在 await 上，直到被取消。"""
+
+    def __init__(self) -> None:
+        self.cancelled = False
+
+    async def start(self, run_input):
+        yield AgentEvent(AgentEventKind.RUN_STARTED, run_input.run_id, run_input.attempt_id, 1, {})
+        try:
+            while not self.cancelled:
+                await asyncio.sleep(0.02)
+        except asyncio.CancelledError:
+            raise
+
+    async def cancel(self, run_id: str) -> None:
+        self.cancelled = True
+
+    async def dispose(self, run_id: str) -> None:
+        await self.cancel(run_id)
+
+
+def test_cancel_route_interrupts_blocking_stream_with_terminal(tmp_path, monkeypatch):
+    adapter = _BlockingAdapter()
+    agent_stream.clear_runtime_factories()
+    agent_stream.register_runtime_factory("fake", lambda: adapter)
+    try:
+        status, content_type, streamer = api.ROUTES[
+            ("POST", "/api/agent/runs/<id>/stream")
+        ]({"params": {"id": "run-blocking"}, "body": json.dumps(_body(run_id="run-blocking")).encode(), "content_type": "application/json", "query": {}})
+        assert status == 200
+        frames: list[bytes] = []
+        stop = threading.Event()
+
+        def run():
+            streamer(frames.append)
+            stop.set()
+
+        thread = threading.Thread(target=run)
+        thread.start()
+        # 等待流真正启动（出现第一帧）
+        for _ in range(200):
+            if frames:
+                break
+            threading.Event().wait(0.01)
+        api.ROUTES[("POST", "/api/agent/runs/<id>/cancel")](
+            {"params": {"id": "run-blocking"}, "body": None, "content_type": "", "query": {}}
+        )
+        assert stop.wait(3.0), "streamer 未在取消后退出"
+        thread.join(timeout=1.0)
+    finally:
+        agent_stream.clear_runtime_factories()
+
+    parsed = [
+        json.loads(line[len("data: "):])
+        for frame in frames
+        for line in frame.decode().splitlines()
+        if line.startswith("data: ")
+    ]
+    assert parsed[0]["type"] == "run_started"
+    assert parsed[-1]["type"] == "run_failed"
+    assert parsed[-1]["payload"]["code"] == "cancelled"
+    assert sum(t in {"run_finished", "run_failed"} for t in [p["type"] for p in parsed]) == 1
+
+
+def test_stream_route_over_http(tmp_path, monkeypatch):
+    """真实起 server，POST stream 路由应返回 text/event-stream 且含唯一终态。"""
+    agent_stream.clear_runtime_factories()
+    agent_stream.register_runtime_factory(
+        "fake",
+        lambda: FakeAgentAdapter(
+            [ScriptedAgentEvent(AgentEventKind.RUN_FINISHED, {"outcome": "completed"})]
+        ),
+    )
+    try:
+        srv = gui_server.create_server(port=0)
+        thread = threading.Thread(target=srv.serve_forever, daemon=True)
+        thread.start()
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=10)
+            try:
+                conn.request(
+                    "POST",
+                    "/api/agent/runs/run-http/stream",
+                    body=json.dumps(_body(run_id="run-http")).encode(),
+                    headers={"Content-Type": "application/json"},
+                )
+                resp = conn.getresponse()
+                assert resp.status == 200
+                assert resp.getheader("Content-Type").startswith("text/event-stream")
+                body = resp.read().decode()
+            finally:
+                conn.close()
+        finally:
+            srv.shutdown()
+            srv.server_close()
+            thread.join(timeout=5)
+    finally:
+        agent_stream.clear_runtime_factories()
+
+    parsed = [
+        json.loads(line[len("data: "):])
+        for line in body.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert parsed[0]["type"] == "run_started"
+    assert parsed[-1]["type"] == "run_finished"
+    assert sum(t in {"run_finished", "run_failed"} for t in [p["type"] for p in parsed]) == 1
