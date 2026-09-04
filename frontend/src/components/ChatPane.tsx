@@ -6,6 +6,7 @@ import type { SessionCoordinator } from "../features/sessions/sessionCoordinator
 import type { RenderStatus } from "../store/editorStore";
 import { ChatChangeCard } from "./ChatChangeCard";
 import { ChatMessageList } from "./ChatMessageList";
+import { Icon } from "../platform/icons";
 
 type ChatPaneProps = {
   enabled: boolean;
@@ -14,9 +15,11 @@ type ChatPaneProps = {
   providerLabel?: string;
   renderStatus?: RenderStatus;
   client?: LookliftClient;
+  onHome?(): void;
 };
 
 export type TemplatePromptAttachment = { template: TemplateCard; analysis: Analysis };
+export type SkillAttachment = { id: string; name: string; description: string };
 
 export function buildTemplatePrompt(message: string, attachment?: TemplatePromptAttachment | null): string {
   if (!attachment) return message;
@@ -28,12 +31,17 @@ export function buildTemplatePrompt(message: string, attachment?: TemplatePrompt
   ].join("\n");
 }
 
+export function buildSkillPrompt(message: string, skill?: SkillAttachment | null): string {
+  if (!skill) return message;
+  return [`用户要求：${message}`, `已选择技能：${skill.name}（${skill.description}）`, "请按该技能执行，并保持白盒参数可解释；不要重绘原照片。"].join("\n");
+}
+
 export async function submitChatInput(
-  value: string, workflow: ChatWorkflow, attachment?: TemplatePromptAttachment | null,
+  value: string, workflow: ChatWorkflow, attachment?: TemplatePromptAttachment | null, skill?: SkillAttachment | null,
 ) {
   const message = value.trim();
   if (!message) return null;
-  return workflow.send(buildTemplatePrompt(message, attachment));
+  return workflow.send(buildSkillPrompt(buildTemplatePrompt(message, attachment), skill));
 }
 
 const EMPTY = Object.freeze({
@@ -46,19 +54,25 @@ export function ChatPane({
   enabled,
   workflow,
   coordinator,
-  providerLabel = "当前配置",
   renderStatus = "ready",
   client,
+  onHome,
 }: ChatPaneProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [input, setInput] = useState("");
-  const [includeMetadata, setIncludeMetadata] = useState(true);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
-  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerMode, setPickerMode] = useState<"skill" | "template" | null>(null);
   const [templates, setTemplates] = useState<readonly TemplateCard[]>([]);
   const [templateLoading, setTemplateLoading] = useState(false);
   const [attachment, setAttachment] = useState<TemplatePromptAttachment | null>(null);
+  const [skillAttachment, setSkillAttachment] = useState<SkillAttachment | null>(null);
+  const skills: SkillAttachment[] = [
+    { id: "abstract-collage", name: "抽象风格拼接", description: "生成照片衍生的抽象拼接参考" },
+    { id: "zine-layout", name: "Zine / 小志排版", description: "整理照片叙事与版式建议" },
+    { id: "film-look", name: "胶片质感", description: "模拟胶片色彩、颗粒与对比" },
+  ];
   const state = useSyncExternalStore(
     workflow?.subscribe ?? emptySubscribe,
     workflow?.getSnapshot ?? (() => EMPTY),
@@ -74,8 +88,9 @@ export function ChatPane({
     } finally { setActionBusy(false); }
   };
   const toggleTemplatePicker = async () => {
-    const next = !templatePickerOpen;
-    setTemplatePickerOpen(next);
+    const next = !(pickerOpen && pickerMode === "template");
+    setPickerOpen(next);
+    setPickerMode("template");
     if (!next || !client || templates.length > 0 || templateLoading) return;
     setTemplateLoading(true);
     setActionError(null);
@@ -89,7 +104,8 @@ export function ChatPane({
     setActionError(null);
     try {
       setAttachment({ template, analysis: await client.getLook(template.name) });
-      setTemplatePickerOpen(false);
+      setPickerOpen(false);
+      setPickerMode(null);
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : String(reason));
     } finally { setTemplateLoading(false); }
@@ -105,21 +121,22 @@ export function ChatPane({
       data-collapsed={collapsed}
     >
       <header className="chat-heading">
-        <div><p className="pane-kicker">AI Studio</p><h2>对话修图</h2></div>
-        <button type="button" aria-label={collapsed ? "展开 AI 对话" : "折叠 AI 对话"} onClick={() => setCollapsed(!collapsed)}>
-          {collapsed ? "›" : "‹"}
-        </button>
+        <div><p className="pane-kicker">Chat</p><h2>对话调整</h2></div>
+        <div className="chat-heading-actions">
+          <button className="chat-home" type="button" aria-label="返回主页" title="返回首页" onClick={onHome}>
+            <Icon name="home" />
+          </button>
+          <button
+            type="button"
+            aria-label={collapsed ? "展开 AI 对话" : "折叠 AI 对话"}
+            title={collapsed ? "展开对话" : "折叠对话"}
+            onClick={() => setCollapsed(!collapsed)}
+          >
+            <Icon name="collapse" />
+          </button>
+        </div>
       </header>
       {!collapsed && <>
-        <section className="chat-privacy" aria-label="调用隐私摘要">
-          <span>供应商：{response?.provider ?? providerLabel}</span>
-          <span>{response?.proxy_count ?? 1} 张安全代理图</span>
-          <label><input type="checkbox" checked={includeMetadata} onChange={(event) => {
-            setIncludeMetadata(event.currentTarget.checked);
-            workflow?.setIncludeMetadata(event.currentTarget.checked);
-          }} />发送元数据</label>
-        </section>
-
         <div className="chat-scroll">
           <ChatMessageList messages={state.messages} />
           {response && <ChatChangeCard changes={response.changes} />}
@@ -167,25 +184,31 @@ export function ChatPane({
           const value = input;
           setInput("");
           void act(async () => {
-            const result = await submitChatInput(value, workflow, attachment);
-            if (result) setAttachment(null);
+            const result = await submitChatInput(value, workflow, attachment, skillAttachment);
+            if (result) { setAttachment(null); setSkillAttachment(null); }
             void result;
           });
         }}>
-          {attachment && <div className="chat-template-chip">
-            <span>模板 · {attachment.template.name}</span>
-            <button type="button" aria-label="移除模板附件" onClick={() => setAttachment(null)}>×</button>
+          {(attachment || skillAttachment) && <div className="chat-template-chip">
+            {skillAttachment && <span><Icon name="skill" />技能 · {skillAttachment.name}</span>}
+            {skillAttachment && <button type="button" aria-label="移除技能附件" onClick={() => setSkillAttachment(null)}><Icon name="close" /></button>}
+            {attachment && <span><Icon name="template" />模板 · {attachment.template.name}</span>}
+            {attachment && <button type="button" aria-label="移除模板附件" onClick={() => setAttachment(null)}><Icon name="close" /></button>}
           </div>}
-          {templatePickerOpen && <div className="chat-template-picker" role="dialog" aria-label="选择模板附件">
-            <strong>选择模板作为 AI 参考</strong>
-            {templates.map((template) => <button type="button" key={template.name} onClick={() => void selectTemplate(template)}>
+          {pickerOpen && !pickerMode && <div className="chat-template-picker" role="dialog" aria-label="添加技能或模板"><strong>添加到本轮</strong><button type="button" onClick={() => setPickerMode("skill")}>选择技能</button><button type="button" onClick={() => void toggleTemplatePicker()}>选择模板</button></div>}
+          {pickerOpen && pickerMode === "skill" && <div className="chat-template-picker" role="dialog" aria-label="选择技能"><strong>选择技能</strong>{skills.map((skill) => <button type="button" key={skill.id} onClick={() => { setSkillAttachment(skill); setPickerOpen(false); setPickerMode(null); }}><span>{skill.name}</span><small>{skill.description}</small></button>)}</div>}
+          {pickerOpen && pickerMode === "template" && <div className="chat-template-picker" role="dialog" aria-label="选择模板附件"><strong>选择模板作为 AI 参考</strong>{templates.map((template) => <button type="button" key={template.name} onClick={() => void selectTemplate(template)}>
               <span>{template.name}</span><small>{template.summary}</small>
             </button>)}
             {templateLoading && <span>正在载入模板…</span>}
           </div>}
-          <button type="button" aria-label="添加附件或模板" title="添加模板" disabled={!client} onClick={() => void toggleTemplatePicker()}>+</button>
-          <textarea value={input} onChange={(event) => setInput(event.currentTarget.value)} placeholder="说说你想怎么调整" rows={2} disabled={!workflow || state.phase === "requesting"} />
-          <button type="submit" className="send" disabled={!workflow || !input.trim() || state.phase === "requesting"}>发送</button>
+          <button type="button" aria-label="添加技能或模板" title="添加技能或模板" onClick={() => { setPickerOpen((current) => !current); setPickerMode(null); }}>
+            <Icon name="add" />
+          </button>
+          <textarea value={input} onChange={(event) => setInput(event.currentTarget.value)} placeholder="说说你想怎么调整…" rows={2} disabled={!workflow || state.phase === "requesting"} />
+          <button type="submit" className="send" aria-label="发送" disabled={!workflow || !input.trim() || state.phase === "requesting"}>
+            <Icon name="arrow-up" />
+          </button>
         </form>
       </>}
     </aside>

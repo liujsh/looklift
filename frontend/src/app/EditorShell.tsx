@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { isTauri } from "@tauri-apps/api/core";
 import { CanvasPane } from "../components/CanvasPane";
 import { ChatPane } from "../components/ChatPane";
-import { GalleryPane } from "../components/GalleryPane";
 import { PanelPane } from "../components/PanelPane";
 import { FEATURES } from "./featureFlags";
 import type { LookliftClient } from "../api/client";
 import type { ImageInfo, ParamContract } from "../api/types";
 import { createNeutralAnalysis } from "../panel/contractModel";
-import { exportLookFile, isCurrentLookSnapshot } from "../features/looks/lookActions";
 import { createChatWorkflow, type ChatWorkflow } from "../features/chat/chatWorkflow";
 import { createSessionCoordinator, type SessionCoordinator } from "../features/sessions/sessionCoordinator";
 import { createHistogramController } from "../features/histogram/histogramController";
 import { calculateHistogramInWorker } from "../features/histogram/histogramWorkerClient";
+import { Icon } from "../platform/icons";
 import type { EditorStore } from "../store/editorStore";
 import { useEditorState } from "../store/editorStore";
 
@@ -24,6 +25,7 @@ type EditorShellProps = {
   contract?: ParamContract;
   coordinator?: SessionCoordinator | null;
   workflow?: ChatWorkflow | null;
+  onHome?(): void;
 };
 
 export function EditorShell({
@@ -35,12 +37,13 @@ export function EditorShell({
   contract,
   coordinator: providedCoordinator,
   workflow: providedWorkflow,
+  onHome,
 }: EditorShellProps) {
   const editor = useEditorState(store);
-  const [activeLookName, setActiveLookName] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [providerLabel, setProviderLabel] = useState("正在读取…");
+  const [exportDirectory, setExportDirectory] = useState("");
   const [imageInfo, setImageInfo] = useState<ImageInfo | null>(null);
   const histogramController = useMemo(
     () => createHistogramController(calculateHistogramInWorker),
@@ -57,6 +60,7 @@ export function EditorShell({
     [client, providedCoordinator, store],
   );
   const sessionCoordinator = providedCoordinator === undefined ? ownedCoordinator : providedCoordinator;
+  const sessionReady = Boolean(client && sessionCoordinator?.getSessionId());
   const ownedWorkflow = useMemo(
     () => providedWorkflow === undefined && client ? createChatWorkflow(client, store, {
       onMessagesOnly: (exchange) => sessionCoordinator?.recordMessages(exchange),
@@ -64,7 +68,6 @@ export function EditorShell({
     [client, providedWorkflow, sessionCoordinator, store],
   );
   const chatWorkflow = providedWorkflow === undefined ? ownedWorkflow : providedWorkflow;
-  const activeLookSnapshot = useRef({ analysis: editor.analysis, factor: editor.factor });
   const neutral = !editor.analysis && contract ? createNeutralAnalysis(contract) : undefined;
   const openImage = useCallback((path: string) => {
     if (!contract) {
@@ -101,13 +104,6 @@ export function EditorShell({
     if (store.commitAnalysis(analysis, "ai")) persistFormal(analysis, "analysis");
   }, [persistFormal, store]);
   const setRenderState = useCallback(store.setRenderState, [store]);
-  const activateLook = useCallback((name: string) => {
-    const current = store.getSnapshot();
-    activeLookSnapshot.current = { analysis: current.analysis, factor: current.factor };
-    setActiveLookName(name);
-    setExportStatus(null);
-  }, [store]);
-
   useEffect(() => {
     return () => ownedWorkflow?.dispose();
   }, [ownedWorkflow]);
@@ -116,9 +112,10 @@ export function EditorShell({
     if (!client) return;
     let cancelled = false;
     void client.config().then((current) => {
-      if (!cancelled) setProviderLabel(
-        current.provider === "auto" ? "自动选择（调用时确定）" : current.provider,
-      );
+      if (!cancelled) {
+        setProviderLabel(current.provider === "auto" ? "自动选择（调用时确定）" : current.provider);
+        setExportDirectory(current.export_dir || "");
+      }
     }).catch(() => { if (!cancelled) setProviderLabel("配置读取失败"); });
     return () => { cancelled = true; };
   }, [client]);
@@ -135,22 +132,14 @@ export function EditorShell({
     return () => { cancelled = true; };
   }, [client, editor.imagePath, histogramController, store]);
 
-  useEffect(() => {
-    if (activeLookName && !isCurrentLookSnapshot(
-      activeLookSnapshot.current,
-      editor.analysis,
-      editor.factor,
-    )) {
-      setActiveLookName(null);
-      setExportStatus(null);
-    }
-  }, [activeLookName, editor.analysis, editor.factor]);
-
-  const exportActiveLook = async () => {
-    if (!client || !activeLookName) return;
+  const exportCurrentPhoto = async () => {
+    const sessionId = sessionCoordinator?.getSessionId();
+    if (!client || !sessionId || editor.pendingPreview) return;
     setExporting(true);
+    setExportStatus(null);
     try {
-      setExportStatus(`已导出：${await exportLookFile(client, activeLookName)}`);
+      const result = await client.exportSession(sessionId);
+      setExportStatus(`成片已保存：${result.path}`);
     } catch (reason) {
       setExportStatus(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -158,26 +147,83 @@ export function EditorShell({
     }
   };
 
+  const exportCurrentPhotoTo = async () => {
+    const sessionId = sessionCoordinator?.getSessionId();
+    if (!client || !sessionId || editor.pendingPreview) return;
+    if (!isTauri()) {
+      setExportStatus("浏览器开发模式不能选择本地输出目录");
+      return;
+    }
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: true,
+        title: "选择成片输出目录",
+        defaultPath: exportDirectory || undefined,
+      });
+      if (typeof selected !== "string") return;
+      setExporting(true);
+      setExportStatus(null);
+      const result = await client.exportSession(sessionId, { output_dir: selected });
+      setExportDirectory(selected);
+      setExportStatus(`成片已保存：${result.path}`);
+    } catch (reason) {
+      setExportStatus(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportDisabled = !sessionReady || exporting || editor.pendingPreview !== null;
+  const exportTitle = editor.pendingPreview
+    ? "请先保留或放弃当前候选，再导出正式版本"
+    : !sessionReady
+      ? "打开照片并建立正式版本后即可导出"
+      : "保存当前正式版本为高质量 JPEG";
+  const formatChip = [imageInfo?.file_format?.toUpperCase(), imageInfo?.color_space].filter(Boolean).join(" · ");
+
   return (
     <main className="editor-shell" data-chat-enabled={chatEnabled}>
+      {/* 原型：品牌标只在标签栏出现一次，这里是文件元信息栏。 */}
       <header className="app-bar" data-tauri-drag-region>
-        <div className="brand-lockup" data-tauri-drag-region>
-          <span className="brand-mark" aria-hidden="true">L</span>
-          <strong>looklift</strong>
-          <span className="workspace-name">未命名照片</span>
-        </div>
-        <div className="engine-status" title={engineLabel}>
-          <span aria-hidden="true" />
-          引擎已连接
+        <div className="app-bar-meta">
+          <span className="workspace-name" title={editor.imagePath ?? undefined}>
+            {editor.imagePath ? fileName(editor.imagePath) : "未命名照片"}
+          </span>
+          {formatChip && <span className="format-chip">{formatChip}</span>}
+          <span className="engine-status" title={engineLabel}>
+            <i aria-hidden="true" />
+            <span>{engineLabel}</span>
+          </span>
         </div>
         <div className="app-actions">
-          {exportStatus && <span title={exportStatus}>{exportStatus}</span>}
+          {exportStatus && (
+            <span className="export-status" role="status" aria-live="polite" title={exportStatus}>
+              <Icon name="info" />{exportStatus}
+            </span>
+          )}
+          {sessionReady && (
+            <details className="export-menu">
+              <summary><Icon name="download" />更多导出<Icon name="chevron-down" /></summary>
+              <div className="export-menu-popover">
+                <button
+                  type="button"
+                  disabled={exportDisabled}
+                  onClick={() => void exportCurrentPhotoTo()}
+                >选择位置导出成片…</button>
+              </div>
+            </details>
+          )}
           <button
             className="export-button"
             type="button"
-            disabled={!activeLookName || exporting}
-            onClick={() => void exportActiveLook()}
-          >{exporting ? "导出中…" : "导出预设"}</button>
+            disabled={exportDisabled}
+            title={exportTitle}
+            onClick={() => void exportCurrentPhoto()}
+          >
+            <Icon name="check" />
+            {exporting ? "导出中…" : editor.pendingPreview ? "先确认候选" : "导出成片"}
+          </button>
         </div>
       </header>
 
@@ -189,6 +235,7 @@ export function EditorShell({
           providerLabel={providerLabel}
           renderStatus={editor.render.status}
           client={client}
+          onHome={onHome}
         />
         <CanvasPane
           active={active}
@@ -206,8 +253,10 @@ export function EditorShell({
         />
         <PanelPane store={store} contract={contract} onFormalAnalysis={persistFormal} histogram={histogram} imageInfo={imageInfo} />
       </section>
-
-      <GalleryPane store={store} client={client} onActiveLookChange={activateLook} onFormalAnalysis={persistFormal} />
     </main>
   );
+}
+
+function fileName(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path;
 }

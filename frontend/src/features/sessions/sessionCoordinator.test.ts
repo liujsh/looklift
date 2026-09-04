@@ -5,7 +5,7 @@ import { createSessionCoordinator } from "./sessionCoordinator";
 
 const analysis = (exposure = 0) => ({ summary: "测试", steps: [], basic: { exposure }, tone_curve: [], hsl: [], color_grading: {}, effects: {} }) as unknown as Analysis;
 const snapshot = (current: Analysis): SessionSnapshot => ({
-  id: "s1", image_path: "C:/photo.jpg", created_at: "", updated_at: "", messages: [], versions: [],
+  id: "s1", image_path: "C:/photo.jpg", created_at: "", updated_at: "", messages: [], versions: [], exports: [],
   current_version_id: "v1", current_analysis: current,
 });
 

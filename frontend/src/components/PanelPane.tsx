@@ -7,8 +7,8 @@ import { ColorGradingWheels } from "../panel/ColorGradingWheels";
 import { PANEL_GROUPS } from "../panel/groups";
 import { HslMixer } from "../panel/HslMixer";
 import { SliderControl } from "../panel/SliderControl";
-import { StrengthSlider } from "../panel/StrengthSlider";
 import { ToneCurve } from "../panel/ToneCurve";
+import { Icon } from "../platform/icons";
 import type { EditorStore } from "../store/editorStore";
 import { useEditorState } from "../store/editorStore";
 import { HistogramPanel } from "./HistogramPanel";
@@ -82,7 +82,7 @@ export function PanelPane({ store, contract, onFormalAnalysis, histogram = EMPTY
     <aside className="panel-pane" data-pane="controls" aria-label="调整面板">
       <header className="pane-heading">
         <div>
-          <p className="pane-kicker">编辑</p>
+          <p className="pane-kicker">Edit</p>
           <h2>调整</h2>
         </div>
         <button
@@ -95,16 +95,10 @@ export function PanelPane({ store, contract, onFormalAnalysis, histogram = EMPTY
             store.commitAnalysis(neutral, "manual");
             onFormalAnalysis?.(neutral, "manual");
           }}
-        >重置</button>
+        ><Icon name="reset" />重置</button>
       </header>
 
       <HistogramPanel histogram={histogram} imageInfo={imageInfo} />
-
-      <StrengthSlider
-        factor={editor.factor}
-        disabled={!editor.analysis || locked}
-        onChange={store.setFactor}
-      />
 
       {analysis && <AnalysisBrief analysis={analysis} />}
       {pending && <p className="panel-pending-note">当前显示 AI 候选；要修改参数，请先在左侧选择“继续手调”。</p>}
@@ -120,8 +114,8 @@ export function PanelPane({ store, contract, onFormalAnalysis, histogram = EMPTY
                 aria-expanded={expanded}
                 onClick={() => setOpenGroup(expanded ? "" : group.id)}
               >
-                <span>{group.label}</span>
-                <span aria-hidden="true">{expanded ? "−" : "+"}</span>
+                <span><Icon name={group.icon} />{group.label}</span>
+                <span aria-hidden="true"><Icon name={expanded ? "min" : "add"} /></span>
               </button>
               {expanded && (
                 <fieldset className="group-content" disabled={locked}>

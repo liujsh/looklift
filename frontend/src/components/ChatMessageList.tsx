@@ -1,8 +1,15 @@
 import type { ChatMessage } from "../api/types";
+import { Icon } from "../platform/icons";
 
 export function ChatMessageList({ messages }: { messages: readonly ChatMessage[] }) {
   if (messages.length === 0) {
-    return <div className="chat-empty"><strong>说说你想怎么调整</strong><span>例如：压低高光，让肤色更自然。</span></div>;
+    return (
+      <div className="chat-empty">
+        <span className="chat-empty-mark" aria-hidden="true"><Icon name="wand" /></span>
+        <strong>说说你想怎么调整</strong>
+        <span>例如：压低高光、让肤色更自然，或直接附上一个模板作为参考。</span>
+      </div>
+    );
   }
   return <ol className="chat-messages" aria-label="对话记录">
     {messages.map((message, index) => <li key={`${index}-${message.role}`} data-role={message.role}>

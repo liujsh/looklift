@@ -10,6 +10,7 @@ const interrupted: AgentRunManifest = {
   run_id: "run-a", status: "interrupted", baseline_hash: "a".repeat(64), photo_hash: "b".repeat(64),
   attempt_id: "attempt-1", last_sequence: 4, last_candidate_revision: "candidate-1", stale_reason: null,
   runtime_id: "openai-api", provider: "openai", model: "gpt-test", domain_pack_hash: "c".repeat(64), session_id: "session-a",
+  user_goal: "提亮主体", confirmed_candidate_id: null,
   context_sources: [
     { id: "rule-natural", version: 2, hash: "d".repeat(64), status: "used" },
     { id: "reference-catalog", version: 1, hash: "e".repeat(64), status: "omitted", reason: "预算不足" },

@@ -25,7 +25,7 @@ describe("ChatPane", () => {
   it("空态包含输入、附件 seam、隐私摘要和折叠入口", () => {
     const html = renderToStaticMarkup(<ChatPane enabled workflow={workflow()} coordinator={coordinator} providerLabel="ollama" />);
     expect(html).toContain("说说你想怎么调整");
-    expect(html).toContain('aria-label="添加附件或模板"');
+    expect(html).toContain('aria-label="添加技能或模板"');
     expect(html).toContain("1 张安全代理图");
     expect(html).toContain("供应商：ollama");
     expect(html).toContain("发送元数据");

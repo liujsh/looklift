@@ -1,4 +1,5 @@
 import { factorToPercent, percentToFactor } from "./controlModels";
+import { Icon } from "../platform/icons";
 
 type StrengthSliderProps = {
   factor: number;
@@ -10,7 +11,7 @@ export function StrengthSlider({ factor, disabled, onChange }: StrengthSliderPro
   const percent = factorToPercent(factor);
   return (
     <div className="strength-control" data-control="factor">
-      <div><span>整体强度</span><strong>{percent}%</strong></div>
+      <div><span><Icon name="gauge" />整体强度</span><strong>{percent}%</strong></div>
       <input
         type="range"
         aria-label="整体强度"

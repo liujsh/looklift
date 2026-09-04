@@ -23,6 +23,7 @@ function snapshot(id: string, imagePath: string, exposure = 0): SessionSnapshot 
     updated_at: "2026-07-20T01:00:00Z",
     messages: [{ id: "m1", role: "assistant", content: `${id} 的消息`, provider: "mock", status: "done", created_at: "2026-07-20T00:00:00Z" }],
     versions: [{ id: "v1", parent_id: null, analysis: current, source: "initial", summary: "正式版本", created_at: "2026-07-20T00:00:00Z" }],
+    exports: [],
     current_version_id: "v1",
     current_analysis: current,
   };

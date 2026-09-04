@@ -4,6 +4,7 @@ const CONTENT: Record<PlatformPage, { title: string; version: string; descriptio
   library: { title: "我的图库", version: "v2.3-A", description: "索引本机文件夹并提供缩略图、标签和版本记录；只索引，不复制原文件。" },
   import: { title: "从设备导入", version: "v2.3-B", description: "在 RAW 可行性门之后接入设备发现、选择、复制校验和重复检测。" },
   templates: { title: "大师模板", version: "v2.4", description: "浏览精选与个人模板，了解风格思路并直接应用到照片。" },
+  skills: { title: "技能", version: "v2.6", description: "查看已安装的图像处理技能，并从 Studio 加号入口调用。" },
   automation: { title: "自动化技能", version: "v2.5", description: "提供显式、可预览、可恢复的批量修图工作流。" },
   plugins: { title: "插件", version: "v2.6", description: "通过受控权限扩展模型、导入、导出和元数据能力。" },
   runs: { title: "运行恢复", version: "v2.6", description: "查看 Agent 运行事实、中断状态和恢复入口。" },

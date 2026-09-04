@@ -58,8 +58,6 @@ function SessionThumb({ client, session, index }: { client: RecentSessionClient;
   const thumbnailUrl = useSessionThumbnail(client, session);
   return (
     <div className="session-thumb-wrap">
-      <span className="sprocket tl" aria-hidden="true" />
-      <span className="sprocket tr" aria-hidden="true" />
       <div className={`session-thumb ${toneFor(session.id)}`} aria-hidden="true">
         {thumbnailUrl && <img src={thumbnailUrl} alt="" />}
       </div>
@@ -113,23 +111,33 @@ export function HomePage({ client, onResume, onQuickEdit, quickEditBusy = false,
           <span className="ic"><Icon name="aperture" /></span>
           <h3>{quickEditBusy ? "正在打开…" : "快速修图"}</h3>
           <p>选一张照片直接进 Studio，不加入图库。</p>
+          <span className="home-action-kbd">⌘ N</span>
+          <Icon name="arrow-up-right" className="home-action-go" />
         </button>
         <button className="home-action" type="button" onClick={() => onFuture("folder")}>
           <span className="ic"><Icon name="folder-plus" /></span>
           <h3>添加文件夹</h3>
-          <p>只建立本地索引，不复制、不移动。<span className="home-action-kbd">v2.3-A</span></p>
+          <p>只建立本地索引，不复制、不移动。</p>
+          <span className="home-action-kbd">v2.3-A</span>
+          <Icon name="arrow-up-right" className="home-action-go" />
         </button>
         <button className="home-action" type="button" onClick={() => onFuture("device")}>
           <span className="ic"><Icon name="import" /></span>
           <h3>从设备导入</h3>
-          <p>安全复制并校验，再加入图库。<span className="home-action-kbd">v2.3-B</span></p>
+          <p>安全复制并校验，再加入图库。</p>
+          <span className="home-action-kbd">v2.3-B</span>
+          <Icon name="arrow-up-right" className="home-action-go" />
         </button>
       </div>
 
       <section className="recent-sessions" aria-labelledby="recent-heading">
         <div className="section-heading">
           <div><p className="pane-kicker">Contact Sheet · 最近</p><h2 id="recent-heading">继续修图</h2></div>
-          {!loading && <button data-action="retry-sessions" type="button" onClick={() => void loadSessions()}>刷新</button>}
+          {!loading && (
+            <button data-action="retry-sessions" type="button" onClick={() => void loadSessions()}>
+              <Icon name="refresh" />刷新
+            </button>
+          )}
         </div>
         {loading && <p className="home-status" aria-live="polite">正在读取最近正式会话…</p>}
         {error && <div className="home-error" role="alert"><span>{error}</span><button data-action="retry-sessions" type="button" onClick={() => void loadSessions()}>重试</button></div>}
@@ -152,10 +160,13 @@ export function HomePage({ client, onResume, onQuickEdit, quickEditBusy = false,
                       type="button"
                       disabled={openingId !== null}
                       onClick={() => void resume(session.id)}
-                    >{openingId === session.id ? "正在恢复…" : "继续"}</button>
+                    >
+                      <Icon name="arrow-right" className="go-ic" />
+                      {openingId === session.id ? "正在恢复…" : "继续"}
+                    </button>
                   ) : (
                     <button className="session-relocate" type="button" disabled aria-label={`${session.display_name} 重新定位`}>
-                      <Icon name="relocate" className="go-ic" /> 重新定位
+                      <Icon name="relocate" className="go-ic" />重新定位
                     </button>
                   )}
                 </div>
