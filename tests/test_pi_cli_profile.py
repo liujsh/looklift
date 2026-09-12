@@ -97,6 +97,31 @@ def test_prepare_pi_launch_disables_all_unselected_capabilities(tmp_path: Path) 
     assert (workspace.path / "tool-schema.json").is_file()
 
 
+def test_prepare_pi_launch_accepts_task_scoped_generic_tools(tmp_path: Path) -> None:
+    workspace = CliWorkspaceManager(tmp_path / "workspace").create(_run_input())
+    extension = tmp_path / "readonly" / "pi-looklift-tools.js"
+    extension.parent.mkdir()
+    extension.write_text("export default () => {};", encoding="utf-8")
+    definitions = (
+        {"name": "discover_tools", "description": "发现", "inputSchema": {"type": "object"}},
+        {"name": "invoke_tool", "description": "调用", "inputSchema": {"type": "object"}, "terminal": False},
+    )
+
+    prepare_pi_launch(
+        executable="pi",
+        run_input=_run_input(),
+        workspace=workspace,
+        extension_path=extension,
+        gateway_url="http://127.0.0.1:43123",
+        token="opaque-token",
+        source_environment={},
+        tool_definitions=definitions,
+    )
+    stored = (workspace.path / "tool-schema.json").read_text(encoding="utf-8")
+    assert "discover_tools" in stored
+    assert "finish_candidate" not in stored
+
+
 def test_packaged_launch_resolver_uses_readonly_extension_and_current_environment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

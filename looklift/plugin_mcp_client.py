@@ -6,6 +6,9 @@ import asyncio
 import json
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
+from urllib.parse import urlparse
+
+import httpx
 
 from .plugin_registry import PluginManifest
 from .plugin_tools import PluginTool, PluginToolError
@@ -50,19 +53,29 @@ class ManagedMcpClient:
     async def connect(self) -> None:
         if self._connected:
             raise McpClientError("MCP Client 不能重复连接")
-        result = await self._transport.request(
-            "initialize",
-            {
-                "protocolVersion": "2025-11-25",
-                "capabilities": {},
-                "clientInfo": {"name": "looklift", "version": "2"},
-            },
-        )
-        version = result.get("protocolVersion")
-        if not isinstance(version, str) or not version:
-            raise McpClientError("MCP 服务未返回协议版本")
-        await self._transport.notify("notifications/initialized", {})
-        self._connected = True
+        try:
+            starter = getattr(self._transport, "start", None)
+            if callable(starter):
+                await starter()
+            result = await self._transport.request(
+                "initialize",
+                {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": {"name": "looklift", "version": "2"},
+                },
+            )
+            version = result.get("protocolVersion")
+            if not isinstance(version, str) or not version:
+                raise McpClientError("MCP 服务未返回协议版本")
+            await self._transport.notify("notifications/initialized", {})
+            self._connected = True
+        except Exception:
+            try:
+                await self._transport.close()
+            except Exception:
+                pass
+            raise
 
     async def refresh_tools(self) -> tuple[PluginTool, ...]:
         self._require_connected()
@@ -249,3 +262,167 @@ class StdioMcpTransport:
         if not isinstance(message, Mapping) or message.get("jsonrpc") != "2.0":
             raise McpClientError("MCP JSON-RPC 响应无效")
         return message
+
+
+class StreamableHttpMcpTransport:
+    """仅连接宿主管理回环端点的 MCP Streamable HTTP 传输。"""
+
+    def __init__(
+        self,
+        endpoint: str,
+        *,
+        bearer_token: str,
+        timeout_seconds: float = 30,
+        max_response_bytes: int = 4 * 1024 * 1024,
+        http_transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        parsed = urlparse(endpoint)
+        if (
+            parsed.scheme != "http"
+            or parsed.hostname not in {"127.0.0.1", "::1"}
+            or parsed.port is None
+            or not parsed.path
+        ):
+            raise McpClientError("受管 MCP HTTP 端点必须是显式端口的回环地址")
+        if not bearer_token or timeout_seconds <= 0 or max_response_bytes <= 0:
+            raise McpClientError("MCP HTTP 认证或响应上限无效")
+        self._endpoint = endpoint
+        self._token = bearer_token
+        self._max_response_bytes = max_response_bytes
+        self._client = httpx.AsyncClient(
+            transport=http_transport,
+            timeout=timeout_seconds,
+            follow_redirects=False,
+            trust_env=False,
+        )
+        self._next_id = 1
+        self._session_id: str | None = None
+        self._protocol_version: str | None = None
+        self._lock = asyncio.Lock()
+
+    async def request(self, method: str, params: Mapping[str, Any]) -> Mapping[str, Any]:
+        async with self._lock:
+            request_id = self._next_id
+            self._next_id += 1
+            response = await self._post(
+                {"jsonrpc": "2.0", "id": request_id, "method": method, "params": dict(params)}
+            )
+            result = self._parse_response(response, request_id)
+            if method == "initialize":
+                version = result.get("protocolVersion")
+                if isinstance(version, str) and version:
+                    self._protocol_version = version
+                session_id = response.headers.get("MCP-Session-Id")
+                if session_id is not None:
+                    if not session_id or any(ord(char) < 0x21 or ord(char) > 0x7E for char in session_id):
+                        raise McpClientError("MCP HTTP Session ID 不安全")
+                    self._session_id = session_id
+            return result
+
+    async def notify(self, method: str, params: Mapping[str, Any]) -> None:
+        async with self._lock:
+            response = await self._post(
+                {"jsonrpc": "2.0", "method": method, "params": dict(params)}
+            )
+            if response.status_code != 202:
+                raise McpClientError("MCP HTTP 通知未被服务端接受")
+
+    async def close(self) -> None:
+        try:
+            if self._session_id is not None:
+                response = await self._client.delete(
+                    self._endpoint,
+                    headers=self._headers(),
+                )
+                if response.status_code not in {200, 202, 204, 404, 405}:
+                    raise McpClientError("MCP HTTP Session 关闭失败")
+        finally:
+            self._session_id = None
+            await self._client.aclose()
+
+    async def _post(self, message: Mapping[str, Any]) -> httpx.Response:
+        try:
+            request = self._client.build_request(
+                "POST",
+                self._endpoint,
+                headers=self._headers(),
+                json=dict(message),
+            )
+            response = await self._client.send(request, stream=True)
+            try:
+                if 300 <= response.status_code < 400:
+                    raise McpClientError("MCP HTTP 禁止重定向")
+                if response.status_code >= 400:
+                    raise McpClientError("MCP HTTP 服务返回错误状态")
+                chunks: list[bytes] = []
+                size = 0
+                async for chunk in response.aiter_bytes():
+                    size += len(chunk)
+                    if size > self._max_response_bytes:
+                        raise McpClientError("MCP HTTP 响应超过安全上限")
+                    chunks.append(chunk)
+                return httpx.Response(
+                    response.status_code,
+                    headers=response.headers,
+                    content=b"".join(chunks),
+                    request=request,
+                )
+            finally:
+                await response.aclose()
+        except httpx.TimeoutException as exc:
+            raise McpClientError("MCP HTTP 请求超时") from exc
+        except httpx.HTTPError as exc:
+            raise McpClientError("MCP HTTP 请求失败") from exc
+
+    def _headers(self) -> dict[str, str]:
+        headers = {
+            "Accept": "application/json, text/event-stream",
+            "Authorization": f"Bearer {self._token}",
+            "Origin": "http://127.0.0.1",
+        }
+        if self._session_id is not None:
+            headers["MCP-Session-Id"] = self._session_id
+        if self._protocol_version is not None:
+            headers["MCP-Protocol-Version"] = self._protocol_version
+        return headers
+
+    def _parse_response(self, response: httpx.Response, request_id: int) -> dict[str, Any]:
+        content_type = response.headers.get("Content-Type", "").split(";", 1)[0].strip().casefold()
+        if content_type == "application/json":
+            try:
+                message = response.json()
+            except json.JSONDecodeError as exc:
+                raise McpClientError("MCP HTTP JSON 响应无效") from exc
+            return _jsonrpc_result(message, request_id)
+        if content_type == "text/event-stream":
+            try:
+                text = response.content.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise McpClientError("MCP HTTP SSE 不是 UTF-8") from exc
+            for block in text.replace("\r\n", "\n").split("\n\n"):
+                data = "\n".join(
+                    line[5:].lstrip()
+                    for line in block.splitlines()
+                    if line.startswith("data:")
+                )
+                if not data:
+                    continue
+                try:
+                    message = json.loads(data)
+                except json.JSONDecodeError as exc:
+                    raise McpClientError("MCP HTTP SSE data 无效") from exc
+                if isinstance(message, Mapping) and message.get("id") == request_id:
+                    return _jsonrpc_result(message, request_id)
+            raise McpClientError("MCP HTTP SSE 未返回请求结果")
+        raise McpClientError("MCP HTTP 响应 Content-Type 不受支持")
+
+
+def _jsonrpc_result(message: Any, request_id: int) -> dict[str, Any]:
+    if not isinstance(message, Mapping) or message.get("jsonrpc") != "2.0" or message.get("id") != request_id:
+        raise McpClientError("MCP JSON-RPC 响应身份不匹配")
+    if "error" in message:
+        raise McpClientError("MCP 服务返回调用错误")
+    result = message.get("result")
+    if not isinstance(result, Mapping):
+        raise McpClientError("MCP JSON-RPC 缺少对象结果")
+    return dict(result)

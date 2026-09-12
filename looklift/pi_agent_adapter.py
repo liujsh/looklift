@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .agent_adapter import AgentEvent, AgentEventKind, AgentRunInput
+from .agent_adapter import AgentEvent, AgentEventKind, AgentRunInput, AgentTaskKind
 from .candidate_runtime import CandidateRuntime
 from .cli_jsonl_protocol import CLI_EVENT_STREAM_LIMIT, CliProtocolError, read_cli_event
 from .cli_process import reap_cli_process
@@ -20,11 +20,13 @@ from .pi_json_protocol import (
     pi_usage_payload,
     send_pi_rpc_command,
 )
+from .plugin_bridge import PluginBridgeSession, ScopedPluginBridgeGateway
 from .scoped_tool_gateway import ScopedToolGateway
 from .scoped_tool_http import ScopedToolHttpServer
 
 
 RuntimeResolver = Callable[[AgentRunInput], CandidateRuntime]
+PluginSessionResolver = Callable[[AgentRunInput], PluginBridgeSession]
 LaunchResolver = Callable[
     [AgentRunInput, CliWorkspace, str, str],
     PiLaunchSpec,
@@ -32,9 +34,11 @@ LaunchResolver = Callable[
 @dataclass
 class _ActivePi:
     process: asyncio.subprocess.Process
-    runtime: CandidateRuntime
+    runtime: CandidateRuntime | None
+    plugin_session: PluginBridgeSession | None
     workspace: CliWorkspace
     token: str
+    gateway_kind: str
     cancelled: bool = False
     latest_candidate_id: str | None = None
 
@@ -49,14 +53,19 @@ class PiAgentAdapter:
         runtime_resolver: RuntimeResolver,
         workspace_manager: CliWorkspaceManager,
         tool_gateway: ScopedToolGateway | None = None,
+        plugin_session_resolver: PluginSessionResolver | None = None,
         cancel_grace_seconds: float = 0.5,
     ) -> None:
         self._launch_resolver = launch_resolver
         self._runtime_resolver = runtime_resolver
         self._workspace_manager = workspace_manager
         self._tool_gateway = tool_gateway or ScopedToolGateway()
+        self._plugin_session_resolver = plugin_session_resolver
+        self._plugin_gateway = ScopedPluginBridgeGateway()
         self._http = ScopedToolHttpServer(self._tool_gateway)
+        self._plugin_http = ScopedToolHttpServer(self._plugin_gateway)
         self._http_users = 0
+        self._plugin_http_users = 0
         self._cancel_grace_seconds = cancel_grace_seconds
         self._active: dict[str, _ActivePi] = {}
         self._attempts: set[tuple[str, str]] = set()
@@ -90,18 +99,30 @@ class PiAgentAdapter:
         token: str | None = None
         process: asyncio.subprocess.Process | None = None
         server_acquired = False
+        gateway_kind = "candidate"
         try:
-            runtime = self._runtime_resolver(run_input)
-            _validate_binding(run_input, runtime)
+            if run_input.task_kind is AgentTaskKind.PHOTO_EDITING:
+                runtime: CandidateRuntime | None = self._runtime_resolver(run_input)
+                plugin_session: PluginBridgeSession | None = None
+                _validate_binding(run_input, runtime)
+                grant = self._tool_gateway.bind(runtime)
+                http = self._http
+            else:
+                if self._plugin_session_resolver is None:
+                    raise ValueError("PLUGIN_TASK 缺少桥接会话")
+                runtime = None
+                plugin_session = self._plugin_session_resolver(run_input)
+                grant = self._plugin_gateway.bind(plugin_session)
+                http = self._plugin_http
+                gateway_kind = "plugin"
             workspace = self._workspace_manager.create(run_input)
-            grant = self._tool_gateway.bind(runtime)
             token = grant.token
-            self._acquire_http()
+            self._acquire_http(gateway_kind)
             server_acquired = True
             launch = self._launch_resolver(
                 run_input,
                 workspace,
-                self._http.url,
+                http.url,
                 token,
             )
             process = await asyncio.create_subprocess_exec(
@@ -116,13 +137,13 @@ class PiAgentAdapter:
             await send_pi_rpc_command(process, pi_prompt_command(run_input))
         except Exception:
             if token is not None:
-                self._tool_gateway.revoke(token)
+                self._revoke(gateway_kind, token)
             if process is not None:
                 await reap_cli_process(process, self._cancel_grace_seconds)
             if workspace is not None:
                 self._workspace_manager.dispose(workspace)
             if server_acquired:
-                self._release_http()
+                self._release_http(gateway_kind)
             yield event(
                 AgentEventKind.RUN_FAILED,
                 {"code": "cli_start_failed", "message": "Pi CLI 启动失败"},
@@ -135,8 +156,10 @@ class PiAgentAdapter:
         active = _ActivePi(
             process=process,
             runtime=runtime,
+            plugin_session=plugin_session,
             workspace=workspace,
             token=token,
+            gateway_kind=gateway_kind,
         )
         self._active[run_input.run_id] = active
         yield event(
@@ -170,19 +193,39 @@ class PiAgentAdapter:
 
                 source_type = source.get("type")
                 if source_type == "tool_execution_start":
-                    name, call_id = pi_tool_identity(source)
+                    name, call_id = pi_tool_identity(
+                        source,
+                        allowed_tools=(
+                            self._tool_gateway.allowed_tools
+                            if active.gateway_kind == "candidate"
+                            else self._plugin_gateway.allowed_tools
+                        ),
+                    )
                     yield event(
                         AgentEventKind.TOOL_STARTED,
                         {"tool_name": name, "tool_call_id": call_id},
                     )
                 elif source_type == "tool_execution_end":
-                    name, call_id = pi_tool_identity(source)
+                    name, call_id = pi_tool_identity(
+                        source,
+                        allowed_tools=(
+                            self._tool_gateway.allowed_tools
+                            if active.gateway_kind == "candidate"
+                            else self._plugin_gateway.allowed_tools
+                        ),
+                    )
                     ok = _tool_succeeded(active, name, source)
+                    tool_result = _pi_tool_result(source)
                     yield event(
                         AgentEventKind.TOOL_COMPLETED,
-                        {"tool_name": name, "tool_call_id": call_id, "ok": ok},
+                        {
+                            "tool_name": name,
+                            "tool_call_id": call_id,
+                            "ok": ok,
+                            **({"result": tool_result} if active.plugin_session is not None else {}),
+                        },
                     )
-                    if name == "render_candidate" and ok:
+                    if active.runtime is not None and name == "render_candidate" and ok:
                         latest = active.runtime.latest_candidate
                         assert latest is not None
                         active.latest_candidate_id = latest.candidate_id
@@ -193,7 +236,7 @@ class PiAgentAdapter:
                                 "parent_candidate_id": latest.parent_candidate_id,
                             },
                         )
-                    if name == "finish_candidate" and ok:
+                    if active.runtime is not None and name == "finish_candidate" and ok:
                         finished = active.runtime.finished
                         assert finished is not None
                         yield event(
@@ -202,6 +245,23 @@ class PiAgentAdapter:
                         )
                         terminal = True
                         break
+                    if (
+                        active.plugin_session is not None
+                        and tool_result.get("status") == "pending_confirmation"
+                    ):
+                        yield event(
+                            AgentEventKind.RUN_FINISHED,
+                            {**tool_result, "outcome": "waiting_confirmation"},
+                        )
+                        terminal = True
+                        break
+                elif source_type == "agent_end" and active.runtime is None:
+                    yield event(
+                        AgentEventKind.RUN_FINISHED,
+                        {"outcome": "plugin_completed"},
+                    )
+                    terminal = True
+                    break
                 elif source_type == "agent_end" and active.runtime.finished is None:
                     yield event(
                         AgentEventKind.RUN_FAILED,
@@ -230,10 +290,10 @@ class PiAgentAdapter:
             )
             terminal = True
         finally:
-            self._tool_gateway.revoke(active.token)
+            self._revoke(active.gateway_kind, active.token)
             await reap_cli_process(process, self._cancel_grace_seconds)
             self._active.pop(run_input.run_id, None)
-            self._release_http()
+            self._release_http(active.gateway_kind)
 
         if not terminal:
             yield event(
@@ -245,8 +305,9 @@ class PiAgentAdapter:
         active = self._active.get(run_id)
         if active is None:
             return
-        active.runtime.cancel()
-        self._tool_gateway.revoke(active.token)
+        if active.runtime is not None:
+            active.runtime.cancel()
+        self._revoke(active.gateway_kind, active.token)
         active.cancelled = True
         await reap_cli_process(active.process, self._cancel_grace_seconds)
 
@@ -266,24 +327,48 @@ class PiAgentAdapter:
             return {"code": "run_active", "message": "本轮已有正在执行的 Attempt"}
         return None
 
-    def _acquire_http(self) -> None:
-        if self._http_users == 0:
-            self._http.start()
-        self._http_users += 1
+    def _acquire_http(self, gateway_kind: str) -> None:
+        if gateway_kind == "candidate":
+            if self._http_users == 0:
+                self._http.start()
+            self._http_users += 1
+            return
+        if self._plugin_http_users == 0:
+            self._plugin_http.start()
+        self._plugin_http_users += 1
 
-    def _release_http(self) -> None:
-        self._http_users -= 1
-        if self._http_users == 0:
-            self._http.close()
+    def _release_http(self, gateway_kind: str) -> None:
+        if gateway_kind == "candidate":
+            self._http_users -= 1
+            if self._http_users == 0:
+                self._http.close()
+            return
+        self._plugin_http_users -= 1
+        if self._plugin_http_users == 0:
+            self._plugin_http.close()
+
+    def _revoke(self, gateway_kind: str, token: str) -> None:
+        if gateway_kind == "candidate":
+            self._tool_gateway.revoke(token)
+        else:
+            self._plugin_gateway.revoke(token)
 
 
 def _tool_succeeded(active: _ActivePi, name: str, source: dict[str, Any]) -> bool:
     if source.get("isError") is True:
         return False
+    if active.plugin_session is not None:
+        return _pi_tool_result(source).get("ok") is True
     if name == "finish_candidate":
         return active.runtime.finished is not None
     latest = active.runtime.latest_candidate
     return latest is not None and latest.candidate_id != active.latest_candidate_id
+
+
+def _pi_tool_result(source: dict[str, Any]) -> dict[str, Any]:
+    result = source.get("result")
+    details = result.get("details") if isinstance(result, dict) else None
+    return dict(details) if isinstance(details, Mapping) else {}
 
 
 def _validate_binding(run_input: AgentRunInput, runtime: CandidateRuntime) -> None:

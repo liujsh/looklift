@@ -598,8 +598,13 @@ Provider 元数据保存在版本化 JSON 快照，API Key 使用当前 Windows 
 ### Plugin MCP 工具发现与确认执行基础
 
 - `PluginRegistry` 在保留原构造与历史版本语义的同时，可原子持久化 Manifest 和经审核的版本化工具目录；`CapabilityGrantStore` 按 Plugin 与项目保存最小授权。插件列表 API 只投影当前请求项目的 Grant，不再合并其他项目授权。
-- `plugin_mcp_client.py` 提供无 Shell 的 stdio JSON-RPC 传输和受控 MCP 会话，固定握手、分页目录、消息/页数/工具数上限、审核工具白名单、实时目录调用检查和进程回收。受管本地 HTTP MCP 尚未实现。
+- `plugin_mcp_client.py` 提供无 Shell 的 stdio JSON-RPC 和受管 Streamable HTTP 传输。stdio 固定消息上限与进程回收；HTTP 只接受显式端口的 IPv4/IPv6 回环地址，强制 Bearer、Origin、无环境代理/重定向，支持 JSON/SSE 响应、协商协议版本、Session ID 和显式关闭。共享 MCP 会话固定握手、分页目录、页数/工具数/字节上限、审核白名单及实时目录调用检查。HTTP SSE 断线续传和服务端反向消息尚未实现。
+- `plugin_catalog.py` 使用 Ed25519 受信公钥验证规范化目录快照，支持公钥撤销、有效期、单调 revision、离线过期标记和原子缓存。目录包只接受无凭据 HTTPS 固定地址及 SHA-256，下载文件作为临时输入交给 `plugin_installer.py`；安装前再次比对目录声明的名称、版本和许可证。真实 Fetcher 使用显式域名白名单和公网 DNS 校验，禁环境代理/重定向并流式限制响应。正式公钥与真实目录服务尚未随应用发布。
+- `connector_sessions.py` 在 `ConnectorRegistry` 配置权威之上管理 MCP 会话：可启动 Transport 先启动，再完成 initialize 和实时目录刷新，最后才把连接标为在线；失败关闭半成品连接，断开/撤销先落权威状态再回收。每个连接固定 Workspace 和不含凭据的账号 ID，可按接收方获取在线账号快照；生产凭据解析、账号 profile 生命周期和 GUI 接线尚未完成。
+- `plugin_installer.py` 只安装已下载且经用户确认的固定 ZIP，校验包/文件摘要、许可、平台和固定依赖，阻断路径穿越、大小写重复、Windows 保留路径、符号链接与压缩炸弹后原子落入版本目录；联网签名目录仍未实现。
 - `plugin_tools.py` 在本地完整目录上执行授权过滤、中文/英文加权召回和分页；发现只返回 L1 摘要，描述阶段返回不可截断的完整 Draft 2020-12 Schema、Schema Hash、唯一 Provider 名和活动集 revision。桥接执行前再次核对实时目录、完整 Schema、项目 Grant；`POST /api/plugins/tools/discover` 与 `POST /api/plugins/tools/describe` 已提供同一投影。
-- `AgentRunInput` 新增 `PLUGIN_TASK` 策略，可持有零张或多张安全 JPEG；CLI Workspace 与 OpenAI-compatible 请求构造支持相同输入，既有 `PHOTO_EDITING` 仍强制单张代理图。现有 OpenAI/Pi 候选 Adapter 尚未切换为通用插件任务循环。
-- `PluginAssetBroker` 只接收内存中的正式导出字节并向模型投影匿名 asset ID，按 Action 创建受控暂存目录；`PluginActionStore` 持久化待确认、已确认、执行中及成功/失败/结果未知终态。外部写入第一次调用只创建 Action，确认绑定参数、素材顺序、账号、Plugin/Schema Hash 和 revision，执行前重新校验当前授权与账号；确认只消费一次，超时结果未知且不自动重试。
+- `AgentRunInput` 新增 `PLUGIN_TASK` 策略，可持有零张或多张安全 JPEG；GUI/SSE 输入最多接收 20 张、总计 40 MiB，CLI Workspace 与 OpenAI-compatible 请求构造支持相同输入，既有 `PHOTO_EDITING` 仍强制单张代理图。
+- `plugin_bridge.py` 固定 discover/describe/invoke/resource 四个跨平台桥接操作。`OpenAiApiAdapter` 在同一多轮循环中按任务策略刷新动态原生 Schema；`PiAgentAdapter` 复用同一桥接会话和 localhost Token Gateway，随应用 Extension 接受任务级工具表，不再硬编码恰好两个候选工具。插件任务可在本地草稿或待确认 Action 结束，不进入 Candidate Verifier。
+- `PluginAssetBroker` 只接收内存中的正式导出字节并向模型投影匿名 asset ID，按 Action 创建受控暂存目录；`PluginActionStore` 持久化待确认、已确认、执行中及成功/失败/结果未知终态。外部写入第一次调用只创建 Action，确认绑定参数、素材顺序、账号、Plugin/Schema Hash 和 revision，执行前重新校验当前授权与账号；确认只消费一次，超时结果未知且不自动重试。待确认 Action 有明确有效期，可拒绝/取消；宿主启动时把遗留执行中状态收敛为结果未知。
+- `ConnectorRegistry` 可原子持久化非敏感连接配置与凭据引用；重启恢复授权但强制清除在线状态，只有重新完成 MCP 握手后才进入连接快照。
 - `context_budget.prepare_messages` 按完整 Assistant Tool Call + Tool Result 事实组淘汰旧历史，避免预算压缩产生孤立工具消息。Skill/Reference/图片与 Provider tokenizer 的统一 token 计量仍待后续阶段完成。

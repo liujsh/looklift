@@ -4,8 +4,9 @@ import asyncio
 import json
 from types import SimpleNamespace
 
-from looklift.agent_adapter import AgentEventKind
+from looklift.agent_adapter import AgentEventKind, AgentRunInput, AgentTaskKind
 from looklift.openai_api_adapter import OpenAiApiAdapter
+from looklift.plugin_tools import ActiveTool, ActiveToolSet
 from looklift.provider_snapshot import ProviderProtocol, ProviderSnapshot
 from looklift.scoped_tool_gateway import GatewayToolResult, ScopedToolGrant
 from tests.test_runtime_lifecycle import _run_input
@@ -179,3 +180,84 @@ def test_openai_adapter_emits_tool_loop_limit_after_three_rounds() -> None:
     events = asyncio.run(exercise())
     assert events[-1].kind is AgentEventKind.RUN_FAILED
     assert events[-1].payload["code"] == "tool_loop_limit"
+
+
+def test_openai_adapter_plugin_task_refreshes_native_tools_and_waits_for_confirmation() -> None:
+    active_tools = ActiveToolSet(
+        "a" * 64,
+        (
+            ActiveTool(
+                "redbook@1.0.0/main/publish",
+                "redbook_publish_1234567890",
+                "b" * 64,
+                "发布图文",
+                {"type": "object"},
+            ),
+        ),
+        20,
+    )
+
+    class Session:
+        active_tools = None
+
+        def call(self, name, _arguments):
+            assert name in {"discover_tools", "describe_tools"}
+            if name == "describe_tools":
+                self.active_tools = active_tools
+            return {"ok": True}
+
+        def call_native(self, name, _arguments):
+            assert name == "redbook_publish_1234567890"
+            return {"ok": True, "status": "pending_confirmation", "action_id": "action-1"}
+
+    class Transport:
+        round = 0
+
+        async def stream(self, _snapshot, request, *, api_key):
+            names = [item["function"]["name"] for item in request["tools"]]
+            if self.round == 0:
+                name = "discover_tools"
+            elif self.round == 1:
+                name = "describe_tools"
+            else:
+                assert "redbook_publish_1234567890" in names
+                name = "redbook_publish_1234567890"
+            self.round += 1
+            yield _sse(
+                {
+                    "choices": [{
+                        "delta": {"tool_calls": [{
+                            "index": 0,
+                            "id": f"plugin-{self.round}",
+                            "function": {"name": name, "arguments": "{}"},
+                        }]},
+                        "finish_reason": "tool_calls",
+                    }]
+                }
+            )
+
+    snapshot = ProviderSnapshot(
+        "openai", "https://api.openai.com/v1", "gpt-5", "credential://openai/default",
+        ProviderProtocol.OPENAI_CHAT_COMPLETIONS, 4096, 1,
+    )
+    session = Session()
+    adapter = OpenAiApiAdapter(
+        snapshot_resolver=lambda _input: snapshot,
+        credential_resolver=lambda _ref: "sk-test",
+        runtime_resolver=lambda _input: (_ for _ in ()).throw(AssertionError("插件任务不应创建候选 Runtime")),
+        plugin_session_resolver=lambda _input: session,
+        transport=Transport(),
+    )
+    base = _run_input()
+    run_input = AgentRunInput(
+        base.run_id, base.attempt_id, base.domain_pack, None, base.model,
+        task_kind=AgentTaskKind.PLUGIN_TASK,
+    )
+
+    async def exercise():
+        return [event async for event in adapter.start(run_input)]
+
+    events = asyncio.run(exercise())
+    assert events[-1].kind is AgentEventKind.RUN_FINISHED
+    assert events[-1].payload["outcome"] == "waiting_confirmation"
+    assert events[-1].payload["action_id"] == "action-1"

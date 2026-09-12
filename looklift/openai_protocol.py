@@ -49,7 +49,19 @@ def build_openai_request(
                 "content": user_content,
             },
         ],
-        "tools": [
+        "tools": project_openai_tools(tools),
+        "tool_choice": "auto",
+        "max_tokens": snapshot.max_tokens,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+
+
+def project_openai_tools(
+    tools: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """将传输无关工具定义完整投影为 OpenAI-compatible tools。"""
+    return [
             {
                 "type": "function",
                 "function": {
@@ -59,12 +71,7 @@ def build_openai_request(
                 },
             }
             for tool in tools
-        ],
-        "tool_choice": "auto",
-        "max_tokens": snapshot.max_tokens,
-        "stream": True,
-        "stream_options": {"include_usage": True},
-    }
+        ]
 
 
 class OpenAiSseParser:

@@ -30,6 +30,7 @@ def agent_tool_definitions() -> tuple[dict[str, Any], ...]:
             "name": "finish_candidate",
             "description": "记录模型终态，不提交正式版本。",
             "inputSchema": FinishCandidateInput.model_json_schema(),
+            "terminal": True,
         },
     )
 

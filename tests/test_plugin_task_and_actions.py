@@ -53,7 +53,8 @@ def test_action_waits_for_confirmation_and_consumes_once(tmp_path):
         store.begin_execution(confirmed.action_id)
 
     restored = PluginActionStore(tmp_path).get(action.action_id)
-    assert restored.state is ActionState.EXECUTING
+    assert restored.state is ActionState.UNKNOWN
+    assert restored.result["reason"] == "host_restarted"
 
 
 def test_action_revision_change_invalidates_old_confirmation(tmp_path):
@@ -74,6 +75,37 @@ def test_action_revision_change_invalidates_old_confirmation(tmp_path):
     assert changed.revision == 2
     with pytest.raises(ActionError, match="revision"):
         store.confirm(action.action_id, expected_revision=1)
+
+
+def test_action_expiry_and_cancellation_are_persisted(tmp_path):
+    clock = [100.0]
+    store = PluginActionStore(tmp_path, clock=lambda: clock[0])
+    action = store.prepare(
+        project_id="project-a",
+        plugin_identity="redbook@1.0.0/main/publish_content",
+        plugin_hash="a" * 64,
+        schema_hash="b" * 64,
+        account_id="account-a",
+        arguments={},
+        asset_hashes=(),
+        ttl_seconds=10,
+    )
+    clock[0] = 111.0
+    with pytest.raises(ActionError, match="过期"):
+        store.confirm(action.action_id, expected_revision=1)
+    assert store.get(action.action_id).state is ActionState.EXPIRED
+
+    other = store.prepare(
+        project_id="project-a",
+        plugin_identity="redbook@1.0.0/main/publish_content",
+        plugin_hash="a" * 64,
+        schema_hash="b" * 64,
+        account_id="account-a",
+        arguments={},
+        asset_hashes=(),
+    )
+    cancelled = store.cancel(other.action_id)
+    assert cancelled.state is ActionState.CANCELLED
 
 
 def test_action_marks_uncertain_write_without_automatic_retry(tmp_path):

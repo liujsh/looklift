@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
+import httpx
 import pytest
 
-from looklift.plugin_mcp_client import McpClientError, ManagedMcpClient
+from looklift.plugin_mcp_client import (
+    McpClientError,
+    ManagedMcpClient,
+    StreamableHttpMcpTransport,
+)
 from looklift.plugin_registry import PluginManifest
 
 
@@ -45,6 +51,19 @@ class FakeTransport:
         self.closed = True
 
 
+class StartAwareTransport(FakeTransport):
+    def __init__(self, pages):
+        super().__init__(pages)
+        self.started = False
+
+    async def start(self):
+        self.started = True
+
+    async def request(self, method, params):
+        assert self.started is True
+        return await super().request(method, params)
+
+
 def test_mcp_client_negotiates_and_collects_paginated_catalog():
     transport = FakeTransport(
         {
@@ -79,6 +98,21 @@ def test_mcp_client_negotiates_and_collects_paginated_catalog():
     assert result["isError"] is False
     assert transport.calls[1][0] == "notifications/initialized"
     assert transport.closed is True
+
+
+def test_mcp_client_starts_transport_before_initialize():
+    transport = StartAwareTransport({None: {"tools": []}})
+    client = ManagedMcpClient(
+        transport,
+        manifest=_manifest(),
+        service="main",
+        tool_metadata={},
+    )
+
+    asyncio.run(client.connect())
+
+    assert transport.started is True
+    asyncio.run(client.close())
 
 
 def test_mcp_client_rejects_unreviewed_or_oversized_catalog():
@@ -117,3 +151,92 @@ def test_mcp_client_never_calls_tool_missing_from_latest_catalog():
 
     with pytest.raises(McpClientError, match="实时目录"):
         asyncio.run(exercise())
+
+
+def test_streamable_http_transport_keeps_auth_origin_protocol_and_session_headers():
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        payload = json.loads(request.content)
+        if "id" not in payload:
+            return httpx.Response(202)
+        headers = {"Content-Type": "application/json"}
+        if payload["method"] == "initialize":
+            headers["MCP-Session-Id"] = "secure-session"
+            result = {"protocolVersion": "2025-11-25"}
+        else:
+            assert request.headers["MCP-Session-Id"] == "secure-session"
+            assert request.headers["MCP-Protocol-Version"] == "2025-11-25"
+            result = {"tools": []}
+        assert request.headers["Authorization"] == "Bearer local-secret"
+        assert request.headers["Origin"] == "http://127.0.0.1"
+        return httpx.Response(200, headers=headers, json={"jsonrpc": "2.0", "id": payload["id"], "result": result})
+
+    transport = StreamableHttpMcpTransport(
+        "http://127.0.0.1:43123/mcp",
+        bearer_token="local-secret",
+        http_transport=httpx.MockTransport(handler),
+    )
+
+    async def exercise():
+        initialized = await transport.request("initialize", {})
+        assert initialized["protocolVersion"] == "2025-11-25"
+        await transport.notify("notifications/initialized", {})
+        assert await transport.request("tools/list", {}) == {"tools": []}
+        await transport.close()
+
+    asyncio.run(exercise())
+    assert seen[-1].method == "DELETE"
+
+
+def test_streamable_http_transport_accepts_sse_response_and_rejects_remote_url():
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        body = f"event: message\ndata: {json.dumps({'jsonrpc': '2.0', 'id': payload['id'], 'result': {'ok': True}})}\n\n"
+        return httpx.Response(200, headers={"Content-Type": "text/event-stream"}, text=body)
+
+    transport = StreamableHttpMcpTransport(
+        "http://[::1]:43123/mcp",
+        bearer_token="local-secret",
+        http_transport=httpx.MockTransport(handler),
+    )
+    assert asyncio.run(transport.request("ping", {})) == {"ok": True}
+    asyncio.run(transport.close())
+
+    with pytest.raises(McpClientError, match="回环"):
+        StreamableHttpMcpTransport("https://example.com/mcp", bearer_token="secret")
+
+
+def test_streamable_http_transport_stops_reading_when_response_exceeds_limit():
+    class OversizedStream(httpx.AsyncByteStream):
+        def __init__(self):
+            self.reads = 0
+
+        async def __aiter__(self):
+            for _ in range(3):
+                self.reads += 1
+                yield b"x" * 8
+
+    stream = OversizedStream()
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "application/json"},
+            stream=stream,
+        )
+
+    transport = StreamableHttpMcpTransport(
+        "http://127.0.0.1:43123/mcp",
+        bearer_token="local-secret",
+        max_response_bytes=10,
+        http_transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(McpClientError, match="安全上限"):
+        asyncio.run(transport.request("ping", {}))
+    assert stream.reads == 2
+    asyncio.run(transport.close())

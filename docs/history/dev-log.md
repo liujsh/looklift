@@ -426,4 +426,15 @@
 - `PLUGIN_TASK` 支持无图/多张安全图，CLI Workspace 与 OpenAI-compatible 请求投影保持原 PHOTO_EDITING 单图 ABI；上下文压缩不再拆散 Tool Call/Result。
 - 新增匿名 Asset Broker 和持久化 Action Gate。外部写入首次调用不上传，确认后执行冻结参数；项目授权、账号、Plugin/Schema 或 revision 变化均阻止执行，超时进入结果未知且禁止自动重试。
 - 离线定向测试覆盖两个 Fake 插件、中文发现、预算、组合 Schema、MCP 分页、跨项目授权、确认消费、素材隔离和多图输入；最终后端全量基线为 `780 passed, 1 skipped`，受影响文件 Ruff 全部通过。
-- 待人工/后续：签名目录与安装器、受管 HTTP MCP、API/Pi 动态工具循环、插件页确认卡、独立小红书包、登录及真实发布均未完成，不宣称平台可用。
+- 当时待后续的本地安装与 API/Pi 通用任务循环已由下方阶段补齐；签名目录、受管 Streamable HTTP MCP、插件页确认卡、独立小红书包、登录及真实发布仍未完成，不宣称平台可用。
+
+### 后续阶段：本地安装与 API/Pi 通用任务循环
+
+- 新增只读本地 ZIP 安装链路，要求用户确认及目录给出的 SHA-256，校验许可、平台、固定依赖和逐文件摘要；路径穿越、大小写重复、Windows 保留名、符号链接、超量解压和异常压缩比均在解压前拒绝。
+- Connector Registry 可重启恢复配置和授权，但不会恢复旧进程的 connected 状态；Plugin Action 增加有效期、取消和启动恢复，遗留执行中写入统一标记结果未知。
+- OpenAI-compatible 与 Pi Adapter 在原有循环中增加 PLUGIN_TASK 策略。API 每轮可刷新激活工具的原生 Schema；Pi Extension 使用任务级固定桥接表，二者调用同一 Plugin Bridge/Gateway，待确认不再触发候选终态错误。
+- GUI/SSE 输入支持纯文字或最多 20 张、总计 40 MiB 的安全代理图；PHOTO_EDITING 的单图候选契约保持不变。
+- 受管 Streamable HTTP MCP Client 仅允许显式回环地址，强制 Bearer/Origin、无代理与无重定向，支持 JSON/SSE、协议版本、Session ID、响应上限和 DELETE 会话关闭；SSE 断线续传与服务端反向消息仍待后续。
+- 定向验证 `55 passed`（加入 HTTP Client 前）；安全自审补齐会话级活动集隔离与 HTTP 响应流式限额后，阶段收口后端全量基线为 `798 passed, 1 skipped`，受影响 Python 文件 Ruff 与 Pi Extension Node 语法检查通过。签名目录、其他 CLI、插件 UI 和真实平台仍未验收。
+- 后续供应链切片新增 Ed25519 签名目录、公钥撤销、有效期、防 revision 回滚、离线缓存和固定 HTTPS/SHA-256 包下载；目录名称、版本和许可证会在本地 ZIP 落盘前再次比对。离线定向测试 `11 passed`，最终后端全量基线 `805 passed, 1 skipped`；正式公钥/目录服务、真实 HTTPS 传输、插件 UI 与 Release 仍未接入，不宣称目录上线。
+- 目录网络层新增显式主机白名单、公网 DNS 校验、无环境代理/重定向及流式限额。Connector 会话管理器在握手和目录刷新后才上线，失败会回收 Transport，撤销先失效权威连接再关闭会话；`ManagedMcpClient` 修复了真实 stdio 进程从未启动的阻断。连接配置新增 Workspace 内账号 ID，仍不把凭据引用暴露给模型/UI。相关定向测试 `30 passed`，最终后端全量基线 `815 passed, 1 skipped`。生产目录、公钥、Connector 工厂、凭据/profile 清理和 GUI 接线继续保持未完成。

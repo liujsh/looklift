@@ -69,6 +69,25 @@ def main() -> None:
 
     workspace = Path.cwd()
     assert (workspace / "DOMAIN_PACK.md").is_file()
+    if mode == "plugin":
+        _send({"type": "agent_start"})
+        _tool_start("discover_tools", "discover-pi", {"query": "发布"})
+        found = _call("discover_tools", {"query": "发布"})
+        _tool_end("discover_tools", "discover-pi", found)
+        identity = found["tools"][0]["identity"]
+        _tool_start("describe_tools", "describe-pi", {"identities": [identity]})
+        described = _call("describe_tools", {"identities": [identity]})
+        _tool_end("describe_tools", "describe-pi", described)
+        arguments = {
+            "identity": identity,
+            "schema_hash": described["tools"][0]["schema_hash"],
+            "arguments": {},
+        }
+        _tool_start("invoke_tool", "invoke-pi", arguments)
+        invoked = _call("invoke_tool", arguments)
+        _tool_end("invoke_tool", "invoke-pi", invoked)
+        _send({"type": "agent_end", "messages": []})
+        return
     assert (workspace / "proxy.jpg").read_bytes().startswith(b"\xff\xd8")
     _send({"type": "session", "version": 3, "id": "fake", "cwd": "redacted"})
     _send({"type": "agent_start"})
