@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 
 from looklift.gui import api
+from looklift.plugin_registry import PluginManifest, PluginRegistry
+from looklift.plugin_tools import PluginTool
 
 
 def _ctx(body=None, plugin_id="catalog-tools"):
@@ -16,7 +18,7 @@ def _ctx(body=None, plugin_id="catalog-tools"):
 
 def test_plugin_api_lists_declared_capabilities_and_grants_subset():
     api._PLUGIN_GRANTS.clear()
-    status, payload = api.ROUTES[("GET", "/api/plugins")]({})
+    status, payload = api.ROUTES[("GET", "/api/plugins")]({"query": {"project_id": "project-a"}})
     assert status == 200
     plugin = next(item for item in payload["plugins"] if item["id"] == "catalog-tools")
     assert plugin["capabilities"] == ["connector.read_catalog"]
@@ -28,8 +30,12 @@ def test_plugin_api_lists_declared_capabilities_and_grants_subset():
     assert status == 200
     assert granted["granted_capabilities"] == ["connector.read_catalog"]
 
-    status, payload = api.ROUTES[("GET", "/api/plugins")]({})
+    status, payload = api.ROUTES[("GET", "/api/plugins")]({"query": {"project_id": "project-a"}})
     assert payload["plugins"][0]["granted_capabilities"] == ["connector.read_catalog"]
+
+    status, other = api.ROUTES[("GET", "/api/plugins")]({"query": {"project_id": "project-b"}})
+    assert status == 200
+    assert other["plugins"][0]["granted_capabilities"] == []
 
 
 def test_plugin_api_rejects_capability_escalation_and_revokes():
@@ -48,3 +54,45 @@ def test_plugin_api_rejects_capability_escalation_and_revokes():
     )
     assert status == 200
     assert revoked["granted_capabilities"] == []
+
+
+def test_plugin_api_discovers_summary_then_describes_full_schema(monkeypatch):
+    digest = "b" * 64
+    registry = PluginRegistry()
+    registry.install(
+        PluginManifest(
+            2, "redbook", "1.0.0", "connector", "publish", "sidecar", ("exported_assets",),
+            frozenset({"social.publish"}), digest, aliases=("小红书",),
+        ),
+        tools=(
+            PluginTool(
+                "redbook", "1.0.0", digest, "main", "publish", "发布图文",
+                {"type": "object", "properties": {"title": {"type": "string"}}},
+                frozenset({"social.publish"}), "external_write",
+            ),
+        ),
+    )
+    monkeypatch.setattr(api, "_PLUGIN_REGISTRY", registry)
+    api._PLUGIN_GRANTS.clear()
+    api._PLUGIN_GRANTS.put(
+        api.CapabilityGrant("redbook", frozenset({"social.publish"}), "project-a", digest)
+    )
+
+    status, found = api.ROUTES[("POST", "/api/plugins/tools/discover")](
+        _ctx({"project_id": "project-a", "query": "发到小红书"})
+    )
+    assert status == 200
+    assert "input_schema" not in found["tools"][0]
+
+    identity = found["tools"][0]["identity"]
+    status, described = api.ROUTES[("POST", "/api/plugins/tools/describe")](
+        _ctx({"project_id": "project-a", "identities": [identity]})
+    )
+    assert status == 200
+    assert described["tools"][0]["input_schema"]["type"] == "object"
+
+    status, denied = api.ROUTES[("POST", "/api/plugins/tools/describe")](
+        _ctx({"project_id": "project-b", "identities": [identity]})
+    )
+    assert status == 403
+    assert "授权" in denied["error"]

@@ -26,23 +26,27 @@ def build_openai_request(
     *,
     instructions: str,
     user_message: str,
-    proxy_jpeg: bytes,
+    proxy_jpeg: bytes | None,
+    proxy_jpegs: Sequence[bytes] | None = None,
     tools: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
-    image = base64.b64encode(proxy_jpeg).decode("ascii")
+    images = tuple(proxy_jpegs) if proxy_jpegs is not None else (() if proxy_jpeg is None else (proxy_jpeg,))
+    user_content: list[dict[str, Any]] = [{"type": "text", "text": user_message}]
+    for content in images:
+        image = base64.b64encode(content).decode("ascii")
+        user_content.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{image}"},
+            }
+        )
     return {
         "model": snapshot.model,
         "messages": [
             {"role": "system", "content": instructions},
             {
                 "role": "user",
-                "content": [
-                    {"type": "text", "text": user_message},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{image}"},
-                    },
-                ],
+                "content": user_content,
             },
         ],
         "tools": [

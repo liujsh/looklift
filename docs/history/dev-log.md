@@ -418,3 +418,12 @@
 - OpenAI-compatible 已由自研 `OpenAiApiAdapter`、HTTP 传输和 SSE/JSON Parser 承载，删除不可选择的 `pydantic-api` Runtime、Pydantic Adapter/模型构造、依赖、打包元数据和专属测试。
 - Anthropic 官方 SDK Provider 独立保留；旧 Run Manifest 中的 Runtime ID 继续按普通字符串读取，不要求对应 Runtime 注册。
 - 验证证据：后端全量 `727 passed, 1 skipped`；前端全量 `177 passed`，TypeScript 与 production build 通过。
+
+## 2026-09-12：Plugin MCP 工具发现与确认执行基础
+
+- 现有 Plugin Registry 增加版本化工具目录和原子持久化；Grant Store 按项目隔离，修复插件 API 把不同项目授权合并展示的问题。
+- 新增受控 stdio MCP Client、本地字段加权发现、分页短摘要、完整 Schema 激活、唯一工具别名和活动集 revision；桥接调用用 `jsonschema` Draft 2020-12 校验完整约束，目录变化使旧激活失效。
+- `PLUGIN_TASK` 支持无图/多张安全图，CLI Workspace 与 OpenAI-compatible 请求投影保持原 PHOTO_EDITING 单图 ABI；上下文压缩不再拆散 Tool Call/Result。
+- 新增匿名 Asset Broker 和持久化 Action Gate。外部写入首次调用不上传，确认后执行冻结参数；项目授权、账号、Plugin/Schema 或 revision 变化均阻止执行，超时进入结果未知且禁止自动重试。
+- 离线定向测试覆盖两个 Fake 插件、中文发现、预算、组合 Schema、MCP 分页、跨项目授权、确认消费、素材隔离和多图输入；最终后端全量基线为 `780 passed, 1 skipped`，受影响文件 Ruff 全部通过。
+- 待人工/后续：签名目录与安装器、受管 HTTP MCP、API/Pi 动态工具循环、插件页确认卡、独立小红书包、登录及真实发布均未完成，不宣称平台可用。

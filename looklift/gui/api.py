@@ -40,10 +40,11 @@ from ..automation_tasks import AutomationTaskManager
 from ..builtin_runtimes import builtin_runtime_registry
 from ..cli_runtime_detection import detect_cli_runtime
 from ..context_memory import ContextEntry, ContextMemoryStore
-from ..capabilities import CapabilityGrant
+from ..capabilities import CapabilityGrant, CapabilityGrantStore
 from ..credential_store import CredentialStoreError, DpapiCredentialStore
 from ..execution_selection import ExecutionSelectionError, resolve_runtime_id
 from ..plugin_registry import PluginManifest, PluginManifestError, PluginRegistry
+from ..plugin_tools import ExposureBudget, PluginToolCatalog, PluginToolError
 from ..provider_config_store import ProviderConfigStore
 from ..provider_detection import detect_provider
 from ..runtime_settings import load_runtime_settings, save_runtime_settings
@@ -66,7 +67,7 @@ _VALID_PROVIDERS = {"auto", "cli", "api", "openai_compat", "ollama"}
 _CONTEXT_STORES: dict[Path, ContextMemoryStore] = {}
 _CONTEXT_STORES_LOCK = threading.Lock()
 _PLUGIN_REGISTRY = PluginRegistry()
-_PLUGIN_GRANTS: dict[tuple[str, str], CapabilityGrant] = {}
+_PLUGIN_GRANTS = CapabilityGrantStore()
 
 
 def _seed_plugin_registry() -> None:
@@ -80,15 +81,30 @@ def _seed_plugin_registry() -> None:
     )
 
 
-def _plugin_payload(item: dict) -> dict:
-    grants = [grant for (name, _), grant in _PLUGIN_GRANTS.items() if name == item["name"] and grant.active()]
+def _plugin_payload(item: dict, *, project_id: str | None = None) -> dict:
+    grants = [
+        grant
+        for (name, grant_project_id), grant in _PLUGIN_GRANTS.items()
+        if name == item["name"]
+        and project_id is not None
+        and grant_project_id == project_id
+        and grant.active()
+    ]
     granted = sorted({cap for grant in grants for cap in grant.capabilities})
     return {"id": item["name"], **{key: value for key, value in item.items() if key != "name"}, "granted_capabilities": granted}
 
 
-def _get_plugins(_ctx: dict) -> tuple[int, dict]:
+def _get_plugins(ctx: dict) -> tuple[int, dict]:
     _seed_plugin_registry()
-    return 200, {"plugins": [_plugin_payload(item) for item in _PLUGIN_REGISTRY.list()]}
+    project_id = (ctx.get("query") or {}).get("project_id")
+    if project_id is not None and (not isinstance(project_id, str) or not project_id):
+        return 400, {"error": "project_id 无效"}
+    return 200, {
+        "plugins": [
+            _plugin_payload(item, project_id=project_id)
+            for item in _PLUGIN_REGISTRY.list()
+        ]
+    }
 
 
 def _grant_plugin(ctx: dict) -> tuple[int, dict]:
@@ -110,7 +126,10 @@ def _grant_plugin(ctx: dict) -> tuple[int, dict]:
             raise ValueError("Grant 不能超过 Plugin 已声明能力")
         grant = CapabilityGrant(manifest.name, requested, project_id, manifest.content_hash, scope=scope)
         _PLUGIN_GRANTS[(manifest.name, project_id)] = grant
-        return 200, _plugin_payload({"name": manifest.name, **next(item for item in _PLUGIN_REGISTRY.list() if item["name"] == manifest.name)})
+        return 200, _plugin_payload(
+            {"name": manifest.name, **next(item for item in _PLUGIN_REGISTRY.list() if item["name"] == manifest.name)},
+            project_id=project_id,
+        )
     except (KeyError, TypeError, ValueError, PluginManifestError) as exc:
         return 400, {"error": str(exc)}
 
@@ -127,7 +146,71 @@ def _revoke_plugin(ctx: dict) -> tuple[int, dict]:
     grant = _PLUGIN_GRANTS.get((manifest.name, project_id))
     if grant is not None:
         _PLUGIN_GRANTS[(manifest.name, project_id)] = replace(grant, revoked=True)
-    return 200, _plugin_payload(next(item for item in _PLUGIN_REGISTRY.list() if item["name"] == manifest.name))
+    return 200, _plugin_payload(
+        next(item for item in _PLUGIN_REGISTRY.list() if item["name"] == manifest.name),
+        project_id=project_id,
+    )
+
+
+def _discover_plugin_tools(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    try:
+        page = PluginToolCatalog(_PLUGIN_REGISTRY).discover(
+            payload.get("query"),
+            project_id=payload.get("project_id"),
+            grants=tuple(grant for _, grant in _PLUGIN_GRANTS.items()),
+            limit=payload.get("limit", 10),
+            cursor=payload.get("cursor"),
+            plugin_name=payload.get("plugin_id"),
+        )
+    except (TypeError, PluginToolError) as exc:
+        return 400, {"error": str(exc)}
+    return 200, {
+        "tools": [item.public_dict() for item in page.items],
+        "next_cursor": page.next_cursor,
+    }
+
+
+def _describe_plugin_tools(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    project_id = payload.get("project_id")
+    identities = payload.get("identities")
+    if not isinstance(project_id, str) or not project_id or not isinstance(identities, list) or not all(isinstance(item, str) for item in identities):
+        return 400, {"error": "project_id 与 identities 无效"}
+    catalog = PluginToolCatalog(_PLUGIN_REGISTRY)
+    try:
+        for identity in identities:
+            tool = catalog.resolve(identity)
+            grant = _PLUGIN_GRANTS.active_for(tool.plugin_name, project_id=project_id)
+            if grant is None or grant.version_hash != tool.plugin_hash or not tool.capabilities <= grant.capabilities:
+                return 403, {"error": "工具未获得当前项目授权"}
+        active = catalog.activate(
+            identities,
+            budget=ExposureBudget(
+                max_schema_bytes=payload.get("max_schema_bytes", 32 * 1024),
+                max_tools=payload.get("max_tools", 16),
+            ),
+        )
+    except (TypeError, PluginToolError) as exc:
+        return 400, {"error": str(exc)}
+    return 200, {
+        "revision": active.revision,
+        "schema_bytes": active.schema_bytes,
+        "tools": [
+            {
+                "identity": tool.identity,
+                "provider_name": tool.provider_name,
+                "schema_hash": tool.schema_hash,
+                "description": tool.description,
+                "input_schema": dict(tool.input_schema),
+            }
+            for tool in active.tools
+        ],
+    }
 
 _ANALYZE_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
 
@@ -1695,6 +1778,8 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/plugins"): _get_plugins,
     ("POST", "/api/plugins/<id>/grant"): _grant_plugin,
     ("DELETE", "/api/plugins/<id>/grant"): _revoke_plugin,
+    ("POST", "/api/plugins/tools/discover"): _discover_plugin_tools,
+    ("POST", "/api/plugins/tools/describe"): _describe_plugin_tools,
     ("GET", "/api/memory/config"): _get_memory_config,
     ("PATCH", "/api/memory/config"): _patch_memory_config,
     ("GET", "/api/memory/tree"): _get_memory_tree,

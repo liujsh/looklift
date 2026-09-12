@@ -36,7 +36,8 @@ class CliWorkspace:
 
     path: Path
     domain_pack_path: Path
-    proxy_path: Path
+    proxy_path: Path | None
+    proxy_paths: tuple[Path, ...]
     candidates_path: Path
 
 
@@ -53,17 +54,22 @@ class CliWorkspaceManager:
         candidates = path / "candidates"
         candidates.mkdir()
         domain_path = path / "DOMAIN_PACK.md"
-        proxy_path = path / "proxy.jpg"
         domain_path.write_text(
             f"{run_input.domain_pack.instructions}\n\n"
             f"# 本轮目标\n\n{run_input.domain_pack.user_message}\n",
             encoding="utf-8",
         )
-        proxy_path.write_bytes(run_input.proxy_image.content)
+        proxy_paths: list[Path] = []
+        for index, image in enumerate(run_input.proxy_images):
+            name = "proxy.jpg" if len(run_input.proxy_images) == 1 else f"proxy-{index + 1}.jpg"
+            proxy = path / name
+            proxy.write_bytes(image.content)
+            proxy_paths.append(proxy)
         return CliWorkspace(
             path=path,
             domain_pack_path=domain_path,
-            proxy_path=proxy_path,
+            proxy_path=proxy_paths[0] if proxy_paths else None,
+            proxy_paths=tuple(proxy_paths),
             candidates_path=candidates,
         )
 

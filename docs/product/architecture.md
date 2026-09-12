@@ -594,3 +594,12 @@ Provider。连接注册、调用错误和安全拒绝均保持结构化错误分
 OpenAI-compatible 路径使用独立 SSE/JSON 协议层和 `OpenAiApiAdapter`，多轮 Tool Call 只经过共享 `ScopedToolGateway` 与 `CandidateRuntime`。成功的 `candidate_ready` 由共享 `VerifiedAgentAdapter` 进入 `CandidateVerifier` 和 `UserReviewGate`；无候选终态不进入复核门。HTTP 传输禁用环境代理与重定向，远程地址要求 HTTPS 并在 DNS 解析后拒绝私网、loopback、link-local 和 CGNAT；显式本地 Ollama 只允许 loopback。
 
 Provider 元数据保存在版本化 JSON 快照，API Key 使用当前 Windows 用户 DPAPI 加密，快照、Query、日志和 Run Manifest 只接触 `dpapi://` 引用。React 设置页提供本机 CLI/API 双模式、支持等级和能力标签、Runtime 重新扫描、OpenAI/Ollama 隔离草稿、连通性检测、保存与删除；Ollama 不显示或要求 API Key。
+
+### Plugin MCP 工具发现与确认执行基础
+
+- `PluginRegistry` 在保留原构造与历史版本语义的同时，可原子持久化 Manifest 和经审核的版本化工具目录；`CapabilityGrantStore` 按 Plugin 与项目保存最小授权。插件列表 API 只投影当前请求项目的 Grant，不再合并其他项目授权。
+- `plugin_mcp_client.py` 提供无 Shell 的 stdio JSON-RPC 传输和受控 MCP 会话，固定握手、分页目录、消息/页数/工具数上限、审核工具白名单、实时目录调用检查和进程回收。受管本地 HTTP MCP 尚未实现。
+- `plugin_tools.py` 在本地完整目录上执行授权过滤、中文/英文加权召回和分页；发现只返回 L1 摘要，描述阶段返回不可截断的完整 Draft 2020-12 Schema、Schema Hash、唯一 Provider 名和活动集 revision。桥接执行前再次核对实时目录、完整 Schema、项目 Grant；`POST /api/plugins/tools/discover` 与 `POST /api/plugins/tools/describe` 已提供同一投影。
+- `AgentRunInput` 新增 `PLUGIN_TASK` 策略，可持有零张或多张安全 JPEG；CLI Workspace 与 OpenAI-compatible 请求构造支持相同输入，既有 `PHOTO_EDITING` 仍强制单张代理图。现有 OpenAI/Pi 候选 Adapter 尚未切换为通用插件任务循环。
+- `PluginAssetBroker` 只接收内存中的正式导出字节并向模型投影匿名 asset ID，按 Action 创建受控暂存目录；`PluginActionStore` 持久化待确认、已确认、执行中及成功/失败/结果未知终态。外部写入第一次调用只创建 Action，确认绑定参数、素材顺序、账号、Plugin/Schema Hash 和 revision，执行前重新校验当前授权与账号；确认只消费一次，超时结果未知且不自动重试。
+- `context_budget.prepare_messages` 按完整 Assistant Tool Call + Tool Result 事实组淘汰旧历史，避免预算压缩产生孤立工具消息。Skill/Reference/图片与 Provider tokenizer 的统一 token 计量仍待后续阶段完成。

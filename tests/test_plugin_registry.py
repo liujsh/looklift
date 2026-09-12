@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from looklift.capabilities import CapabilityGrant, ScopedTokenStore
+from looklift.capabilities import CapabilityGrant, CapabilityGrantStore, ScopedTokenStore
 from looklift.plugin_registry import PluginManifest, PluginManifestError, PluginRegistry
 from looklift.skill_staging import SkillStagingError, stage_skill_snapshot
 
@@ -78,3 +78,15 @@ def test_registry_lists_versions_without_exposing_disabled_as_active():
     assert listed[0]["name"] == "catalog-tools"
     assert listed[0]["version"] == "1.0.0"
     assert registry.list(include_disabled=True)[-1]["enabled"] is False
+
+
+def test_grant_store_persists_project_scope_and_revocation(tmp_path):
+    store = CapabilityGrantStore(tmp_path)
+    grant = CapabilityGrant("plugin", frozenset({"social.publish"}), "project-a", "a" * 64)
+    store.put(grant)
+
+    restored = CapabilityGrantStore(tmp_path)
+    assert restored.active_for("plugin", project_id="project-a") == grant
+    assert restored.active_for("plugin", project_id="project-b") is None
+    restored.revoke("plugin", project_id="project-a")
+    assert CapabilityGrantStore(tmp_path).active_for("plugin", project_id="project-a") is None

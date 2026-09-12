@@ -31,8 +31,10 @@ def prepare_messages(messages: list[dict[str, Any]], budget: int = DEFAULT_BUDGE
             dropped += len(value) - MAX_TOOL_RESULT_CHARS
         prepared.append(item)
     while sum(len(json.dumps(item, ensure_ascii=False)) for item in prepared) > budget and len(prepared) > 2:
-        removed = prepared.pop(1)
-        dropped += len(json.dumps(removed, ensure_ascii=False))
+        end = _oldest_removable_group_end(prepared)
+        removed = prepared[1:end]
+        del prepared[1:end]
+        dropped += sum(len(json.dumps(item, ensure_ascii=False)) for item in removed)
     if not dropped:
         return prepared, None
     return prepared, {
@@ -42,3 +44,22 @@ def prepare_messages(messages: list[dict[str, Any]], budget: int = DEFAULT_BUDGE
         "budget_chars": budget,
         "reason": "context_budget",
     }
+
+
+def _oldest_removable_group_end(messages: list[dict[str, Any]]) -> int:
+    """返回首个旧消息事实组末端，工具调用与结果必须一起淘汰。"""
+    first = messages[1]
+    if first.get("role") != "assistant" or not isinstance(first.get("tool_calls"), list):
+        return 2
+    call_ids = {
+        call.get("id")
+        for call in first["tool_calls"]
+        if isinstance(call, dict) and isinstance(call.get("id"), str)
+    }
+    end = 2
+    while end < len(messages) - 1:
+        item = messages[end]
+        if item.get("role") != "tool" or item.get("tool_call_id") not in call_ids:
+            break
+        end += 1
+    return end

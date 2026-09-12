@@ -19,3 +19,18 @@ def test_prepare_messages_drops_old_context_when_budget_exceeded():
     assert prepared[0]["role"] == "system"
     assert len(prepared) < len(messages)
     assert audit is not None
+
+
+def test_prepare_messages_never_splits_tool_call_and_result_pair():
+    messages = [
+        {"role": "system", "content": "contract"},
+        {"role": "assistant", "tool_calls": [{"id": "call-1", "function": {"name": "tool"}}]},
+        {"role": "tool", "tool_call_id": "call-1", "content": "x" * 600},
+        {"role": "user", "content": "当前目标"},
+    ]
+
+    prepared, audit = prepare_messages(messages, budget=800)
+
+    roles = [message["role"] for message in prepared]
+    assert roles == ["system", "user"]
+    assert audit is not None
