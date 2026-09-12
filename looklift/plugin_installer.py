@@ -15,7 +15,12 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
-from .plugin_registry import PluginManifest, PluginManifestError, PluginRegistry
+from .plugin_registry import (
+    PluginManifest,
+    PluginManifestError,
+    PluginRegistry,
+    PluginService,
+)
 from .plugin_tools import PluginTool, PluginToolError
 
 
@@ -192,6 +197,9 @@ class PluginPackageInstaller:
             source=raw.get("source", "local"),
             aliases=tuple(raw.get("aliases", ())),
             description=raw.get("description", ""),
+            services=self._parse_services(
+                value.get("services", []), value.get("files")
+            ),
         )
         raw_tools = value.get("tools", [])
         if not isinstance(raw_tools, list):
@@ -214,6 +222,34 @@ class PluginPackageInstaller:
             for item in raw_tools
         )
         return manifest, tools, license_id
+
+    def _parse_services(
+        self, value: Any, files: Any
+    ) -> tuple[PluginService, ...]:
+        if not isinstance(value, list) or not isinstance(files, Mapping):
+            raise PluginInstallError("插件 Service 或文件清单无效")
+        services: list[PluginService] = []
+        for raw in value:
+            if not isinstance(raw, Mapping):
+                raise PluginInstallError("插件 Service 声明无效")
+            try:
+                entrypoint = raw["entrypoint"]
+                entrypoint_sha256 = raw["entrypoint_sha256"]
+                if files.get(entrypoint) != entrypoint_sha256:
+                    raise PluginInstallError("插件 Service 入口未绑定文件清单摘要")
+                services.append(
+                    PluginService(
+                        name=raw["name"],
+                        transport=raw["transport"],
+                        entrypoint=entrypoint,
+                        entrypoint_sha256=entrypoint_sha256,
+                        arguments=tuple(raw.get("arguments", ())),
+                        credential_env=raw.get("credential_env"),
+                    )
+                )
+            except (KeyError, TypeError) as exc:
+                raise PluginInstallError("插件 Service 声明缺少字段") from exc
+        return tuple(services)
 
     def _validate_dependencies(self, dependencies: Any) -> None:
         if not isinstance(dependencies, list):

@@ -100,6 +100,32 @@ class ConnectorSessionManager:
         if client is not None:
             await _close_or_raise(client)
 
+    async def forget_account(
+        self,
+        connector_id: str,
+        *,
+        credential_delete: Callable[[str], None],
+        profile_delete: Callable[[str], None],
+    ) -> None:
+        """显式忘记账号：先撤权/停进程，再删除凭据与长期 Profile。"""
+        with self._lock:
+            try:
+                credential_ref = self._registry.get(connector_id).credential_ref
+            except ConnectorRegistryError as exc:
+                raise ConnectorSessionError("未知 Connector") from exc
+        await self.revoke(connector_id)
+        failures = 0
+        for callback, value in (
+            (credential_delete, credential_ref),
+            (profile_delete, connector_id),
+        ):
+            try:
+                callback(value)
+            except Exception:
+                failures += 1
+        if failures:
+            raise ConnectorSessionError("Connector 账号持久状态未完全清理")
+
     async def close_all(self) -> None:
         with self._lock:
             connector_ids = tuple(self._clients)

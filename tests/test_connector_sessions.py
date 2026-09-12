@@ -116,3 +116,44 @@ def test_authorization_revoked_during_handshake_prevents_session_publish(tmp_pat
     assert client.closed == 1
     assert registry.get("notes").authorized is False
     assert registry.get("notes").connected is False
+
+
+def test_forget_account_revokes_and_closes_before_removing_persistent_state(tmp_path):
+    registry = _registry(tmp_path)
+    order = []
+    client = FakeClient(
+        close_hook=lambda: order.append(("close", registry.get("notes").authorized))
+    )
+    manager = ConnectorSessionManager(registry, client_factory=lambda _config: client)
+    asyncio.run(manager.connect("notes", workspace_id="project-a"))
+
+    asyncio.run(
+        manager.forget_account(
+            "notes",
+            credential_delete=lambda reference: order.append(
+                ("credential", reference)
+            ),
+            profile_delete=lambda connector_id: order.append(
+                ("profile", connector_id)
+            ),
+        )
+    )
+
+    assert order == [
+        ("close", False),
+        ("credential", "keyring://looklift/notes"),
+        ("profile", "notes"),
+    ]
+
+
+def test_disconnect_preserves_account_credential_and_profile(tmp_path):
+    registry = _registry(tmp_path)
+    manager = ConnectorSessionManager(
+        registry, client_factory=lambda _config: FakeClient()
+    )
+    asyncio.run(manager.connect("notes", workspace_id="project-a"))
+
+    asyncio.run(manager.disconnect("notes"))
+
+    assert registry.get("notes").authorized is True
+    assert registry.get("notes").credential_ref == "keyring://looklift/notes"

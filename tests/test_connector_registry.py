@@ -99,10 +99,13 @@ def test_registry_keeps_accounts_isolated_by_connection(tmp_path) -> None:
     registry = ConnectorRegistry(root=tmp_path)
     registry.register(
         _manifest("notes-main"),
-        credential_ref="keyring://notes/main",
+        credential_ref="dpapi://notes-main",
         workspace_id="project-a",
         account_id="account-main",
         authorized=True,
+        plugin_name="notes",
+        plugin_version="1.2.3",
+        service="main",
     )
     registry.register(
         _manifest("notes-work"),
@@ -119,7 +122,10 @@ def test_registry_keeps_accounts_isolated_by_connection(tmp_path) -> None:
         ("notes-work", "account-work"),
     )
     assert registry.get("notes-main").account_id == "account-main"
-    assert ConnectorRegistry(root=tmp_path).get("notes-work").account_id == "account-work"
+    restored = ConnectorRegistry(root=tmp_path)
+    assert restored.get("notes-work").account_id == "account-work"
+    assert restored.get("notes-main").plugin_version == "1.2.3"
+    assert "credential_ref" not in restored.get("notes-main").public_dict()
 
 
 def test_registry_rejects_unsafe_account_id() -> None:

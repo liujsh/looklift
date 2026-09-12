@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass, replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Iterable
 
 if TYPE_CHECKING:
@@ -18,6 +18,45 @@ class PluginManifestError(ValueError):
 
 _SEMVER = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+_SAFE_COMPONENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
+_SAFE_ENV = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
+
+
+@dataclass(frozen=True)
+class PluginService:
+    """审核后可持久化的包内 MCP Service 启动契约。"""
+
+    name: str
+    transport: str
+    entrypoint: str
+    entrypoint_sha256: str
+    arguments: tuple[str, ...] = ()
+    credential_env: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "arguments", tuple(self.arguments))
+        path = PurePosixPath(self.entrypoint)
+        if (
+            not _SAFE_COMPONENT.fullmatch(self.name)
+            or self.transport != "stdio"
+            or path.is_absolute()
+            or not path.parts
+            or any(part in {"", ".", ".."} for part in path.parts)
+            or any(not _SAFE_COMPONENT.fullmatch(part) for part in path.parts)
+            or "\\" in self.entrypoint
+            or not _SHA256.fullmatch(self.entrypoint_sha256)
+        ):
+            raise PluginManifestError("Plugin Service 启动契约无效")
+        if len(self.arguments) > 64 or any(
+            not isinstance(value, str)
+            or not value
+            or len(value) > 4096
+            or "\x00" in value
+            for value in self.arguments
+        ):
+            raise PluginManifestError("Plugin Service 参数无效")
+        if self.credential_env is not None and not _SAFE_ENV.fullmatch(self.credential_env):
+            raise PluginManifestError("Plugin Service 凭据环境变量无效")
 
 
 @dataclass(frozen=True)
@@ -35,6 +74,7 @@ class PluginManifest:
     enabled: bool = True
     aliases: tuple[str, ...] = ()
     description: str = ""
+    services: tuple[PluginService, ...] = ()
 
     def __post_init__(self) -> None:
         if self.spec_version < 1 or not self.name or not _SEMVER.fullmatch(self.version):
@@ -50,6 +90,9 @@ class PluginManifest:
             raise PluginManifestError("禁止声明代码、原图或黑盒像素能力")
         if any(not isinstance(value, str) or not value.strip() for value in self.aliases):
             raise PluginManifestError("Plugin 别名必须是非空文本")
+        object.__setattr__(self, "services", tuple(self.services))
+        if len({service.name for service in self.services}) != len(self.services):
+            raise PluginManifestError("Plugin Service 名称重复")
 
 
 class PluginRegistry:
@@ -144,6 +187,17 @@ class PluginRegistry:
                 "enabled": item.enabled,
                 "aliases": list(item.aliases),
                 "description": item.description,
+                "services": [
+                    {
+                        "name": service.name,
+                        "transport": service.transport,
+                        "entrypoint": service.entrypoint,
+                        "entrypoint_sha256": service.entrypoint_sha256,
+                        "arguments": list(service.arguments),
+                        "credential_env": service.credential_env,
+                    }
+                    for service in item.services
+                ],
             }
             for item in items
             if include_disabled or item.enabled
@@ -164,6 +218,8 @@ class PluginRegistry:
                 raise PluginManifestError("工具身份与 Plugin Manifest 不一致")
             if not tool.capabilities <= manifest.capabilities:
                 raise PluginManifestError("工具能力不能超过 Plugin 声明")
+            if manifest.services and tool.service not in {item.name for item in manifest.services}:
+                raise PluginManifestError("工具引用了未声明的 Plugin Service")
             if tool.identity in identities:
                 raise PluginManifestError("Plugin 工具身份重复")
             identities.add(tool.identity)
@@ -195,6 +251,17 @@ class PluginRegistry:
                         "enabled": manifest.enabled,
                         "aliases": list(manifest.aliases),
                         "description": manifest.description,
+                        "services": [
+                            {
+                                "name": service.name,
+                                "transport": service.transport,
+                                "entrypoint": service.entrypoint,
+                                "entrypoint_sha256": service.entrypoint_sha256,
+                                "arguments": list(service.arguments),
+                                "credential_env": service.credential_env,
+                            }
+                            for service in manifest.services
+                        ],
                     },
                     "tools": [tool.as_storage_dict() for tool in self._tools.get(key, ())],
                 }
@@ -229,6 +296,17 @@ class PluginRegistry:
                     enabled=raw.get("enabled", True),
                     aliases=tuple(raw.get("aliases", ())),
                     description=raw.get("description", ""),
+                    services=tuple(
+                        PluginService(
+                            name=service["name"],
+                            transport=service["transport"],
+                            entrypoint=service["entrypoint"],
+                            entrypoint_sha256=service["entrypoint_sha256"],
+                            arguments=tuple(service.get("arguments", ())),
+                            credential_env=service.get("credential_env"),
+                        )
+                        for service in raw.get("services", ())
+                    ),
                 )
                 tools = tuple(PluginTool.from_storage_dict(value) for value in item.get("tools", ()))
                 self._validate_tools(manifest, tools)

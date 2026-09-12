@@ -438,3 +438,4 @@
 - 定向验证 `55 passed`（加入 HTTP Client 前）；安全自审补齐会话级活动集隔离与 HTTP 响应流式限额后，阶段收口后端全量基线为 `798 passed, 1 skipped`，受影响 Python 文件 Ruff 与 Pi Extension Node 语法检查通过。签名目录、其他 CLI、插件 UI 和真实平台仍未验收。
 - 后续供应链切片新增 Ed25519 签名目录、公钥撤销、有效期、防 revision 回滚、离线缓存和固定 HTTPS/SHA-256 包下载；目录名称、版本和许可证会在本地 ZIP 落盘前再次比对。离线定向测试 `11 passed`，最终后端全量基线 `805 passed, 1 skipped`；正式公钥/目录服务、真实 HTTPS 传输、插件 UI 与 Release 仍未接入，不宣称目录上线。
 - 目录网络层新增显式主机白名单、公网 DNS 校验、无环境代理/重定向及流式限额。Connector 会话管理器在握手和目录刷新后才上线，失败会回收 Transport，撤销先失效权威连接再关闭会话；`ManagedMcpClient` 修复了真实 stdio 进程从未启动的阻断。连接配置新增 Workspace 内账号 ID，仍不把凭据引用暴露给模型/UI。相关定向测试 `30 passed`，最终后端全量基线 `815 passed, 1 skipped`。生产目录、公钥、Connector 工厂、凭据/profile 清理和 GUI 接线继续保持未完成。
+- stdio 生产工厂把 Connector 固定到已安装 Plugin 版本与 Service，启动前复核包内入口 SHA-256，并以最小环境注入 DPAPI 凭据和账号独立 Profile；调用请求不能提交命令、入口或环境。普通断开保留长期状态，显式忘记账号才在撤权和进程回收后删除凭据/Profile。相关定向测试 `36 passed`，最终后端全量基线 `821 passed, 1 skipped`；GUI/API 生产接线仍未完成。

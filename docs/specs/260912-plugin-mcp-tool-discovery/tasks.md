@@ -22,8 +22,9 @@
 - [x] 实现签名目录供应链内核：Ed25519 多公钥/撤销、有效期、防 revision 回滚、离线缓存、固定 HTTPS 包摘要下载，并把目录身份/版本/许可证绑定到原子安装器。
 - [x] 实现目录专用真实 HTTPS Fetcher：显式主机白名单、公网 DNS 校验、无环境代理/重定向和流式响应上限。
 - [x] 实现 Connector 会话生命周期协调：Transport 启动后握手/刷新才上线，失败关闭半成品连接，断开/撤销先收敛权威状态；连接增加 Workspace 内独立账号身份。
+- [x] 实现生产 stdio Plugin Client 工厂：Connector 固定绑定插件版本/Service，入口限于已安装包且启动前复核摘要，DPAPI 凭据与账号 Profile 通过最小环境注入；普通断开保留登录态，显式忘记账号才清除凭据/Profile。
 
-仍未完成：应用内正式目录公钥及轮换发布、真实目录服务、生产 Connector 工厂与凭据/profile 清理、HTTP SSE 断线续传及服务端反向消息、其他 CLI 契约验证、统一 tokenizer/Skill/Result 预算、通用插件 UI、独立小红书包及真实平台人工验收。因此下方阶段任务保持未勾选，不能把本轮 Fake/契约通过等同最小演示完成。
+仍未完成：应用内正式目录公钥及轮换发布、真实目录服务、生产 GUI/API 的 Connector/凭据/Profile 接线、HTTP SSE 断线续传及服务端反向消息、其他 CLI 契约验证、统一 tokenizer/Skill/Result 预算、通用插件 UI、独立小红书包及真实平台人工验收。因此下方阶段任务保持未勾选，不能把本轮 Fake/契约通过等同最小演示完成。
 
 ## 阶段 A — 通用插件基础与任务边界
 

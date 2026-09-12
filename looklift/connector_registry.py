@@ -15,7 +15,7 @@ class ConnectorRegistryError(ValueError):
     """连接配置或生命周期操作不符合契约。"""
 
 
-_CREDENTIAL_REF = re.compile(r"^(?:keyring|secret|env)://[a-z0-9][a-z0-9._/-]{0,127}$")
+_CREDENTIAL_REF = re.compile(r"^(?:dpapi|keyring|secret|env)://[a-z0-9][a-z0-9._/-]{0,127}$")
 _WORKSPACE_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _ACCOUNT_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
@@ -30,6 +30,9 @@ class ConnectorConfig:
     account_id: str = "default"
     authorized: bool = False
     connected: bool = False
+    plugin_name: str | None = None
+    plugin_version: str | None = None
+    service: str | None = None
 
     def __post_init__(self) -> None:
         if not _CREDENTIAL_REF.fullmatch(self.credential_ref):
@@ -38,6 +41,11 @@ class ConnectorConfig:
             raise ConnectorRegistryError("Workspace ID 不安全")
         if not _ACCOUNT_ID.fullmatch(self.account_id):
             raise ConnectorRegistryError("账号 ID 不安全")
+        binding = (self.plugin_name, self.plugin_version, self.service)
+        if any(value is not None for value in binding) and not all(
+            isinstance(value, str) and value for value in binding
+        ):
+            raise ConnectorRegistryError("Connector Plugin 绑定必须完整")
 
     def public_dict(self) -> dict[str, object]:
         """返回 UI/审计可用投影，绝不暴露凭据引用。"""
@@ -50,6 +58,9 @@ class ConnectorConfig:
             "account_id": self.account_id,
             "authorized": self.authorized,
             "connected": self.connected,
+            "plugin_name": self.plugin_name,
+            "plugin_version": self.plugin_version,
+            "service": self.service,
         }
 
 
@@ -76,6 +87,9 @@ class ConnectorRegistry:
         workspace_id: str = "default",
         account_id: str = "default",
         authorized: bool = False,
+        plugin_name: str | None = None,
+        plugin_version: str | None = None,
+        service: str | None = None,
     ) -> ConnectorConfig:
         return self.register_config(
             ConnectorConfig(
@@ -84,6 +98,9 @@ class ConnectorRegistry:
                 workspace_id=workspace_id,
                 account_id=account_id,
                 authorized=authorized,
+                plugin_name=plugin_name,
+                plugin_version=plugin_version,
+                service=service,
             )
         )
 
@@ -178,6 +195,9 @@ class ConnectorRegistry:
                 "account_id": config.account_id,
                 "authorized": config.authorized,
                 "connected": config.connected,
+                "plugin_name": config.plugin_name,
+                "plugin_version": config.plugin_version,
+                "service": config.service,
             }
             for config in self.list()
         ]
@@ -208,6 +228,9 @@ class ConnectorRegistry:
                     authorized=raw.get("authorized", False),
                     # 连接是进程事实；重启只恢复配置与授权，必须重新握手后才能在线。
                     connected=False,
+                    plugin_name=raw.get("plugin_name"),
+                    plugin_version=raw.get("plugin_version"),
+                    service=raw.get("service"),
                 )
                 self._configs[manifest.connector_id] = config
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:

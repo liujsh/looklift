@@ -11,7 +11,14 @@ from looklift.plugin_installer import PluginInstallError, PluginPackageInstaller
 from looklift.plugin_registry import PluginRegistry
 
 
-def _write_package(path: Path, *, extra_entries=(), license_id="Apache-2.0", platforms=("win32",)) -> str:
+def _write_package(
+    path: Path,
+    *,
+    extra_entries=(),
+    license_id="Apache-2.0",
+    platforms=("win32",),
+    with_service=False,
+) -> str:
     runtime = b"fake-runtime"
     manifest = {
         "manifest": {
@@ -45,6 +52,17 @@ def _write_package(path: Path, *, extra_entries=(), license_id="Apache-2.0", pla
             }
         ],
     }
+    if with_service:
+        manifest["services"] = [
+            {
+                "name": "main",
+                "transport": "stdio",
+                "entrypoint": "runtime/fake.exe",
+                "entrypoint_sha256": hashlib.sha256(runtime).hexdigest(),
+                "arguments": ["--mcp"],
+                "credential_env": "PLUGIN_TOKEN",
+            }
+        ]
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("plugin.json", json.dumps(manifest, ensure_ascii=False))
         archive.writestr("runtime/fake.exe", runtime)
@@ -55,7 +73,7 @@ def _write_package(path: Path, *, extra_entries=(), license_id="Apache-2.0", pla
 
 def test_installer_verifies_and_atomically_registers_package(tmp_path: Path):
     package = tmp_path / "plugin.zip"
-    digest = _write_package(package)
+    digest = _write_package(package, with_service=True)
     registry = PluginRegistry(tmp_path / "state")
     installer = PluginPackageInstaller(tmp_path / "app-data", registry=registry)
 
@@ -70,6 +88,8 @@ def test_installer_verifies_and_atomically_registers_package(tmp_path: Path):
     assert (installed.path / "runtime" / "fake.exe").read_bytes() == b"fake-runtime"
     assert registry.resolve("redbook").source == "official-catalog"
     assert registry.tools_for("redbook")[0].risk == "external_write"
+    assert registry.resolve("redbook").services[0].entrypoint == "runtime/fake.exe"
+    assert PluginRegistry(tmp_path / "state").resolve("redbook").services[0].credential_env == "PLUGIN_TOKEN"
     assert not any((tmp_path / "app-data" / "plugin-staging").iterdir())
 
 
