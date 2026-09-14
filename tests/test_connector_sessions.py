@@ -6,7 +6,11 @@ import pytest
 
 from looklift.connector import ConnectorManifest
 from looklift.connector_registry import ConnectorRegistry
-from looklift.connector_sessions import ConnectorSessionError, ConnectorSessionManager
+from looklift.connector_sessions import (
+    ConnectorRuntimeHost,
+    ConnectorSessionError,
+    ConnectorSessionManager,
+)
 
 
 class FakeClient:
@@ -30,6 +34,9 @@ class FakeClient:
         self.closed += 1
         if self.close_hook:
             self.close_hook()
+
+    async def call(self, name, arguments):
+        return {"name": name, "arguments": dict(arguments)}
 
 
 def _registry(tmp_path):
@@ -157,3 +164,36 @@ def test_disconnect_preserves_account_credential_and_profile(tmp_path):
 
     assert registry.get("notes").authorized is True
     assert registry.get("notes").credential_ref == "keyring://looklift/notes"
+
+
+def test_runtime_host_keeps_connect_call_and_close_on_one_event_loop(tmp_path):
+    registry = _registry(tmp_path)
+    loop_ids = []
+
+    class LoopAwareClient(FakeClient):
+        async def connect(self):
+            loop_ids.append(id(asyncio.get_running_loop()))
+            await super().connect()
+
+        async def call(self, name, arguments):
+            loop_ids.append(id(asyncio.get_running_loop()))
+            return await super().call(name, arguments)
+
+        async def close(self):
+            loop_ids.append(id(asyncio.get_running_loop()))
+            await super().close()
+
+    manager = ConnectorSessionManager(
+        registry, client_factory=lambda _config: LoopAwareClient()
+    )
+    host = ConnectorRuntimeHost(manager)
+    try:
+        assert host.connect("notes", workspace_id="project-a") == ("tool",)
+        assert host.call(
+            "notes", workspace_id="project-a", name="list_notes", arguments={"limit": 1}
+        ) == {"name": "list_notes", "arguments": {"limit": 1}}
+        host.disconnect("notes")
+    finally:
+        host.close()
+
+    assert len(set(loop_ids)) == 1

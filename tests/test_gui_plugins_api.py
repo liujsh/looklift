@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from looklift.gui import api
+from looklift.capabilities import CapabilityGrantStore
 from looklift.plugin_registry import PluginManifest, PluginRegistry
 from looklift.plugin_tools import PluginTool
 
@@ -17,7 +18,8 @@ def _ctx(body=None, plugin_id="catalog-tools"):
 
 
 def test_plugin_api_lists_declared_capabilities_and_grants_subset():
-    api._PLUGIN_GRANTS.clear()
+    _, grants = api._plugin_stores()
+    grants.clear()
     status, payload = api.ROUTES[("GET", "/api/plugins")]({"query": {"project_id": "project-a"}})
     assert status == 200
     plugin = next(item for item in payload["plugins"] if item["id"] == "catalog-tools")
@@ -39,7 +41,8 @@ def test_plugin_api_lists_declared_capabilities_and_grants_subset():
 
 
 def test_plugin_api_rejects_capability_escalation_and_revokes():
-    api._PLUGIN_GRANTS.clear()
+    _, grants = api._plugin_stores()
+    grants.clear()
     status, body = api.ROUTES[("POST", "/api/plugins/<id>/grant")](
         _ctx({"project_id": "project-a", "capabilities": ["shell.exec"], "scope": "run"})
     )
@@ -54,6 +57,68 @@ def test_plugin_api_rejects_capability_escalation_and_revokes():
     )
     assert status == 200
     assert revoked["granted_capabilities"] == []
+
+
+def test_plugin_api_restores_registry_and_grant_after_process_restart(tmp_path, monkeypatch):
+    monkeypatch.setattr(api.config, "CONFIG_PATH", tmp_path / "profile" / "config.toml")
+    monkeypatch.setattr(api, "_PLUGIN_REGISTRY", None)
+    monkeypatch.setattr(api, "_PLUGIN_GRANTS", None)
+    monkeypatch.setattr(api, "_PLUGIN_STATE_ROOT", None)
+
+    status, _ = api.ROUTES[("POST", "/api/plugins/<id>/grant")](
+        _ctx({
+            "project_id": "project-a",
+            "capabilities": ["connector.read_catalog"],
+            "scope": "run",
+        })
+    )
+    assert status == 200
+
+    monkeypatch.setattr(api, "_PLUGIN_REGISTRY", None)
+    monkeypatch.setattr(api, "_PLUGIN_GRANTS", None)
+    monkeypatch.setattr(api, "_PLUGIN_STATE_ROOT", None)
+    status, payload = api.ROUTES[("GET", "/api/plugins")](
+        {"query": {"project_id": "project-a"}}
+    )
+
+    assert status == 200
+    assert payload["plugins"][0]["granted_capabilities"] == [
+        "connector.read_catalog"
+    ]
+    assert (tmp_path / "profile" / "plugins" / "registry.json").is_file()
+    assert (tmp_path / "profile" / "plugin-grants" / "grants.json").is_file()
+
+
+def test_plugin_api_seeds_builtin_when_persisted_registry_has_other_plugin(
+    tmp_path, monkeypatch
+):
+    profile = tmp_path / "profile"
+    registry = PluginRegistry(profile / "plugins")
+    registry.install(
+        PluginManifest(
+            2,
+            "notes",
+            "1.0.0",
+            "connector",
+            "notes",
+            "sidecar",
+            ("text",),
+            frozenset({"notes.read"}),
+            "b" * 64,
+        )
+    )
+    monkeypatch.setattr(api.config, "CONFIG_PATH", profile / "config.toml")
+    monkeypatch.setattr(api, "_PLUGIN_REGISTRY", None)
+    monkeypatch.setattr(api, "_PLUGIN_GRANTS", None)
+    monkeypatch.setattr(api, "_PLUGIN_STATE_ROOT", None)
+
+    status, payload = api.ROUTES[("GET", "/api/plugins")]({"query": {}})
+
+    assert status == 200
+    assert {item["id"] for item in payload["plugins"]} == {
+        "catalog-tools",
+        "notes",
+    }
 
 
 def test_plugin_api_discovers_summary_then_describes_full_schema(monkeypatch):
@@ -72,9 +137,9 @@ def test_plugin_api_discovers_summary_then_describes_full_schema(monkeypatch):
             ),
         ),
     )
-    monkeypatch.setattr(api, "_PLUGIN_REGISTRY", registry)
-    api._PLUGIN_GRANTS.clear()
-    api._PLUGIN_GRANTS.put(
+    grants = CapabilityGrantStore()
+    monkeypatch.setattr(api, "_plugin_stores", lambda: (registry, grants))
+    grants.put(
         api.CapabilityGrant("redbook", frozenset({"social.publish"}), "project-a", digest)
     )
 

@@ -48,6 +48,7 @@ def main(
 def _stop(srv) -> None:
     """统一收尾：所有退出路径都要 `shutdown()` + `server_close()`，不留残余。"""
     srv.shutdown()
+    gui_server.api.close_plugin_connector_runtime()
     srv.server_close()
 
 

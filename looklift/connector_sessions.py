@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 from collections.abc import Callable
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import Any, Protocol
 
 from .connector_registry import ConnectorConfig, ConnectorRegistry, ConnectorRegistryError
@@ -16,6 +18,7 @@ class ConnectorSessionError(RuntimeError):
 class ConnectorClient(Protocol):
     async def connect(self) -> None: ...
     async def refresh_tools(self) -> tuple[Any, ...]: ...
+    async def call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]: ...
     async def close(self) -> None: ...
 
 
@@ -160,3 +163,115 @@ async def _close_or_raise(client: ConnectorClient) -> None:
         await client.close()
     except Exception as exc:
         raise ConnectorSessionError("Connector 会话回收失败") from exc
+
+
+class ConnectorRuntimeHost:
+    """为同步 GUI/API 提供长期异步循环，避免 MCP 会话跨事件循环使用。"""
+
+    def __init__(
+        self,
+        manager: ConnectorSessionManager,
+        *,
+        operation_timeout_seconds: float = 120,
+    ) -> None:
+        if operation_timeout_seconds <= 0:
+            raise ConnectorSessionError("Connector Host 超时必须为正数")
+        self._manager = manager
+        self._timeout = operation_timeout_seconds
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._thread: threading.Thread | None = None
+        self._guard = threading.RLock()
+
+    def connect(self, connector_id: str, *, workspace_id: str) -> tuple[Any, ...]:
+        return self._run(self._manager.connect(connector_id, workspace_id=workspace_id))
+
+    def call(
+        self,
+        connector_id: str,
+        *,
+        workspace_id: str,
+        name: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        async def invoke() -> dict[str, Any]:
+            client = self._manager.get(connector_id, workspace_id=workspace_id)
+            return await client.call(name, arguments)
+
+        return self._run(invoke())
+
+    def disconnect(self, connector_id: str) -> None:
+        self._run(self._manager.disconnect(connector_id))
+
+    def revoke(self, connector_id: str) -> None:
+        self._run(self._manager.revoke(connector_id))
+
+    def forget_account(
+        self,
+        connector_id: str,
+        *,
+        credential_delete: Callable[[str], None],
+        profile_delete: Callable[[str], None],
+    ) -> None:
+        self._run(
+            self._manager.forget_account(
+                connector_id,
+                credential_delete=credential_delete,
+                profile_delete=profile_delete,
+            )
+        )
+
+    def close(self) -> None:
+        with self._guard:
+            loop = self._loop
+            thread = self._thread
+        if loop is None or thread is None:
+            return
+        try:
+            self._run(self._manager.close_all())
+        finally:
+            loop.call_soon_threadsafe(loop.stop)
+            thread.join(timeout=5)
+            if thread.is_alive():
+                raise ConnectorSessionError("Connector Host 事件循环未停止")
+            with self._guard:
+                self._loop = None
+                self._thread = None
+
+    def _run(self, coroutine):
+        loop = self._ensure_loop()
+        future = asyncio.run_coroutine_threadsafe(coroutine, loop)
+        try:
+            return future.result(timeout=self._timeout)
+        except FutureTimeoutError as exc:
+            future.cancel()
+            raise ConnectorSessionError("Connector Host 操作超时") from exc
+
+    def _ensure_loop(self) -> asyncio.AbstractEventLoop:
+        with self._guard:
+            if self._loop is not None and self._loop.is_running():
+                return self._loop
+            ready = threading.Event()
+
+            def run() -> None:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                self._loop = loop
+                ready.set()
+                loop.run_forever()
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                loop.close()
+
+            thread = threading.Thread(
+                target=run,
+                daemon=True,
+                name="looklift-plugin-connectors",
+            )
+            self._thread = thread
+            thread.start()
+            if not ready.wait(timeout=5) or self._loop is None:
+                raise ConnectorSessionError("Connector Host 事件循环启动失败")
+            return self._loop

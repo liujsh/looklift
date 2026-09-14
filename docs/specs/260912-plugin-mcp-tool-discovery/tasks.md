@@ -23,8 +23,11 @@
 - [x] 实现目录专用真实 HTTPS Fetcher：显式主机白名单、公网 DNS 校验、无环境代理/重定向和流式响应上限。
 - [x] 实现 Connector 会话生命周期协调：Transport 启动后握手/刷新才上线，失败关闭半成品连接，断开/撤销先收敛权威状态；连接增加 Workspace 内独立账号身份。
 - [x] 实现生产 stdio Plugin Client 工厂：Connector 固定绑定插件版本/Service，入口限于已安装包且启动前复核摘要，DPAPI 凭据与账号 Profile 通过最小环境注入；普通断开保留登录态，显式忘记账号才清除凭据/Profile。
+- [x] 实现长期 `ConnectorRuntimeHost`，让同步 GUI/API 后续接线时的连接、工具调用和关闭始终运行在同一后台事件循环，避免请求级 `asyncio.run` 关闭会话所属循环。
+- [x] 接入生产 Connector 业务与 HTTP API：创建操作要求显式确认且只接受 Plugin/Service/项目/账号/凭据字段，连接、断开、忘记账号复用长期 Host；应用退出统一回收会话，凭据和 Profile 只在忘记账号时删除。
+- [x] 将 GUI/API 的 Plugin Registry 与项目 Grant 惰性绑定到应用配置目录并原子持久化；进程重启后恢复安装目录和授权，已有第三方 Plugin 时仍独立补齐内置目录插件。
 
-仍未完成：应用内正式目录公钥及轮换发布、真实目录服务、生产 GUI/API 的 Connector/凭据/Profile 接线、HTTP SSE 断线续传及服务端反向消息、其他 CLI 契约验证、统一 tokenizer/Skill/Result 预算、通用插件 UI、独立小红书包及真实平台人工验收。因此下方阶段任务保持未勾选，不能把本轮 Fake/契约通过等同最小演示完成。
+仍未完成：应用内正式目录公钥及轮换发布、真实目录服务、HTTP SSE 断线续传及服务端反向消息、其他 CLI 契约验证、统一 tokenizer/Skill/Result 预算、通用插件 UI、独立小红书包及真实平台人工验收。因此下方阶段任务保持未勾选，不能把本轮 Fake/契约通过等同最小演示完成。
 
 ## 阶段 A — 通用插件基础与任务边界
 

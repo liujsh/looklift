@@ -41,9 +41,13 @@ from ..builtin_runtimes import builtin_runtime_registry
 from ..cli_runtime_detection import detect_cli_runtime
 from ..context_memory import ContextEntry, ContextMemoryStore
 from ..capabilities import CapabilityGrant, CapabilityGrantStore
+from ..connector_registry import ConnectorRegistry
+from ..connector_sessions import ConnectorRuntimeHost, ConnectorSessionManager
 from ..credential_store import CredentialStoreError, DpapiCredentialStore
 from ..execution_selection import ExecutionSelectionError, resolve_runtime_id
 from ..plugin_registry import PluginManifest, PluginManifestError, PluginRegistry
+from ..plugin_connector_service import PluginConnectorError, PluginConnectorService
+from ..plugin_runtime import PluginProfileStore, StdioPluginClientFactory
 from ..plugin_tools import ExposureBudget, PluginToolCatalog, PluginToolError
 from ..provider_config_store import ProviderConfigStore
 from ..provider_detection import detect_provider
@@ -66,14 +70,144 @@ Handler = Callable[[dict], "tuple[int, dict] | tuple[int, bytes, str]"]
 _VALID_PROVIDERS = {"auto", "cli", "api", "openai_compat", "ollama"}
 _CONTEXT_STORES: dict[Path, ContextMemoryStore] = {}
 _CONTEXT_STORES_LOCK = threading.Lock()
-_PLUGIN_REGISTRY = PluginRegistry()
-_PLUGIN_GRANTS = CapabilityGrantStore()
+_PLUGIN_REGISTRY: PluginRegistry | None = None
+_PLUGIN_GRANTS: CapabilityGrantStore | None = None
+_PLUGIN_STATE_ROOT: Path | None = None
+_PLUGIN_STATE_LOCK = threading.RLock()
+_PLUGIN_CONNECTOR_SERVICE: PluginConnectorService | None = None
+_PLUGIN_CONNECTOR_HOST: ConnectorRuntimeHost | None = None
+_PLUGIN_CONNECTOR_LOCK = threading.Lock()
+
+
+def _plugin_stores() -> tuple[PluginRegistry, CapabilityGrantStore]:
+    """按当前应用配置目录惰性组装可重启恢复的 Plugin 权威状态。"""
+    global _PLUGIN_REGISTRY, _PLUGIN_GRANTS, _PLUGIN_STATE_ROOT
+    root = config.CONFIG_PATH.parent.resolve()
+    with _PLUGIN_STATE_LOCK:
+        if (
+            _PLUGIN_REGISTRY is None
+            or _PLUGIN_GRANTS is None
+            or _PLUGIN_STATE_ROOT != root
+        ):
+            _PLUGIN_REGISTRY = PluginRegistry(root / "plugins")
+            _PLUGIN_GRANTS = CapabilityGrantStore(root / "plugin-grants")
+            _PLUGIN_STATE_ROOT = root
+        return _PLUGIN_REGISTRY, _PLUGIN_GRANTS
+
+
+def _plugin_connector_service() -> PluginConnectorService:
+    global _PLUGIN_CONNECTOR_SERVICE, _PLUGIN_CONNECTOR_HOST
+    if _PLUGIN_CONNECTOR_SERVICE is not None:
+        return _PLUGIN_CONNECTOR_SERVICE
+    with _PLUGIN_CONNECTOR_LOCK:
+        if _PLUGIN_CONNECTOR_SERVICE is not None:
+            return _PLUGIN_CONNECTOR_SERVICE
+        root = config.CONFIG_PATH.parent.resolve()
+        registry, _ = _plugin_stores()
+        connectors = ConnectorRegistry(root=root / "plugin-connections")
+        credentials = DpapiCredentialStore(root / "plugin-credentials")
+        profiles = PluginProfileStore(root)
+        client_factory = StdioPluginClientFactory(
+            install_root=root,
+            registry=registry,
+            credential_resolver=credentials.get,
+        )
+        host = ConnectorRuntimeHost(
+            ConnectorSessionManager(connectors, client_factory=client_factory)
+        )
+        _PLUGIN_CONNECTOR_HOST = host
+        _PLUGIN_CONNECTOR_SERVICE = PluginConnectorService(
+            plugin_registry=registry,
+            connector_registry=connectors,
+            runtime_host=host,
+            credential_store=credentials,
+            profile_delete=profiles.delete,
+        )
+        return _PLUGIN_CONNECTOR_SERVICE
+
+
+def close_plugin_connector_runtime() -> None:
+    """应用退出时回收长期 Connector 事件循环与全部 MCP 会话。"""
+    global _PLUGIN_CONNECTOR_SERVICE, _PLUGIN_CONNECTOR_HOST
+    with _PLUGIN_CONNECTOR_LOCK:
+        host = _PLUGIN_CONNECTOR_HOST
+        _PLUGIN_CONNECTOR_HOST = None
+        _PLUGIN_CONNECTOR_SERVICE = None
+    if host is not None:
+        host.close()
+
+
+def _get_plugin_connectors(ctx: dict) -> tuple[int, dict]:
+    project_id = (ctx.get("query") or {}).get("project_id")
+    if not isinstance(project_id, str) or not project_id:
+        return 400, {"error": "缺少 project_id"}
+    return 200, {"connectors": list(_plugin_connector_service().list(project_id=project_id))}
+
+
+def _create_plugin_connector(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    allowed = {
+        "plugin_name", "version", "service_name", "project_id",
+        "account_id", "credential", "confirmed",
+    }
+    if set(payload) - allowed:
+        return 400, {"error": "插件连接请求包含不允许字段"}
+    try:
+        result = _plugin_connector_service().create(
+            plugin_name=payload["plugin_name"],
+            version=payload["version"],
+            service_name=payload["service_name"],
+            project_id=payload["project_id"],
+            account_id=payload["account_id"],
+            credential=payload.get("credential"),
+            confirmed=payload.get("confirmed") is True,
+        )
+    except (KeyError, TypeError, PluginConnectorError) as exc:
+        return 400, {"error": str(exc)}
+    return 201, result
+
+
+def _connect_plugin_connector(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    try:
+        return 200, _plugin_connector_service().connect(
+            ctx["params"]["id"], project_id=payload["project_id"]
+        )
+    except (KeyError, TypeError, PluginConnectorError) as exc:
+        return 400, {"error": str(exc)}
+
+
+def _plugin_connector_query_action(ctx: dict, action: str) -> tuple[int, dict]:
+    project_id = (ctx.get("query") or {}).get("project_id")
+    if not isinstance(project_id, str) or not project_id:
+        return 400, {"error": "缺少 project_id"}
+    try:
+        method = getattr(_plugin_connector_service(), action)
+        return 200, method(ctx["params"]["id"], project_id=project_id)
+    except PluginConnectorError as exc:
+        return 400, {"error": str(exc)}
+
+
+def _disconnect_plugin_connector(ctx: dict) -> tuple[int, dict]:
+    return _plugin_connector_query_action(ctx, "disconnect")
+
+
+def _forget_plugin_connector(ctx: dict) -> tuple[int, dict]:
+    return _plugin_connector_query_action(ctx, "forget")
 
 
 def _seed_plugin_registry() -> None:
-    if _PLUGIN_REGISTRY.list(include_disabled=True):
+    registry, _ = _plugin_stores()
+    try:
+        registry.resolve("catalog-tools", "1.0.0", include_disabled=True)
         return
-    _PLUGIN_REGISTRY.install(
+    except PluginManifestError:
+        pass
+    registry.install(
         PluginManifest(
             1, "catalog-tools", "1.0.0", "connector", "catalog", "declarative",
             ("catalog",), frozenset({"connector.read_catalog"}), "a" * 64, source="builtin",
@@ -82,9 +216,10 @@ def _seed_plugin_registry() -> None:
 
 
 def _plugin_payload(item: dict, *, project_id: str | None = None) -> dict:
+    _, grants_store = _plugin_stores()
     grants = [
         grant
-        for (name, grant_project_id), grant in _PLUGIN_GRANTS.items()
+        for (name, grant_project_id), grant in grants_store.items()
         if name == item["name"]
         and project_id is not None
         and grant_project_id == project_id
@@ -96,24 +231,26 @@ def _plugin_payload(item: dict, *, project_id: str | None = None) -> dict:
 
 def _get_plugins(ctx: dict) -> tuple[int, dict]:
     _seed_plugin_registry()
+    registry, _ = _plugin_stores()
     project_id = (ctx.get("query") or {}).get("project_id")
     if project_id is not None and (not isinstance(project_id, str) or not project_id):
         return 400, {"error": "project_id 无效"}
     return 200, {
         "plugins": [
             _plugin_payload(item, project_id=project_id)
-            for item in _PLUGIN_REGISTRY.list()
+            for item in registry.list()
         ]
     }
 
 
 def _grant_plugin(ctx: dict) -> tuple[int, dict]:
     _seed_plugin_registry()
+    registry, grants = _plugin_stores()
     payload, err = _json_body(ctx)
     if err is not None:
         return err
     try:
-        manifest = _PLUGIN_REGISTRY.resolve(ctx["params"]["id"])
+        manifest = registry.resolve(ctx["params"]["id"])
         project_id = payload["project_id"]
         capabilities = payload["capabilities"]
         scope = payload.get("scope", "run")
@@ -125,9 +262,9 @@ def _grant_plugin(ctx: dict) -> tuple[int, dict]:
         if not requested <= manifest.capabilities:
             raise ValueError("Grant 不能超过 Plugin 已声明能力")
         grant = CapabilityGrant(manifest.name, requested, project_id, manifest.content_hash, scope=scope)
-        _PLUGIN_GRANTS[(manifest.name, project_id)] = grant
+        grants[(manifest.name, project_id)] = grant
         return 200, _plugin_payload(
-            {"name": manifest.name, **next(item for item in _PLUGIN_REGISTRY.list() if item["name"] == manifest.name)},
+            {"name": manifest.name, **next(item for item in registry.list() if item["name"] == manifest.name)},
             project_id=project_id,
         )
     except (KeyError, TypeError, ValueError, PluginManifestError) as exc:
@@ -136,18 +273,19 @@ def _grant_plugin(ctx: dict) -> tuple[int, dict]:
 
 def _revoke_plugin(ctx: dict) -> tuple[int, dict]:
     _seed_plugin_registry()
+    registry, grants = _plugin_stores()
     project_id = (ctx.get("query") or {}).get("project_id")
     if not isinstance(project_id, str) or not project_id:
         return 400, {"error": "缺少 project_id"}
     try:
-        manifest = _PLUGIN_REGISTRY.resolve(ctx["params"]["id"])
+        manifest = registry.resolve(ctx["params"]["id"])
     except PluginManifestError as exc:
         return 404, {"error": str(exc)}
-    grant = _PLUGIN_GRANTS.get((manifest.name, project_id))
+    grant = grants.get((manifest.name, project_id))
     if grant is not None:
-        _PLUGIN_GRANTS[(manifest.name, project_id)] = replace(grant, revoked=True)
+        grants[(manifest.name, project_id)] = replace(grant, revoked=True)
     return 200, _plugin_payload(
-        next(item for item in _PLUGIN_REGISTRY.list() if item["name"] == manifest.name),
+        next(item for item in registry.list() if item["name"] == manifest.name),
         project_id=project_id,
     )
 
@@ -156,11 +294,12 @@ def _discover_plugin_tools(ctx: dict) -> tuple[int, dict]:
     payload, err = _json_body(ctx)
     if err is not None:
         return err
+    registry, grants = _plugin_stores()
     try:
-        page = PluginToolCatalog(_PLUGIN_REGISTRY).discover(
+        page = PluginToolCatalog(registry).discover(
             payload.get("query"),
             project_id=payload.get("project_id"),
-            grants=tuple(grant for _, grant in _PLUGIN_GRANTS.items()),
+            grants=tuple(grant for _, grant in grants.items()),
             limit=payload.get("limit", 10),
             cursor=payload.get("cursor"),
             plugin_name=payload.get("plugin_id"),
@@ -181,11 +320,12 @@ def _describe_plugin_tools(ctx: dict) -> tuple[int, dict]:
     identities = payload.get("identities")
     if not isinstance(project_id, str) or not project_id or not isinstance(identities, list) or not all(isinstance(item, str) for item in identities):
         return 400, {"error": "project_id 与 identities 无效"}
-    catalog = PluginToolCatalog(_PLUGIN_REGISTRY)
+    registry, grants = _plugin_stores()
+    catalog = PluginToolCatalog(registry)
     try:
         for identity in identities:
             tool = catalog.resolve(identity)
-            grant = _PLUGIN_GRANTS.active_for(tool.plugin_name, project_id=project_id)
+            grant = grants.active_for(tool.plugin_name, project_id=project_id)
             if grant is None or grant.version_hash != tool.plugin_hash or not tool.capabilities <= grant.capabilities:
                 return 403, {"error": "工具未获得当前项目授权"}
         active = catalog.activate(
@@ -1780,6 +1920,11 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("DELETE", "/api/plugins/<id>/grant"): _revoke_plugin,
     ("POST", "/api/plugins/tools/discover"): _discover_plugin_tools,
     ("POST", "/api/plugins/tools/describe"): _describe_plugin_tools,
+    ("GET", "/api/plugin-connectors"): _get_plugin_connectors,
+    ("POST", "/api/plugin-connectors"): _create_plugin_connector,
+    ("POST", "/api/plugin-connectors/<id>/connect"): _connect_plugin_connector,
+    ("DELETE", "/api/plugin-connectors/<id>/connection"): _disconnect_plugin_connector,
+    ("DELETE", "/api/plugin-connectors/<id>/account"): _forget_plugin_connector,
     ("GET", "/api/memory/config"): _get_memory_config,
     ("PATCH", "/api/memory/config"): _patch_memory_config,
     ("GET", "/api/memory/tree"): _get_memory_tree,
