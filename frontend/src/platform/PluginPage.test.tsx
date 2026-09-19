@@ -39,6 +39,27 @@ const connection = {
   service: "main",
 };
 
+const catalog = {
+  revision: 7,
+  issued_at: 1_000,
+  expires_at: 2_000,
+  stale: false,
+  plugins: [{
+    name: "notes",
+    version: "2.0.0",
+    license: "MIT",
+    capabilities: ["notes.read", "notes.write"],
+    platforms: ["win32"],
+    compatible: true,
+    installed: false,
+    enabled: false,
+    package_present: false,
+    revoked: false,
+    installable: true,
+    upgrade_from: "1.0.0",
+  }],
+};
+
 describe("PluginPage", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
@@ -58,6 +79,9 @@ describe("PluginPage", () => {
   function client(overrides = {}) {
     return {
       plugins: vi.fn().mockResolvedValue([plugin]),
+      pluginCatalog: vi.fn().mockResolvedValue(catalog),
+      refreshPluginCatalog: vi.fn().mockResolvedValue(catalog),
+      installCatalogPlugin: vi.fn().mockResolvedValue({ name: "notes", version: "2.0.0", installed: true }),
       pluginConnectors: vi.fn().mockResolvedValue([connection]),
       pluginActions: vi.fn().mockResolvedValue([]),
       grantPlugin: vi.fn().mockResolvedValue(plugin),
@@ -89,6 +113,23 @@ describe("PluginPage", () => {
     expect(current.pluginActions).toHaveBeenCalledWith("default-project");
     expect(container.textContent).toContain("work");
     expect(container.textContent).toContain("未连接");
+    expect(container.textContent).toContain("官方精选目录");
+  });
+
+  it("目录升级安装前展示能力并要求二次确认", async () => {
+    const installCatalogPlugin = vi.fn().mockResolvedValue({ name: "notes", version: "2.0.0", installed: true });
+    const current = client({ installCatalogPlugin });
+    await act(async () => root.render(<PluginPage client={current} />));
+    await vi.waitFor(() => expect(container.textContent).toContain("升级到 v2.0.0"));
+
+    const upgrade = [...container.querySelectorAll("button")].find((item) => item.textContent === "升级到 v2.0.0")!;
+    await act(async () => upgrade.click());
+    expect(installCatalogPlugin).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("notes.write");
+    const confirm = [...container.querySelectorAll("button")].find((item) => item.textContent === "确认安装")!;
+    await act(async () => confirm.click());
+
+    await vi.waitFor(() => expect(installCatalogPlugin).toHaveBeenCalledWith("notes", "2.0.0"));
   });
 
   it("只有显式确认后才创建连接，且不回显凭据", async () => {

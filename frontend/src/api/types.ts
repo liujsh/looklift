@@ -385,6 +385,29 @@ export type PluginSummary = {
   services: PluginServiceSummary[];
 };
 
+export type PluginCatalogItem = {
+  name: string;
+  version: string;
+  license: string;
+  capabilities: string[];
+  platforms: string[];
+  compatible: boolean;
+  installed: boolean;
+  enabled: boolean;
+  package_present: boolean;
+  revoked: boolean;
+  installable: boolean;
+  upgrade_from: string | null;
+};
+
+export type PluginCatalogSnapshot = {
+  revision: number;
+  issued_at: number;
+  expires_at: number;
+  stale: boolean;
+  plugins: PluginCatalogItem[];
+};
+
 export type PluginServiceSummary = {
   name: string;
   transport: "stdio";

@@ -186,6 +186,26 @@ describe("LookliftClient", () => {
     expect(JSON.parse(String(queue.requests[4].init.body))).toEqual({ version: "1.2.3", confirmed: true });
   });
 
+  it("目录浏览、刷新与安装使用固定宿主端点", async () => {
+    const queue = responseQueue(Array.from({ length: 3 }, () => Response.json({ revision: 1, plugins: [] })));
+    const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
+
+    await client.pluginCatalog();
+    await client.refreshPluginCatalog();
+    await client.installCatalogPlugin("notes", "2.0.0");
+
+    expect(queue.requests.map((request) => `${request.init.method ?? "GET"} ${request.url}`)).toEqual([
+      "GET http://127.0.0.1:9/api/plugin-catalog",
+      "POST http://127.0.0.1:9/api/plugin-catalog/refresh",
+      "POST http://127.0.0.1:9/api/plugin-catalog/install",
+    ]);
+    expect(JSON.parse(String(queue.requests[2].init.body))).toEqual({
+      name: "notes",
+      version: "2.0.0",
+      confirmed: true,
+    });
+  });
+
   it("覆盖项目 Action 的修改、确认、拒绝与取消端点", async () => {
     const queue = responseQueue(Array.from({ length: 5 }, () => Response.json({ actions: [] })));
     const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);

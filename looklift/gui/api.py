@@ -19,6 +19,7 @@ import re
 import threading
 import shutil
 import sqlite3
+import sys
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, Callable
@@ -49,6 +50,19 @@ from ..plugin_registry import PluginManifest, PluginManifestError, PluginRegistr
 from ..plugin_actions import PluginActionStore
 from ..plugin_action_service import PluginActionService, PluginActionServiceError
 from ..plugin_connector_service import PluginConnectorError, PluginConnectorService
+from ..plugin_catalog import (
+    HttpxCatalogFetcher,
+    PluginCatalogCache,
+    PluginCatalogError,
+    PluginCatalogVerifier,
+)
+from ..plugin_catalog_config import (
+    PluginCatalogConfigError,
+    bundled_catalog_trust_path,
+    load_catalog_trust,
+)
+from ..plugin_distribution import PluginDistributionService
+from ..plugin_installer import PluginPackageInstaller
 from ..plugin_lifecycle_service import PluginLifecycleError, PluginLifecycleService
 from ..plugin_runtime import PluginProfileStore, StdioPluginClientFactory
 from ..plugin_tools import ExposureBudget, PluginToolCatalog, PluginToolError
@@ -85,6 +99,8 @@ _PLUGIN_ACTION_ROOT: Path | None = None
 _PLUGIN_ACTION_LOCK = threading.Lock()
 _PLUGIN_LIFECYCLE_SERVICE: PluginLifecycleService | None = None
 _PLUGIN_LIFECYCLE_ROOT: Path | None = None
+_PLUGIN_DISTRIBUTION_SERVICE: PluginDistributionService | None = None
+_PLUGIN_DISTRIBUTION_ROOT: Path | None = None
 
 
 def _plugin_stores() -> tuple[PluginRegistry, CapabilityGrantStore]:
@@ -169,11 +185,37 @@ def _plugin_lifecycle_service() -> PluginLifecycleService:
     return _PLUGIN_LIFECYCLE_SERVICE
 
 
+def _plugin_distribution_service() -> PluginDistributionService:
+    """仅从应用打包信任锚组装正式目录，不接受用户覆盖公钥。"""
+    global _PLUGIN_DISTRIBUTION_SERVICE, _PLUGIN_DISTRIBUTION_ROOT
+    root = config.CONFIG_PATH.parent.resolve()
+    if _PLUGIN_DISTRIBUTION_SERVICE is None or _PLUGIN_DISTRIBUTION_ROOT != root:
+        trust = load_catalog_trust(bundled_catalog_trust_path())
+        registry, _ = _plugin_stores()
+        verifier = PluginCatalogVerifier(
+            trust.trusted_keys,
+            revoked_key_ids=trust.revoked_key_ids,
+        )
+        fetcher = HttpxCatalogFetcher(allowed_hosts=trust.allowed_hosts)
+        _PLUGIN_DISTRIBUTION_SERVICE = PluginDistributionService(
+            cache=PluginCatalogCache(root / "plugin-cache", verifier=verifier),
+            registry=registry,
+            installer=PluginPackageInstaller(root, registry=registry),
+            download_root=root / "plugin-downloads",
+            fetch=fetcher,
+            current_platform=sys.platform,
+            catalog_url=trust.catalog_url,
+        )
+        _PLUGIN_DISTRIBUTION_ROOT = root
+    return _PLUGIN_DISTRIBUTION_SERVICE
+
+
 def close_plugin_connector_runtime() -> None:
     """应用退出时回收长期 Connector 事件循环与全部 MCP 会话。"""
     global _PLUGIN_CONNECTOR_SERVICE, _PLUGIN_CONNECTOR_HOST
     global _PLUGIN_ACTION_SERVICE, _PLUGIN_ACTION_ROOT
     global _PLUGIN_LIFECYCLE_SERVICE, _PLUGIN_LIFECYCLE_ROOT
+    global _PLUGIN_DISTRIBUTION_SERVICE, _PLUGIN_DISTRIBUTION_ROOT
     with _PLUGIN_CONNECTOR_LOCK:
         host = _PLUGIN_CONNECTOR_HOST
         _PLUGIN_CONNECTOR_HOST = None
@@ -182,6 +224,8 @@ def close_plugin_connector_runtime() -> None:
         _PLUGIN_ACTION_ROOT = None
         _PLUGIN_LIFECYCLE_SERVICE = None
         _PLUGIN_LIFECYCLE_ROOT = None
+        _PLUGIN_DISTRIBUTION_SERVICE = None
+        _PLUGIN_DISTRIBUTION_ROOT = None
     if host is not None:
         host.close()
 
@@ -389,6 +433,39 @@ def _cleanup_plugin(ctx: dict) -> tuple[int, dict]:
     except (KeyError, TypeError, PluginLifecycleError) as exc:
         return 400, {"error": str(exc)}
     return 200, {"ok": True}
+
+
+def _get_plugin_catalog(ctx: dict) -> tuple[int, dict]:
+    try:
+        return 200, _plugin_distribution_service().list_catalog()
+    except (PluginCatalogConfigError, PluginCatalogError) as exc:
+        return 503, {"error": str(exc)}
+
+
+def _refresh_plugin_catalog(ctx: dict) -> tuple[int, dict]:
+    try:
+        return 200, _plugin_distribution_service().refresh()
+    except (PluginCatalogConfigError, PluginCatalogError) as exc:
+        return 503, {"error": str(exc)}
+
+
+def _install_plugin_catalog_item(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    if set(payload) != {"name", "version", "confirmed"}:
+        return 400, {"error": "目录安装请求字段无效"}
+    try:
+        result = _plugin_distribution_service().install(
+            payload["name"],
+            payload["version"],
+            confirmed=payload["confirmed"],
+        )
+    except PluginCatalogConfigError as exc:
+        return 503, {"error": str(exc)}
+    except (KeyError, TypeError, PluginCatalogError) as exc:
+        return 400, {"error": str(exc)}
+    return 200, result
 
 
 def _grant_plugin(ctx: dict) -> tuple[int, dict]:
@@ -2079,6 +2156,9 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("DELETE", "/api/plugins/<id>/grant"): _revoke_plugin,
     ("POST", "/api/plugins/<id>/state"): _set_plugin_state,
     ("POST", "/api/plugins/<id>/cleanup"): _cleanup_plugin,
+    ("GET", "/api/plugin-catalog"): _get_plugin_catalog,
+    ("POST", "/api/plugin-catalog/refresh"): _refresh_plugin_catalog,
+    ("POST", "/api/plugin-catalog/install"): _install_plugin_catalog_item,
     ("POST", "/api/plugins/tools/discover"): _discover_plugin_tools,
     ("POST", "/api/plugins/tools/describe"): _describe_plugin_tools,
     ("GET", "/api/plugin-connectors"): _get_plugin_connectors,

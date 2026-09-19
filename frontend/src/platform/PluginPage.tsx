@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { LookliftClient } from "../api/client";
-import type { PluginSummary } from "../api/types";
+import type { PluginCatalogItem, PluginCatalogSnapshot, PluginSummary } from "../api/types";
 import { Icon } from "./icons";
 import { PluginConnections } from "./PluginConnections";
 import { PluginActions } from "./PluginActions";
@@ -9,6 +9,9 @@ const pluginKey = (plugin: Pick<PluginSummary, "id" | "version">) => `${plugin.i
 
 export function PluginPage({ client }: { client: LookliftClient }) {
   const [plugins, setPlugins] = useState<PluginSummary[]>([]);
+  const [catalog, setCatalog] = useState<PluginCatalogSnapshot | null>(null);
+  const [catalogStatus, setCatalogStatus] = useState("正在读取官方目录…");
+  const [installTarget, setInstallTarget] = useState<PluginCatalogItem | null>(null);
   const [projectId, setProjectId] = useState("default-project");
   const [projectDraft, setProjectDraft] = useState("default-project");
   const [selected, setSelected] = useState<Record<string, string[]>>({});
@@ -22,6 +25,17 @@ export function PluginPage({ client }: { client: LookliftClient }) {
     setStatus("");
   };
   useEffect(() => { void load().catch(() => setStatus("插件读取失败")); }, [client, projectId]);
+  const loadCatalog = async () => {
+    const snapshot = await client.pluginCatalog();
+    setCatalog(snapshot);
+    setCatalogStatus(snapshot.stale ? "当前为过期缓存，仅供查看，请刷新后再安装" : "");
+  };
+  useEffect(() => {
+    void loadCatalog().catch((reason) => {
+      setCatalog(null);
+      setCatalogStatus(reason instanceof Error ? reason.message : "官方目录不可用");
+    });
+  }, [client]);
   useEffect(() => { setConnectionTarget(null); }, [projectId]);
   const toggle = (id: string, capability: string) => setSelected((current) => {
     const values = new Set(current[id] ?? []);
@@ -64,6 +78,23 @@ export function PluginPage({ client }: { client: LookliftClient }) {
       setStatus("插件包已清理，Manifest 与审计历史仍保留");
     } catch (reason) { setStatus(reason instanceof Error ? reason.message : "插件包清理失败"); }
   };
+  const refreshCatalog = async () => {
+    setCatalogStatus("正在刷新验签目录…");
+    try {
+      const snapshot = await client.refreshPluginCatalog();
+      setCatalog(snapshot);
+      setCatalogStatus("目录已刷新并通过签名校验");
+    } catch (reason) { setCatalogStatus(reason instanceof Error ? reason.message : "目录刷新失败"); }
+  };
+  const installCatalogItem = async (item: PluginCatalogItem) => {
+    setCatalogStatus(`正在安装 ${item.name} v${item.version}…`);
+    try {
+      await client.installCatalogPlugin(item.name, item.version);
+      await Promise.all([load(), loadCatalog()]);
+      setInstallTarget(null);
+      setCatalogStatus(`${item.name} v${item.version} 已安装，启用前请核对并授予最小能力`);
+    } catch (reason) { setCatalogStatus(reason instanceof Error ? reason.message : "目录插件安装失败"); }
+  };
 
   return (
     <main className="plugin-page" aria-label="插件管理">
@@ -84,6 +115,43 @@ export function PluginPage({ client }: { client: LookliftClient }) {
       </header>
 
       {status && <p role="status" className="settings-status">{status}</p>}
+
+      <section className="plugin-catalog" aria-label="官方精选目录">
+        <header>
+          <div>
+            <p className="pane-kicker">Verified catalog</p>
+            <h2>官方精选目录</h2>
+            <p>这里只展示通过应用内公钥校验的固定版本；目录发现不会自动获得执行权限。</p>
+          </div>
+          <button type="button" onClick={() => void refreshCatalog()}>刷新目录</button>
+        </header>
+        {catalogStatus && <p role="status" className="settings-status">{catalogStatus}</p>}
+        {catalog && <small>目录 revision {catalog.revision}{catalog.stale ? " · 缓存已过期" : " · 签名有效"}</small>}
+        <div className="plugin-catalog-list">
+          {catalog?.plugins.map((item) => (
+            <article key={`${item.name}@${item.version}`} className="plugin-catalog-item">
+              <div>
+                <strong>{item.name} <span>v{item.version}</span></strong>
+                <small>{item.license} · {item.platforms.join("、")}</small>
+                <p>{item.capabilities.join("、") || "不请求额外能力"}</p>
+              </div>
+              {item.revoked ? <span className="pill missing">已撤销</span>
+                : item.installed ? <span className="pill official">{item.package_present ? "已安装" : "历史已清理"}</span>
+                : !item.compatible ? <span className="pill missing">平台不兼容</span>
+                : installTarget?.name === item.name && installTarget.version === item.version ? (
+                  <div className="plugin-catalog-confirm">
+                    <span>将下载并校验固定包，安装后仍需单独授权。</span>
+                    <button type="button" onClick={() => void installCatalogItem(item)}>确认安装</button>
+                    <button type="button" onClick={() => setInstallTarget(null)}>取消</button>
+                  </div>
+                ) : <button type="button" disabled={!item.installable || catalog.stale} onClick={() => setInstallTarget(item)}>
+                  {item.upgrade_from ? `升级到 v${item.version}` : "安装"}
+                </button>}
+            </article>
+          ))}
+          {catalog && catalog.plugins.length === 0 && <p>当前目录没有适用于此版本的插件。</p>}
+        </div>
+      </section>
 
       <div className="plugin-list">
         {plugins.map((plugin) => (

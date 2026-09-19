@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import replace
 
 import pytest
@@ -44,9 +45,14 @@ class FakeCache:
     def __init__(self, snapshot: CatalogSnapshot) -> None:
         self.snapshot = snapshot
         self.loads: list[bool] = []
+        self.refreshes: list[tuple[str, object]] = []
 
     def load(self, *, allow_expired: bool = False) -> CatalogSnapshot:
         self.loads.append(allow_expired)
+        return self.snapshot
+
+    def refresh(self, url: str, *, fetch):
+        self.refreshes.append((url, fetch))
         return self.snapshot
 
 
@@ -114,7 +120,7 @@ def test_distribution_install_requires_fresh_catalog_and_exact_confirmation(tmp_
 
     payload = b"package"
     snapshot = _snapshot()
-    digest = __import__("hashlib").sha256(payload).hexdigest()
+    digest = hashlib.sha256(payload).hexdigest()
     cache.snapshot = replace(
         snapshot,
         plugins=(replace(snapshot.plugins[1], sha256=digest),),
@@ -158,3 +164,26 @@ def test_catalog_install_rejects_incompatible_signed_platform_before_download(tm
     with pytest.raises(PluginCatalogError, match="平台"):
         service.install("notes", "2.0.0", confirmed=True)
     assert fetched == []
+
+
+def test_distribution_refreshes_only_fixed_configured_catalog_url(tmp_path):
+    cache = FakeCache(_snapshot())
+
+    def fetch(_url, _limit):
+        return b"catalog"
+
+    service = PluginDistributionService(
+        cache=cache,
+        registry=PluginRegistry(),
+        installer=object(),
+        download_root=tmp_path,
+        fetch=fetch,
+        current_platform="win32",
+        catalog_url="https://catalog.example/v1/catalog.json",
+    )
+
+    result = service.refresh()
+
+    assert result["revision"] == 7
+    assert cache.refreshes == [("https://catalog.example/v1/catalog.json", fetch)]
+    assert cache.loads == [True]

@@ -42,6 +42,7 @@ import type {
   PluginConnectorSummary,
   CreatePluginConnectorRequest,
   PluginActionSummary,
+  PluginCatalogSnapshot,
   ContextConfig,
   ContextEntryType,
   ContextEntryView,
@@ -179,6 +180,21 @@ export class LookliftClient {
     return this.json(`/api/plugins/${encodeURIComponent(id)}/cleanup`, {
       method: "POST",
       body: JSON.stringify({ version, confirmed: true }),
+    });
+  }
+
+  pluginCatalog(): Promise<PluginCatalogSnapshot> {
+    return this.json("/api/plugin-catalog");
+  }
+
+  refreshPluginCatalog(): Promise<PluginCatalogSnapshot> {
+    return this.json("/api/plugin-catalog/refresh", { method: "POST" });
+  }
+
+  installCatalogPlugin(name: string, version: string): Promise<{ name: string; version: string; installed: true }> {
+    return this.json("/api/plugin-catalog/install", {
+      method: "POST",
+      body: JSON.stringify({ name, version, confirmed: true }),
     });
   }
 

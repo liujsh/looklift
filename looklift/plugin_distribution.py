@@ -18,6 +18,10 @@ from .plugin_registry import PluginManifestError, PluginRegistry
 class CatalogCache(Protocol):
     def load(self, *, allow_expired: bool = False) -> CatalogSnapshot: ...
 
+    def refresh(
+        self, url: str, *, fetch: CatalogFetcher
+    ) -> CatalogSnapshot: ...
+
 
 _STABLE_SEMVER = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)")
 
@@ -34,6 +38,7 @@ class PluginDistributionService:
         download_root: Path,
         fetch: CatalogFetcher,
         current_platform: str,
+        catalog_url: str | None = None,
     ) -> None:
         self._cache = cache
         self._registry = registry
@@ -41,6 +46,13 @@ class PluginDistributionService:
         self._download_root = Path(download_root)
         self._fetch = fetch
         self._platform = current_platform
+        self._catalog_url = catalog_url
+
+    def refresh(self) -> dict[str, object]:
+        if self._catalog_url is None:
+            raise PluginCatalogError("正式插件目录刷新地址未配置")
+        self._cache.refresh(self._catalog_url, fetch=self._fetch)
+        return self.list_catalog()
 
     def list_catalog(self) -> dict[str, object]:
         snapshot = self._cache.load(allow_expired=True)

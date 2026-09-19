@@ -88,6 +88,56 @@ def test_plugin_api_cleans_exact_disabled_package_with_confirmation(monkeypatch)
     assert "字段" in body["error"]
 
 
+def test_plugin_catalog_api_lists_refreshes_and_installs_exact_version(monkeypatch):
+    calls = []
+
+    class FakeDistribution:
+        def list_catalog(self):
+            calls.append(("list",))
+            return {"revision": 3, "stale": False, "plugins": []}
+
+        def refresh(self):
+            calls.append(("refresh",))
+            return {"revision": 4, "stale": False, "plugins": []}
+
+        def install(self, name, version, *, confirmed):
+            calls.append(("install", name, version, confirmed))
+            return {"name": name, "version": version, "installed": True}
+
+    monkeypatch.setattr(api, "_plugin_distribution_service", lambda: FakeDistribution())
+
+    assert api.ROUTES[("GET", "/api/plugin-catalog")]({}) == (
+        200,
+        {"revision": 3, "stale": False, "plugins": []},
+    )
+    assert api.ROUTES[("POST", "/api/plugin-catalog/refresh")]({}) == (
+        200,
+        {"revision": 4, "stale": False, "plugins": []},
+    )
+    status, result = api.ROUTES[("POST", "/api/plugin-catalog/install")](
+        _ctx({"name": "notes", "version": "2.0.0", "confirmed": True})
+    )
+    assert status == 200
+    assert result["installed"] is True
+    assert calls == [
+        ("list",),
+        ("refresh",),
+        ("install", "notes", "2.0.0", True),
+    ]
+
+
+def test_plugin_catalog_api_reports_missing_bundled_trust_as_unavailable(monkeypatch):
+    def unavailable():
+        raise api.PluginCatalogConfigError("正式插件目录尚未配置")
+
+    monkeypatch.setattr(api, "_plugin_distribution_service", unavailable)
+
+    status, body = api.ROUTES[("GET", "/api/plugin-catalog")]({})
+
+    assert status == 503
+    assert body == {"error": "正式插件目录尚未配置"}
+
+
 def test_plugin_api_scopes_grant_to_exact_version_and_lists_disabled(monkeypatch):
     registry = PluginRegistry()
     registry.install(
