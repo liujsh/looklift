@@ -210,6 +210,83 @@ def test_streamable_http_transport_accepts_sse_response_and_rejects_remote_url()
         StreamableHttpMcpTransport("https://example.com/mcp", bearer_token="secret")
 
 
+def test_streamable_http_transport_resumes_closed_sse_with_last_event_id():
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        if request.method == "POST":
+            body = "id: stream-1\nretry: 0\ndata:\n\n"
+            return httpx.Response(
+                200,
+                headers={
+                    "Content-Type": "text/event-stream",
+                    "MCP-Session-Id": "resume-session",
+                },
+                text=body,
+            )
+        assert request.method == "GET"
+        assert request.headers["Last-Event-ID"] == "stream-1"
+        assert request.headers["MCP-Session-Id"] == "resume-session"
+        body = (
+            "id: stream-2\nevent: message\ndata: "
+            + json.dumps(
+                {"jsonrpc": "2.0", "id": 1, "result": {"ok": True}}
+            )
+            + "\n\n"
+        )
+        return httpx.Response(
+            200, headers={"Content-Type": "text/event-stream"}, text=body
+        )
+
+    transport = StreamableHttpMcpTransport(
+        "http://127.0.0.1:43123/mcp",
+        bearer_token="local-secret",
+        http_transport=httpx.MockTransport(handler),
+    )
+
+    assert asyncio.run(transport.request("initialize", {})) == {"ok": True}
+    assert [request.method for request in seen] == ["POST", "GET"]
+    asyncio.run(transport.close())
+
+
+def test_streamable_http_transport_limits_resume_attempts_and_event_id():
+    def endless_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            text="id: cursor\nretry: 0\ndata:\n\n",
+        )
+
+    transport = StreamableHttpMcpTransport(
+        "http://127.0.0.1:43123/mcp",
+        bearer_token="local-secret",
+        max_resume_attempts=2,
+        http_transport=httpx.MockTransport(endless_handler),
+    )
+    with pytest.raises(McpClientError, match="重连上限"):
+        asyncio.run(transport.request("ping", {}))
+    asyncio.run(transport.close())
+
+    def unsafe_handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            text="id: unsafe\u0000cursor\ndata:\n\n",
+        )
+
+    unsafe = StreamableHttpMcpTransport(
+        "http://127.0.0.1:43123/mcp",
+        bearer_token="local-secret",
+        http_transport=httpx.MockTransport(unsafe_handler),
+    )
+    with pytest.raises(McpClientError, match="事件 ID"):
+        asyncio.run(unsafe.request("ping", {}))
+    asyncio.run(unsafe.close())
+
+
 def test_streamable_http_transport_stops_reading_when_response_exceeds_limit():
     class OversizedStream(httpx.AsyncByteStream):
         def __init__(self):

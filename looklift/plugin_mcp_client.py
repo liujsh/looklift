@@ -275,6 +275,7 @@ class StreamableHttpMcpTransport:
         bearer_token: str,
         timeout_seconds: float = 30,
         max_response_bytes: int = 4 * 1024 * 1024,
+        max_resume_attempts: int = 3,
         http_transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         parsed = urlparse(endpoint)
@@ -285,11 +286,19 @@ class StreamableHttpMcpTransport:
             or not parsed.path
         ):
             raise McpClientError("受管 MCP HTTP 端点必须是显式端口的回环地址")
-        if not bearer_token or timeout_seconds <= 0 or max_response_bytes <= 0:
+        if (
+            not bearer_token
+            or timeout_seconds <= 0
+            or max_response_bytes <= 0
+            or not isinstance(max_resume_attempts, int)
+            or isinstance(max_resume_attempts, bool)
+            or not 1 <= max_resume_attempts <= 10
+        ):
             raise McpClientError("MCP HTTP 认证或响应上限无效")
         self._endpoint = endpoint
         self._token = bearer_token
         self._max_response_bytes = max_response_bytes
+        self._max_resume_attempts = max_resume_attempts
         self._client = httpx.AsyncClient(
             transport=http_transport,
             timeout=timeout_seconds,
@@ -308,16 +317,13 @@ class StreamableHttpMcpTransport:
             response = await self._post(
                 {"jsonrpc": "2.0", "id": request_id, "method": method, "params": dict(params)}
             )
-            result = self._parse_response(response, request_id)
+            if method == "initialize":
+                self._capture_session(response)
+            result = await self._parse_response(response, request_id)
             if method == "initialize":
                 version = result.get("protocolVersion")
                 if isinstance(version, str) and version:
                     self._protocol_version = version
-                session_id = response.headers.get("MCP-Session-Id")
-                if session_id is not None:
-                    if not session_id or any(ord(char) < 0x21 or ord(char) > 0x7E for char in session_id):
-                        raise McpClientError("MCP HTTP Session ID 不安全")
-                    self._session_id = session_id
             return result
 
     async def notify(self, method: str, params: Mapping[str, Any]) -> None:
@@ -349,31 +355,48 @@ class StreamableHttpMcpTransport:
                 headers=self._headers(),
                 json=dict(message),
             )
-            response = await self._client.send(request, stream=True)
-            try:
-                if 300 <= response.status_code < 400:
-                    raise McpClientError("MCP HTTP 禁止重定向")
-                if response.status_code >= 400:
-                    raise McpClientError("MCP HTTP 服务返回错误状态")
-                chunks: list[bytes] = []
-                size = 0
-                async for chunk in response.aiter_bytes():
-                    size += len(chunk)
-                    if size > self._max_response_bytes:
-                        raise McpClientError("MCP HTTP 响应超过安全上限")
-                    chunks.append(chunk)
-                return httpx.Response(
-                    response.status_code,
-                    headers=response.headers,
-                    content=b"".join(chunks),
-                    request=request,
-                )
-            finally:
-                await response.aclose()
+            return await self._send_limited(request, self._max_response_bytes)
         except httpx.TimeoutException as exc:
             raise McpClientError("MCP HTTP 请求超时") from exc
         except httpx.HTTPError as exc:
             raise McpClientError("MCP HTTP 请求失败") from exc
+
+    async def _resume(self, event_id: str, *, max_bytes: int) -> httpx.Response:
+        headers = self._headers()
+        headers["Accept"] = "text/event-stream"
+        headers["Last-Event-ID"] = event_id
+        try:
+            request = self._client.build_request("GET", self._endpoint, headers=headers)
+            return await self._send_limited(request, max_bytes)
+        except httpx.TimeoutException as exc:
+            raise McpClientError("MCP HTTP SSE 恢复超时") from exc
+        except httpx.HTTPError as exc:
+            raise McpClientError("MCP HTTP SSE 恢复失败") from exc
+
+    async def _send_limited(
+        self, request: httpx.Request, max_bytes: int
+    ) -> httpx.Response:
+        response = await self._client.send(request, stream=True)
+        try:
+            if 300 <= response.status_code < 400:
+                raise McpClientError("MCP HTTP 禁止重定向")
+            if response.status_code >= 400:
+                raise McpClientError("MCP HTTP 服务返回错误状态")
+            chunks: list[bytes] = []
+            size = 0
+            async for chunk in response.aiter_bytes():
+                size += len(chunk)
+                if size > max_bytes:
+                    raise McpClientError("MCP HTTP 响应超过安全上限")
+                chunks.append(chunk)
+            return httpx.Response(
+                response.status_code,
+                headers=response.headers,
+                content=b"".join(chunks),
+                request=request,
+            )
+        finally:
+            await response.aclose()
 
     def _headers(self) -> dict[str, str]:
         headers = {
@@ -387,7 +410,21 @@ class StreamableHttpMcpTransport:
             headers["MCP-Protocol-Version"] = self._protocol_version
         return headers
 
-    def _parse_response(self, response: httpx.Response, request_id: int) -> dict[str, Any]:
+    def _capture_session(self, response: httpx.Response) -> None:
+        session_id = response.headers.get("MCP-Session-Id")
+        if session_id is None:
+            return
+        if (
+            not session_id
+            or len(session_id) > 1024
+            or any(ord(char) < 0x21 or ord(char) > 0x7E for char in session_id)
+        ):
+            raise McpClientError("MCP HTTP Session ID 不安全")
+        self._session_id = session_id
+
+    async def _parse_response(
+        self, response: httpx.Response, request_id: int
+    ) -> dict[str, Any]:
         content_type = response.headers.get("Content-Type", "").split(";", 1)[0].strip().casefold()
         if content_type == "application/json":
             try:
@@ -395,27 +432,71 @@ class StreamableHttpMcpTransport:
             except json.JSONDecodeError as exc:
                 raise McpClientError("MCP HTTP JSON 响应无效") from exc
             return _jsonrpc_result(message, request_id)
-        if content_type == "text/event-stream":
-            try:
-                text = response.content.decode("utf-8")
-            except UnicodeDecodeError as exc:
-                raise McpClientError("MCP HTTP SSE 不是 UTF-8") from exc
-            for block in text.replace("\r\n", "\n").split("\n\n"):
-                data = "\n".join(
-                    line[5:].lstrip()
-                    for line in block.splitlines()
-                    if line.startswith("data:")
-                )
-                if not data:
-                    continue
-                try:
-                    message = json.loads(data)
-                except json.JSONDecodeError as exc:
-                    raise McpClientError("MCP HTTP SSE data 无效") from exc
-                if isinstance(message, Mapping) and message.get("id") == request_id:
-                    return _jsonrpc_result(message, request_id)
+        if content_type != "text/event-stream":
+            raise McpClientError("MCP HTTP 响应 Content-Type 不受支持")
+        remaining = self._max_response_bytes - len(response.content)
+        result, event_id, retry_ms = self._parse_sse(response, request_id)
+        if result is not None:
+            return result
+        if event_id is None:
             raise McpClientError("MCP HTTP SSE 未返回请求结果")
-        raise McpClientError("MCP HTTP 响应 Content-Type 不受支持")
+        for _ in range(self._max_resume_attempts):
+            if retry_ms > 30_000:
+                raise McpClientError("MCP HTTP SSE retry 超过安全上限")
+            if retry_ms:
+                await asyncio.sleep(retry_ms / 1000)
+            resumed = await self._resume(event_id, max_bytes=remaining)
+            remaining -= len(resumed.content)
+            if remaining <= 0:
+                raise McpClientError("MCP HTTP 响应超过安全上限")
+            content_type = resumed.headers.get("Content-Type", "").split(";", 1)[0].strip().casefold()
+            if content_type != "text/event-stream":
+                raise McpClientError("MCP HTTP SSE 恢复响应类型无效")
+            result, next_event_id, retry_ms = self._parse_sse(resumed, request_id)
+            if result is not None:
+                return result
+            if next_event_id is not None:
+                event_id = next_event_id
+        raise McpClientError("MCP HTTP SSE 达到重连上限")
+
+    @staticmethod
+    def _parse_sse(
+        response: httpx.Response, request_id: int
+    ) -> tuple[dict[str, Any] | None, str | None, int]:
+        try:
+            text = response.content.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise McpClientError("MCP HTTP SSE 不是 UTF-8") from exc
+        last_event_id: str | None = None
+        retry_ms = 0
+        for block in text.replace("\r\n", "\n").split("\n\n"):
+            lines = block.splitlines()
+            for line in lines:
+                if line.startswith("id:"):
+                    candidate = line[3:].lstrip()
+                    if (
+                        not candidate
+                        or len(candidate) > 1024
+                        or any(ord(char) < 0x20 or ord(char) > 0x7E for char in candidate)
+                    ):
+                        raise McpClientError("MCP HTTP SSE 事件 ID 不安全")
+                    last_event_id = candidate
+                elif line.startswith("retry:"):
+                    candidate = line[6:].strip()
+                    if candidate.isdecimal():
+                        retry_ms = int(candidate)
+            data = "\n".join(
+                line[5:].lstrip() for line in lines if line.startswith("data:")
+            )
+            if not data:
+                continue
+            try:
+                message = json.loads(data)
+            except json.JSONDecodeError as exc:
+                raise McpClientError("MCP HTTP SSE data 无效") from exc
+            if isinstance(message, Mapping) and message.get("id") == request_id:
+                return _jsonrpc_result(message, request_id), last_event_id, retry_ms
+        return None, last_event_id, retry_ms
 
 
 def _jsonrpc_result(message: Any, request_id: int) -> dict[str, Any]:
