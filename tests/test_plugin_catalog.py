@@ -78,6 +78,19 @@ def test_catalog_rejects_revoked_key_and_non_https_package():
         )
 
 
+def test_catalog_rejects_version_not_supported_by_registry():
+    private = Ed25519PrivateKey.generate()
+    envelope = _envelope(private)
+    envelope["signed"]["plugins"][0]["version"] = "1.2.3-beta.1"
+    canonical = json.dumps(
+        envelope["signed"], ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode()
+    envelope["signature"] = base64.b64encode(private.sign(canonical)).decode()
+
+    with pytest.raises(PluginCatalogError, match="元数据"):
+        _verifier(private).verify(json.dumps(envelope).encode())
+
+
 def test_catalog_cache_is_atomic_and_rejects_rollback(tmp_path):
     private = Ed25519PrivateKey.generate()
     cache = PluginCatalogCache(tmp_path, verifier=_verifier(private))

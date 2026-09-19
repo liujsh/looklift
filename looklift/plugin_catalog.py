@@ -285,6 +285,8 @@ def install_catalog_plugin(
     if not confirmed:
         raise PluginCatalogError("目录插件安装前必须获得用户确认")
     plugin = snapshot.resolve(name, version)
+    if current_platform not in plugin.platforms:
+        raise PluginCatalogError("目录插件与当前平台不兼容")
     archive = download_catalog_package(
         plugin.url,
         expected_sha256=plugin.sha256,
@@ -359,7 +361,7 @@ def _parse_plugins(value: Any) -> tuple[CatalogPlugin, ...]:
             raise PluginCatalogError("签名目录插件条目缺少字段") from exc
         if (
             not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", plugin.name)
-            or not re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?", plugin.version)
+            or not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", plugin.version)
             or not re.fullmatch(r"[0-9a-f]{64}", plugin.sha256)
             or not plugin.license
             or not plugin.platforms
