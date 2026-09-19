@@ -10,7 +10,12 @@ from typing import Any, Protocol
 
 from .agent_adapter import AgentEvent, AgentEventKind, AgentRunInput, AgentTaskKind
 from .candidate_runtime import CandidateRuntime
-from .context_budget import prepare_messages
+from .context_budget import (
+    ContextBudgetError,
+    ContextBudgetPolicy,
+    TokenCounter,
+    prepare_openai_context,
+)
 from .openai_protocol import OpenAiSseParser, build_openai_request, project_openai_tools
 from .plugin_bridge import PluginBridgeSession, bridge_tool_definitions, native_tool_definitions
 from .provider_snapshot import ProviderSnapshot
@@ -57,6 +62,8 @@ class OpenAiApiAdapter:
         plugin_session_resolver: PluginSessionResolver | None = None,
         verifier: CandidateVerifier | None = None,
         review_gate: UserReviewGate | None = None,
+        context_budget_policy: ContextBudgetPolicy | None = None,
+        token_counter: TokenCounter | None = None,
     ) -> None:
         self._snapshot_resolver = snapshot_resolver
         self._credential_resolver = credential_resolver
@@ -66,6 +73,8 @@ class OpenAiApiAdapter:
         self._plugin_session_resolver = plugin_session_resolver
         self._verifier = verifier or CandidateVerifier()
         self._review_gate = review_gate or UserReviewGate()
+        self._context_budget_policy = context_budget_policy or ContextBudgetPolicy()
+        self._token_counter = token_counter
         self._active: dict[str, _ActiveApi] = {}
         self._attempts: set[tuple[str, str]] = set()
 
@@ -141,12 +150,27 @@ class OpenAiApiAdapter:
                 if active.cancelled:
                     yield event(AgentEventKind.RUN_FAILED, {"code": "cancelled", "message": "API Harness 已取消"})
                     return
-                request["messages"], compaction = prepare_messages(request["messages"])
-                if compaction:
-                    yield event(AgentEventKind.CONTEXT_COMPACTION, compaction)
                 if plugin_session is not None:
                     request["tools"] = project_openai_tools(
                         (*bridge_tool_definitions(), *native_tool_definitions(plugin_session.active_tools))
+                    )
+                try:
+                    request["messages"], budget_audit = prepare_openai_context(
+                        request,
+                        policy=self._context_budget_policy,
+                        token_counter=self._token_counter,
+                    )
+                except ContextBudgetError as exc:
+                    yield event(
+                        AgentEventKind.RUN_FAILED,
+                        {"code": "context_budget_exceeded", "message": str(exc)},
+                    )
+                    return
+                compaction = budget_audit["compaction"]
+                if compaction:
+                    yield event(
+                        AgentEventKind.CONTEXT_COMPACTION,
+                        {**compaction, "budget": budget_audit},
                     )
                 parser = OpenAiSseParser()
                 protocol_events = []

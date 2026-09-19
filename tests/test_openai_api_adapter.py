@@ -5,6 +5,7 @@ import json
 from types import SimpleNamespace
 
 from looklift.agent_adapter import AgentEventKind, AgentRunInput, AgentTaskKind
+from looklift.context_budget import ContextBudgetPolicy
 from looklift.openai_api_adapter import OpenAiApiAdapter
 from looklift.plugin_tools import ActiveTool, ActiveToolSet
 from looklift.provider_snapshot import ProviderProtocol, ProviderSnapshot
@@ -261,3 +262,57 @@ def test_openai_adapter_plugin_task_refreshes_native_tools_and_waits_for_confirm
     assert events[-1].kind is AgentEventKind.RUN_FINISHED
     assert events[-1].payload["outcome"] == "waiting_confirmation"
     assert events[-1].payload["action_id"] == "action-1"
+
+
+def test_openai_adapter_rejects_oversized_required_schema_before_transport() -> None:
+    active_tools = ActiveToolSet(
+        "a" * 64,
+        (
+            ActiveTool(
+                "redbook@1.0.0/main/publish",
+                "redbook_publish_1234567890",
+                "b" * 64,
+                "发布图文",
+                {"type": "object", "description": "x" * 2_000},
+            ),
+        ),
+        20,
+    )
+
+    class Session:
+        def __init__(self, tools: ActiveToolSet) -> None:
+            self.active_tools = tools
+
+    class Transport:
+        async def stream(self, _snapshot, _request, *, api_key):
+            raise AssertionError("超预算 Schema 不得发送给 Provider")
+            yield b""
+
+    snapshot = ProviderSnapshot(
+        "openai", "https://api.openai.com/v1", "gpt-5", "credential://openai/default",
+        ProviderProtocol.OPENAI_CHAT_COMPLETIONS, 100, 1,
+    )
+    adapter = OpenAiApiAdapter(
+        snapshot_resolver=lambda _input: snapshot,
+        credential_resolver=lambda _ref: "sk-test",
+        runtime_resolver=lambda _input: (_ for _ in ()).throw(AssertionError()),
+        plugin_session_resolver=lambda _input: Session(active_tools),
+        transport=Transport(),
+        context_budget_policy=ContextBudgetPolicy(
+            max_input_tokens=1_000,
+            output_reserve_tokens=100,
+        ),
+    )
+    base = _run_input()
+    run_input = AgentRunInput(
+        base.run_id, base.attempt_id, base.domain_pack, None, base.model,
+        task_kind=AgentTaskKind.PLUGIN_TASK,
+    )
+
+    async def exercise():
+        return [event async for event in adapter.start(run_input)]
+
+    events = asyncio.run(exercise())
+    assert events[-1].kind is AgentEventKind.RUN_FAILED
+    assert events[-1].payload["code"] == "context_budget_exceeded"
+    assert "Schema" in events[-1].payload["message"]
