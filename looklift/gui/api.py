@@ -46,7 +46,10 @@ from ..connector_sessions import ConnectorRuntimeHost, ConnectorSessionManager
 from ..credential_store import CredentialStoreError, DpapiCredentialStore
 from ..execution_selection import ExecutionSelectionError, resolve_runtime_id
 from ..plugin_registry import PluginManifest, PluginManifestError, PluginRegistry
+from ..plugin_actions import PluginActionStore
+from ..plugin_action_service import PluginActionService, PluginActionServiceError
 from ..plugin_connector_service import PluginConnectorError, PluginConnectorService
+from ..plugin_lifecycle_service import PluginLifecycleError, PluginLifecycleService
 from ..plugin_runtime import PluginProfileStore, StdioPluginClientFactory
 from ..plugin_tools import ExposureBudget, PluginToolCatalog, PluginToolError
 from ..provider_config_store import ProviderConfigStore
@@ -77,6 +80,11 @@ _PLUGIN_STATE_LOCK = threading.RLock()
 _PLUGIN_CONNECTOR_SERVICE: PluginConnectorService | None = None
 _PLUGIN_CONNECTOR_HOST: ConnectorRuntimeHost | None = None
 _PLUGIN_CONNECTOR_LOCK = threading.Lock()
+_PLUGIN_ACTION_SERVICE: PluginActionService | None = None
+_PLUGIN_ACTION_ROOT: Path | None = None
+_PLUGIN_ACTION_LOCK = threading.Lock()
+_PLUGIN_LIFECYCLE_SERVICE: PluginLifecycleService | None = None
+_PLUGIN_LIFECYCLE_ROOT: Path | None = None
 
 
 def _plugin_stores() -> tuple[PluginRegistry, CapabilityGrantStore]:
@@ -126,13 +134,51 @@ def _plugin_connector_service() -> PluginConnectorService:
         return _PLUGIN_CONNECTOR_SERVICE
 
 
+def _plugin_action_service() -> PluginActionService:
+    """按应用配置目录组装持久化 Action 与生产 Connector 执行链。"""
+    global _PLUGIN_ACTION_SERVICE, _PLUGIN_ACTION_ROOT
+    if _PLUGIN_ACTION_SERVICE is not None:
+        return _PLUGIN_ACTION_SERVICE
+    root = config.CONFIG_PATH.parent.resolve()
+    with _PLUGIN_ACTION_LOCK:
+        if _PLUGIN_ACTION_SERVICE is not None:
+            return _PLUGIN_ACTION_SERVICE
+        registry, grants = _plugin_stores()
+        _PLUGIN_ACTION_SERVICE = PluginActionService(
+            action_store=PluginActionStore(root / "plugin-actions"),
+            plugin_registry=registry,
+            grant_store=grants,
+            connector_service=_plugin_connector_service(),
+        )
+        _PLUGIN_ACTION_ROOT = root
+        return _PLUGIN_ACTION_SERVICE
+
+
+def _plugin_lifecycle_service() -> PluginLifecycleService:
+    global _PLUGIN_LIFECYCLE_SERVICE, _PLUGIN_LIFECYCLE_ROOT
+    root = config.CONFIG_PATH.parent.resolve()
+    if _PLUGIN_LIFECYCLE_SERVICE is None or _PLUGIN_LIFECYCLE_ROOT != root:
+        registry, grants = _plugin_stores()
+        _PLUGIN_LIFECYCLE_SERVICE = PluginLifecycleService(
+            registry, grants, _plugin_connector_service()
+        )
+        _PLUGIN_LIFECYCLE_ROOT = root
+    return _PLUGIN_LIFECYCLE_SERVICE
+
+
 def close_plugin_connector_runtime() -> None:
     """应用退出时回收长期 Connector 事件循环与全部 MCP 会话。"""
     global _PLUGIN_CONNECTOR_SERVICE, _PLUGIN_CONNECTOR_HOST
+    global _PLUGIN_ACTION_SERVICE, _PLUGIN_ACTION_ROOT
+    global _PLUGIN_LIFECYCLE_SERVICE, _PLUGIN_LIFECYCLE_ROOT
     with _PLUGIN_CONNECTOR_LOCK:
         host = _PLUGIN_CONNECTOR_HOST
         _PLUGIN_CONNECTOR_HOST = None
         _PLUGIN_CONNECTOR_SERVICE = None
+        _PLUGIN_ACTION_SERVICE = None
+        _PLUGIN_ACTION_ROOT = None
+        _PLUGIN_LIFECYCLE_SERVICE = None
+        _PLUGIN_LIFECYCLE_ROOT = None
     if host is not None:
         host.close()
 
@@ -200,6 +246,66 @@ def _forget_plugin_connector(ctx: dict) -> tuple[int, dict]:
     return _plugin_connector_query_action(ctx, "forget")
 
 
+def _get_plugin_actions(ctx: dict) -> tuple[int, dict]:
+    project_id = (ctx.get("query") or {}).get("project_id")
+    if not isinstance(project_id, str) or not project_id:
+        return 400, {"error": "缺少 project_id"}
+    try:
+        return 200, {
+            "actions": list(_plugin_action_service().list(project_id=project_id))
+        }
+    except PluginActionServiceError as exc:
+        return 400, {"error": str(exc)}
+
+
+def _revise_plugin_action(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    if set(payload) != {"project_id", "expected_revision", "arguments"}:
+        return 400, {"error": "Action 修改请求字段无效"}
+    try:
+        return 200, _plugin_action_service().revise(
+            ctx["params"]["id"],
+            project_id=payload["project_id"],
+            expected_revision=payload["expected_revision"],
+            arguments=payload["arguments"],
+        )
+    except (KeyError, TypeError, PluginActionServiceError) as exc:
+        return 400, {"error": str(exc)}
+
+
+def _plugin_action_command(
+    ctx: dict, action: str, *, needs_revision: bool = False
+) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    allowed = {"project_id", "expected_revision"} if needs_revision else {"project_id"}
+    if set(payload) != allowed:
+        return 400, {"error": "Action 操作请求字段无效"}
+    try:
+        method = getattr(_plugin_action_service(), action)
+        kwargs = {"project_id": payload["project_id"]}
+        if needs_revision:
+            kwargs["expected_revision"] = payload["expected_revision"]
+        return 200, method(ctx["params"]["id"], **kwargs)
+    except (KeyError, TypeError, PluginActionServiceError) as exc:
+        return 400, {"error": str(exc)}
+
+
+def _confirm_plugin_action(ctx: dict) -> tuple[int, dict]:
+    return _plugin_action_command(ctx, "confirm_and_execute", needs_revision=True)
+
+
+def _reject_plugin_action(ctx: dict) -> tuple[int, dict]:
+    return _plugin_action_command(ctx, "reject")
+
+
+def _cancel_plugin_action(ctx: dict) -> tuple[int, dict]:
+    return _plugin_action_command(ctx, "cancel")
+
+
 def _seed_plugin_registry() -> None:
     registry, _ = _plugin_stores()
     try:
@@ -223,6 +329,7 @@ def _plugin_payload(item: dict, *, project_id: str | None = None) -> dict:
         if name == item["name"]
         and project_id is not None
         and grant_project_id == project_id
+        and grant.version_hash == item["content_hash"]
         and grant.active()
     ]
     granted = sorted({cap for grant in grants for cap in grant.capabilities})
@@ -235,12 +342,33 @@ def _get_plugins(ctx: dict) -> tuple[int, dict]:
     project_id = (ctx.get("query") or {}).get("project_id")
     if project_id is not None and (not isinstance(project_id, str) or not project_id):
         return 400, {"error": "project_id 无效"}
+    include_disabled = (ctx.get("query") or {}).get("include_disabled")
+    if include_disabled not in {None, "true", "false"}:
+        return 400, {"error": "include_disabled 无效"}
     return 200, {
         "plugins": [
             _plugin_payload(item, project_id=project_id)
-            for item in registry.list()
+            for item in registry.list(include_disabled=include_disabled == "true")
         ]
     }
+
+
+def _set_plugin_state(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    if set(payload) != {"version", "enabled", "confirmed"}:
+        return 400, {"error": "Plugin 状态请求字段无效"}
+    try:
+        _plugin_lifecycle_service().set_enabled(
+            ctx["params"]["id"],
+            payload["version"],
+            enabled=payload["enabled"],
+            confirmed=payload["confirmed"],
+        )
+    except (KeyError, TypeError, PluginLifecycleError) as exc:
+        return 400, {"error": str(exc)}
+    return 200, {"ok": True}
 
 
 def _grant_plugin(ctx: dict) -> tuple[int, dict]:
@@ -250,7 +378,7 @@ def _grant_plugin(ctx: dict) -> tuple[int, dict]:
     if err is not None:
         return err
     try:
-        manifest = registry.resolve(ctx["params"]["id"])
+        manifest = registry.resolve(ctx["params"]["id"], payload.get("version"))
         project_id = payload["project_id"]
         capabilities = payload["capabilities"]
         scope = payload.get("scope", "run")
@@ -264,7 +392,11 @@ def _grant_plugin(ctx: dict) -> tuple[int, dict]:
         grant = CapabilityGrant(manifest.name, requested, project_id, manifest.content_hash, scope=scope)
         grants[(manifest.name, project_id)] = grant
         return 200, _plugin_payload(
-            {"name": manifest.name, **next(item for item in registry.list() if item["name"] == manifest.name)},
+            next(
+                item
+                for item in registry.list()
+                if item["name"] == manifest.name and item["version"] == manifest.version
+            ),
             project_id=project_id,
         )
     except (KeyError, TypeError, ValueError, PluginManifestError) as exc:
@@ -275,17 +407,24 @@ def _revoke_plugin(ctx: dict) -> tuple[int, dict]:
     _seed_plugin_registry()
     registry, grants = _plugin_stores()
     project_id = (ctx.get("query") or {}).get("project_id")
+    version = (ctx.get("query") or {}).get("version")
     if not isinstance(project_id, str) or not project_id:
         return 400, {"error": "缺少 project_id"}
     try:
-        manifest = registry.resolve(ctx["params"]["id"])
+        manifest = registry.resolve(
+            ctx["params"]["id"], version, include_disabled=True
+        )
     except PluginManifestError as exc:
         return 404, {"error": str(exc)}
     grant = grants.get((manifest.name, project_id))
-    if grant is not None:
+    if grant is not None and grant.version_hash == manifest.content_hash:
         grants[(manifest.name, project_id)] = replace(grant, revoked=True)
     return 200, _plugin_payload(
-        next(item for item in registry.list() if item["name"] == manifest.name),
+        next(
+            item
+            for item in registry.list(include_disabled=True)
+            if item["name"] == manifest.name and item["version"] == manifest.version
+        ),
         project_id=project_id,
     )
 
@@ -1918,6 +2057,7 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/plugins"): _get_plugins,
     ("POST", "/api/plugins/<id>/grant"): _grant_plugin,
     ("DELETE", "/api/plugins/<id>/grant"): _revoke_plugin,
+    ("POST", "/api/plugins/<id>/state"): _set_plugin_state,
     ("POST", "/api/plugins/tools/discover"): _discover_plugin_tools,
     ("POST", "/api/plugins/tools/describe"): _describe_plugin_tools,
     ("GET", "/api/plugin-connectors"): _get_plugin_connectors,
@@ -1925,6 +2065,11 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("POST", "/api/plugin-connectors/<id>/connect"): _connect_plugin_connector,
     ("DELETE", "/api/plugin-connectors/<id>/connection"): _disconnect_plugin_connector,
     ("DELETE", "/api/plugin-connectors/<id>/account"): _forget_plugin_connector,
+    ("GET", "/api/plugin-actions"): _get_plugin_actions,
+    ("POST", "/api/plugin-actions/<id>/revise"): _revise_plugin_action,
+    ("POST", "/api/plugin-actions/<id>/confirm"): _confirm_plugin_action,
+    ("POST", "/api/plugin-actions/<id>/reject"): _reject_plugin_action,
+    ("POST", "/api/plugin-actions/<id>/cancel"): _cancel_plugin_action,
     ("GET", "/api/memory/config"): _get_memory_config,
     ("PATCH", "/api/memory/config"): _patch_memory_config,
     ("GET", "/api/memory/tree"): _get_memory_tree,

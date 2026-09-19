@@ -46,9 +46,15 @@ def _write_package(
                 "service": "main",
                 "name": "publish_content",
                 "description": "发布图文",
-                "input_schema": {"type": "object"},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"title": {"type": "string"}},
+                },
                 "capabilities": ["social.publish"],
                 "risk": "external_write",
+                "confirmation_fields": [
+                    {"key": "title", "label": "标题", "control": "text"}
+                ],
             }
         ],
     }
@@ -88,6 +94,7 @@ def test_installer_verifies_and_atomically_registers_package(tmp_path: Path):
     assert (installed.path / "runtime" / "fake.exe").read_bytes() == b"fake-runtime"
     assert registry.resolve("redbook").source == "official-catalog"
     assert registry.tools_for("redbook")[0].risk == "external_write"
+    assert registry.tools_for("redbook")[0].confirmation_fields[0].label == "标题"
     assert registry.resolve("redbook").services[0].entrypoint == "runtime/fake.exe"
     assert PluginRegistry(tmp_path / "state").resolve("redbook").services[0].credential_env == "PLUGIN_TOKEN"
     assert not any((tmp_path / "app-data" / "plugin-staging").iterdir())

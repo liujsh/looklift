@@ -573,7 +573,7 @@ Connector Manifest 固定协议、数据接收方和能力；外部事实先进�
 
 ### Plugin Registry 与能力授权页
 
-`PluginRegistry.list()` 向前端投影脱敏 Manifest 摘要，内置插件与历史版本仍由 Registry 管理；API 不返回包路径、命令或凭据。授权接口要求 `project_id`、作用域和能力子集，服务端拒绝超出 Manifest 声明的能力，并以 `CapabilityGrant` 保存最小授权；撤销将 Grant 标为 revoked，使后续能力校验立即失败。React 插件页只展示声明能力、摘要和当前授权，授权/撤销均需显式点击。
+`PluginRegistry.list()` 向前端投影脱敏 Manifest 摘要，内置插件与历史版本仍由 Registry 管理；API 不返回包路径、命令或凭据。授权接口要求 `project_id`、作用域和能力子集，服务端拒绝超出 Manifest 声明的能力，并以 `CapabilityGrant` 保存最小授权；撤销将 Grant 标为 revoked，使后续能力校验立即失败。React 插件页展示声明能力、摘要和当前授权，项目切换后同时刷新授权与账号连接；授权、撤销和账号创建均需显式点击。
 
 ### Connector Registry 与调用隔离
 
@@ -598,15 +598,16 @@ Provider 元数据保存在版本化 JSON 快照，API Key 使用当前 Windows 
 ### Plugin MCP 工具发现与确认执行基础
 
 - `PluginRegistry` 在保留原构造与历史版本语义的同时，可原子持久化 Manifest 和经审核的版本化工具目录；`CapabilityGrantStore` 按 Plugin 与项目保存最小授权。插件列表 API 只投影当前请求项目的 Grant，不再合并其他项目授权。
+- `PluginLifecycleService` 精确管理已安装版本的启用状态。停用非内置版本时，先断开该版本所有在线 Connector，再撤销所有项目中绑定同一内容摘要的 Grant，最后原子保存 disabled 状态；重新启用只恢复版本可见性，不恢复 Grant 或在线连接。历史版本、连接和 Action 继续保留为审计事实，失效工具的 Action 可查询但不可执行。React 插件页按名称和版本区分授权、账号入口及两步停用操作。
 - `plugin_mcp_client.py` 提供无 Shell 的 stdio JSON-RPC 和受管 Streamable HTTP 传输。stdio 固定消息上限与进程回收；HTTP 只接受显式端口的 IPv4/IPv6 回环地址，强制 Bearer、Origin、无环境代理/重定向，支持 JSON/SSE 响应、协商协议版本、Session ID 和显式关闭。共享 MCP 会话固定握手、分页目录、页数/工具数/字节上限、审核白名单及实时目录调用检查。HTTP SSE 断线续传和服务端反向消息尚未实现。
 - `plugin_catalog.py` 使用 Ed25519 受信公钥验证规范化目录快照，支持公钥撤销、有效期、单调 revision、离线过期标记和原子缓存。目录包只接受无凭据 HTTPS 固定地址及 SHA-256，下载文件作为临时输入交给 `plugin_installer.py`；安装前再次比对目录声明的名称、版本和许可证。真实 Fetcher 使用显式域名白名单和公网 DNS 校验，禁环境代理/重定向并流式限制响应。正式公钥与真实目录服务尚未随应用发布。
 - `connector_sessions.py` 在 `ConnectorRegistry` 配置权威之上管理 MCP 会话：可启动 Transport 先启动，再完成 initialize 和实时目录刷新，最后才把连接标为在线；失败关闭半成品连接，断开/撤销先落权威状态再回收。每个连接固定 Workspace 和不含凭据的账号 ID，可按接收方获取在线账号快照。
 - `plugin_runtime.py` 从 Connector 固定的插件版本和 Service 构造 stdio MCP Client。Service 的包内入口、参数、摘要及凭据环境变量随 Registry 持久化；启动前再次验证入口仍在安装目录且内容摘要未变。子进程只继承系统目录/临时目录/语言等最小环境，账号凭据与独立 Profile 由宿主注入。普通断开保留长期登录态，`forget_account` 才在撤权和停进程后调用凭据/Profile 清理。
-- 同步 HTTP handler 不能用请求级 `asyncio.run` 持有长连接；`ConnectorRuntimeHost` 因此在单独守护线程维持长期事件循环，connect、call、disconnect、revoke、forget 和 close 均提交到同一循环，并对同步调用设置超时。`PluginConnectorService` 只按已安装 Plugin/Service 创建配置，凭据由 DPAPI Store 接收；GUI API 提供项目内列表、确认创建、连接、断开和忘记账号路由，应用退出时统一关闭 Host。Plugin Registry 与 Grant Store 惰性绑定应用配置目录并原子落盘，避免模块导入触碰真实用户目录；React Connector 控件尚未完成。
+- 同步 HTTP handler 不能用请求级 `asyncio.run` 持有长连接；`ConnectorRuntimeHost` 因此在单独守护线程维持长期事件循环，connect、call、disconnect、revoke、forget 和 close 均提交到同一循环，并对同步调用设置超时。`PluginConnectorService` 只按已安装 Plugin/Service 创建配置，凭据由 DPAPI Store 接收；GUI API 提供项目内列表、确认创建、连接、断开和忘记账号路由，应用退出时统一关闭 Host。Plugin Registry 与 Grant Store 惰性绑定应用配置目录并原子落盘，避免模块导入触碰真实用户目录。React 账号连接区只读取宿主投影的 Service 元数据，密码框不回显凭据；忘记账号需二次确认。
 - `plugin_installer.py` 只安装已下载且经用户确认的固定 ZIP，校验包/文件摘要、许可、平台和固定依赖，阻断路径穿越、大小写重复、Windows 保留路径、符号链接与压缩炸弹后原子落入版本目录；联网签名目录仍未实现。
 - `plugin_tools.py` 在本地完整目录上执行授权过滤、中文/英文加权召回和分页；发现只返回 L1 摘要，描述阶段返回不可截断的完整 Draft 2020-12 Schema、Schema Hash、唯一 Provider 名和活动集 revision。桥接执行前再次核对实时目录、完整 Schema、项目 Grant；`POST /api/plugins/tools/discover` 与 `POST /api/plugins/tools/describe` 已提供同一投影。
 - `AgentRunInput` 新增 `PLUGIN_TASK` 策略，可持有零张或多张安全 JPEG；GUI/SSE 输入最多接收 20 张、总计 40 MiB，CLI Workspace 与 OpenAI-compatible 请求构造支持相同输入，既有 `PHOTO_EDITING` 仍强制单张代理图。
 - `plugin_bridge.py` 固定 discover/describe/invoke/resource 四个跨平台桥接操作。`OpenAiApiAdapter` 在同一多轮循环中按任务策略刷新动态原生 Schema；`PiAgentAdapter` 复用同一桥接会话和 localhost Token Gateway，随应用 Extension 接受任务级工具表，不再硬编码恰好两个候选工具。插件任务可在本地草稿或待确认 Action 结束，不进入 Candidate Verifier。
-- `PluginAssetBroker` 只接收内存中的正式导出字节并向模型投影匿名 asset ID，按 Action 创建受控暂存目录；`PluginActionStore` 持久化待确认、已确认、执行中及成功/失败/结果未知终态。外部写入第一次调用只创建 Action，确认绑定参数、素材顺序、账号、Plugin/Schema Hash 和 revision，执行前重新校验当前授权与账号；确认只消费一次，超时结果未知且不自动重试。待确认 Action 有明确有效期，可拒绝/取消；宿主启动时把遗留执行中状态收敛为结果未知。
+- `PluginAssetBroker` 只接收内存中的正式导出字节并向模型投影匿名 asset ID，按 Action 创建受控暂存目录；`PluginActionStore` 持久化待确认、已确认、执行中及成功/失败/结果未知终态。外部写入第一次调用只创建 Action，确认绑定参数、素材顺序、账号、Plugin/Schema Hash 和 revision，执行前重新校验当前授权与账号；确认只消费一次，超时结果未知且不自动重试。待确认 Action 有明确有效期，可拒绝/取消；宿主启动时把遗留执行中状态收敛为结果未知。`PluginActionService` 向 GUI 投影不含内部摘要和确认凭证的项目事实；参数修改复核完整 Schema 与期望 revision，确认执行只选择 Plugin 版本、Service、项目和账号完全一致的唯一在线 Connector。HTTP API 提供项目列表、修改、确认并执行、拒绝和取消操作。经审核的工具元数据可声明宿主控件类型、标签与受限选项，字段必须引用完整 Schema 的顶层参数；React 只按该声明生成确认卡，不加载插件脚本，并从宿主事实展示账号、素材顺序、有效期与 revision。编辑后必须先保存形成新 revision，才能确认执行。
 - `ConnectorRegistry` 可原子持久化非敏感连接配置与凭据引用；重启恢复授权但强制清除在线状态，只有重新完成 MCP 握手后才进入连接快照。
 - `context_budget.prepare_messages` 按完整 Assistant Tool Call + Tool Result 事实组淘汰旧历史，避免预算压缩产生孤立工具消息。Skill/Reference/图片与 Provider tokenizer 的统一 token 计量仍待后续阶段完成。

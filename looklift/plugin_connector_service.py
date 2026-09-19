@@ -116,7 +116,57 @@ class PluginConnectorService:
             self._host.disconnect(connector_id)
         except ConnectorSessionError as exc:
             raise PluginConnectorError(str(exc)) from exc
+        self._connectors.disconnect(connector_id)
         return self._connectors.get(connector_id).public_dict()
+
+    def disconnect_plugin(self, plugin_name: str, version: str) -> int:
+        """停用插件前断开该精确版本的全部在线账号，但保留登录资料。"""
+        matches = [
+            config
+            for config in self._connectors.list()
+            if config.connected
+            and config.plugin_name == plugin_name
+            and config.plugin_version == version
+        ]
+        try:
+            for config in matches:
+                self._host.disconnect(config.manifest.connector_id)
+                self._connectors.disconnect(config.manifest.connector_id)
+        except ConnectorSessionError as exc:
+            raise PluginConnectorError(str(exc)) from exc
+        return len(matches)
+
+    def call_tool(
+        self,
+        *,
+        plugin_name: str,
+        plugin_version: str,
+        service_name: str,
+        tool_name: str,
+        project_id: str,
+        account_id: str,
+        arguments: dict,
+    ) -> dict[str, object]:
+        """只通过唯一的在线项目账号调用已绑定工具。"""
+        matches = [
+            config
+            for config in self._connectors.list()
+            if config.authorized
+            and config.connected
+            and config.workspace_id == project_id
+            and config.account_id == account_id
+            and config.plugin_name == plugin_name
+            and config.plugin_version == plugin_version
+            and config.service == service_name
+        ]
+        if len(matches) != 1:
+            raise PluginConnectorError("Action 没有唯一的在线绑定账号")
+        return self._host.call(
+            matches[0].manifest.connector_id,
+            workspace_id=project_id,
+            name=tool_name,
+            arguments=dict(arguments),
+        )
 
     def forget(self, connector_id: str, *, project_id: str) -> dict[str, object]:
         config = self._require_project(connector_id, project_id)

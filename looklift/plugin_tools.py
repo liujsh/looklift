@@ -19,6 +19,9 @@ from .plugin_registry import PluginRegistry
 
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 _RISKS = frozenset({"read_only", "local_write", "external_read", "external_write"})
+_CONFIRMATION_CONTROLS = frozenset(
+    {"text", "textarea", "select", "datetime-local", "number", "readonly"}
+)
 
 
 class PluginToolError(ValueError):
@@ -28,6 +31,50 @@ class PluginToolError(ValueError):
 def _canonical_hash(value: Mapping[str, Any]) -> str:
     encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class PluginConfirmationField:
+    """由宿主渲染的外写确认字段，不允许插件注入任意界面。"""
+
+    key: str
+    label: str
+    control: str
+    options: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "options", tuple(self.options))
+        if not isinstance(self.key, str) or not _SAFE_NAME.fullmatch(self.key):
+            raise PluginToolError("确认字段参数名不安全")
+        if not isinstance(self.label, str) or not self.label.strip() or len(self.label) > 80:
+            raise PluginToolError("确认字段标签无效")
+        if self.control not in _CONFIRMATION_CONTROLS:
+            raise PluginToolError("确认字段控件不受支持")
+        if not all(isinstance(item, str) and item for item in self.options):
+            raise PluginToolError("确认字段选项无效")
+        if len(set(self.options)) != len(self.options):
+            raise PluginToolError("确认字段选项不能重复")
+        if self.control == "select" and not self.options:
+            raise PluginToolError("选择字段必须声明选项")
+        if self.control != "select" and self.options:
+            raise PluginToolError("非选择字段不能声明选项")
+
+    def public_dict(self) -> dict[str, Any]:
+        return {
+            "key": self.key,
+            "label": self.label,
+            "control": self.control,
+            "options": list(self.options),
+        }
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "PluginConfirmationField":
+        return cls(
+            key=value["key"],
+            label=value["label"],
+            control=value["control"],
+            options=tuple(value.get("options", ())),
+        )
 
 
 @dataclass(frozen=True)
@@ -44,11 +91,19 @@ class PluginTool:
     aliases: tuple[str, ...] = ()
     task_tags: tuple[str, ...] = ()
     requires_account: bool = False
+    confirmation_fields: tuple[PluginConfirmationField, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "capabilities", frozenset(self.capabilities))
         object.__setattr__(self, "aliases", tuple(self.aliases))
         object.__setattr__(self, "task_tags", tuple(self.task_tags))
+        fields = tuple(
+            item
+            if isinstance(item, PluginConfirmationField)
+            else PluginConfirmationField.from_dict(item)
+            for item in self.confirmation_fields
+        )
+        object.__setattr__(self, "confirmation_fields", fields)
         if not all(_SAFE_NAME.fullmatch(value) for value in (self.plugin_name, self.service, self.name)):
             raise PluginToolError("Plugin、服务或工具名称不安全")
         if not re.fullmatch(r"[0-9a-f]{64}", self.plugin_hash):
@@ -59,6 +114,13 @@ class PluginTool:
             raise PluginToolError("工具输入 Schema 顶层必须是 object")
         _validate_schema_shape(self.input_schema)
         object.__setattr__(self, "input_schema", dict(self.input_schema))
+        properties = self.input_schema.get("properties", {})
+        if not isinstance(properties, Mapping) or any(
+            field.key not in properties for field in fields
+        ):
+            raise PluginToolError("确认字段必须引用已声明的顶层参数")
+        if len({field.key for field in fields}) != len(fields):
+            raise PluginToolError("确认字段不能重复")
 
     @property
     def identity(self) -> str:
@@ -82,6 +144,9 @@ class PluginTool:
             "aliases": list(self.aliases),
             "task_tags": list(self.task_tags),
             "requires_account": self.requires_account,
+            "confirmation_fields": [
+                field.public_dict() for field in self.confirmation_fields
+            ],
         }
 
     @classmethod
@@ -90,6 +155,10 @@ class PluginTool:
         raw["capabilities"] = frozenset(raw.get("capabilities", ()))
         raw["aliases"] = tuple(raw.get("aliases", ()))
         raw["task_tags"] = tuple(raw.get("task_tags", ()))
+        raw["confirmation_fields"] = tuple(
+            PluginConfirmationField.from_dict(item)
+            for item in raw.get("confirmation_fields", ())
+        )
         return cls(**raw)
 
 
@@ -240,6 +309,15 @@ class PluginToolCatalog:
             if tool.identity == identity:
                 return tool
         raise PluginToolError("工具身份已失效")
+
+    def validate(self, identity: str, arguments: Mapping[str, Any]) -> PluginTool:
+        """使用登记的完整 Schema 校验 Action 修改后的参数。"""
+        tool = self.resolve(identity)
+        try:
+            _validate_instance(arguments, tool.input_schema)
+        except ValidationError as exc:
+            raise PluginToolError("Action 参数不符合完整 Schema") from exc
+        return tool
 
 
 class PluginToolGateway:

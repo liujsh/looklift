@@ -131,6 +131,86 @@ describe("LookliftClient", () => {
     ]);
   });
 
+  it("覆盖项目插件与账号连接生命周期端点", async () => {
+    const queue = responseQueue(Array.from({ length: 6 }, () => Response.json({ plugins: [], connectors: [] })));
+    const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
+
+    await client.plugins("project/a");
+    await client.pluginConnectors("project/a");
+    await client.createPluginConnector({
+      plugin_name: "notes",
+      version: "1.0.0",
+      service_name: "main",
+      project_id: "project/a",
+      account_id: "work",
+      credential: "secret",
+      confirmed: true,
+    });
+    await client.connectPluginConnector("pc/1", "project/a");
+    await client.disconnectPluginConnector("pc/1", "project/a");
+    await client.forgetPluginConnector("pc/1", "project/a");
+
+    expect(queue.requests.map((request) => `${request.init.method ?? "GET"} ${request.url}`)).toEqual([
+      "GET http://127.0.0.1:9/api/plugins?project_id=project%2Fa",
+      "GET http://127.0.0.1:9/api/plugin-connectors?project_id=project%2Fa",
+      "POST http://127.0.0.1:9/api/plugin-connectors",
+      "POST http://127.0.0.1:9/api/plugin-connectors/pc%2F1/connect",
+      "DELETE http://127.0.0.1:9/api/plugin-connectors/pc%2F1/connection?project_id=project%2Fa",
+      "DELETE http://127.0.0.1:9/api/plugin-connectors/pc%2F1/account?project_id=project%2Fa",
+    ]);
+    expect(JSON.parse(String(queue.requests[2].init.body))).toMatchObject({
+      credential: "secret",
+      confirmed: true,
+    });
+    expect(JSON.parse(String(queue.requests[3].init.body))).toEqual({ project_id: "project/a" });
+  });
+
+  it("插件版本查询、授权与停用始终携带精确版本", async () => {
+    const queue = responseQueue(Array.from({ length: 4 }, () => Response.json({ plugins: [], ok: true })));
+    const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
+
+    await client.plugins("project/a", true);
+    await client.grantPlugin("notes", { project_id: "project/a", version: "1.2.3", capabilities: ["notes.read"], scope: "run" });
+    await client.revokePlugin("notes", "1.2.3", "project/a");
+    await client.setPluginEnabled("notes", "1.2.3", false);
+
+    expect(queue.requests.map((request) => `${request.init.method ?? "GET"} ${request.url}`)).toEqual([
+      "GET http://127.0.0.1:9/api/plugins?project_id=project%2Fa&include_disabled=true",
+      "POST http://127.0.0.1:9/api/plugins/notes/grant",
+      "DELETE http://127.0.0.1:9/api/plugins/notes/grant?project_id=project%2Fa&version=1.2.3",
+      "POST http://127.0.0.1:9/api/plugins/notes/state",
+    ]);
+    expect(JSON.parse(String(queue.requests[3].init.body))).toEqual({ version: "1.2.3", enabled: false, confirmed: true });
+  });
+
+  it("覆盖项目 Action 的修改、确认、拒绝与取消端点", async () => {
+    const queue = responseQueue(Array.from({ length: 5 }, () => Response.json({ actions: [] })));
+    const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
+
+    await client.pluginActions("project/a");
+    await client.revisePluginAction("action/1", "project/a", 3, { title: "最终稿" });
+    await client.confirmPluginAction("action/1", "project/a", 4);
+    await client.rejectPluginAction("action/1", "project/a");
+    await client.cancelPluginAction("action/1", "project/a");
+
+    expect(queue.requests.map((request) => `${request.init.method ?? "GET"} ${request.url}`)).toEqual([
+      "GET http://127.0.0.1:9/api/plugin-actions?project_id=project%2Fa",
+      "POST http://127.0.0.1:9/api/plugin-actions/action%2F1/revise",
+      "POST http://127.0.0.1:9/api/plugin-actions/action%2F1/confirm",
+      "POST http://127.0.0.1:9/api/plugin-actions/action%2F1/reject",
+      "POST http://127.0.0.1:9/api/plugin-actions/action%2F1/cancel",
+    ]);
+    expect(JSON.parse(String(queue.requests[1].init.body))).toEqual({
+      project_id: "project/a",
+      expected_revision: 3,
+      arguments: { title: "最终稿" },
+    });
+    expect(JSON.parse(String(queue.requests[2].init.body))).toEqual({
+      project_id: "project/a",
+      expected_revision: 4,
+    });
+  });
+
   it("浏览器上传使用 multipart 且不手写 Content-Type 边界", async () => {
     const queue = responseQueue([Response.json({ path: "C:/temp/photo.jpg" })]);
     const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);

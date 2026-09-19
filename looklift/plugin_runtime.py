@@ -125,6 +125,9 @@ class StdioPluginClientFactory:
                 "aliases": list(tool.aliases),
                 "task_tags": list(tool.task_tags),
                 "requires_account": tool.requires_account,
+                "confirmation_fields": [
+                    field.public_dict() for field in tool.confirmation_fields
+                ],
             }
             for tool in self._registry.tools_for(manifest.name, manifest.version)
             if tool.service == service.name

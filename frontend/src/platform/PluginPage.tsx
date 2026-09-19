@@ -2,14 +2,27 @@ import { useEffect, useState } from "react";
 import type { LookliftClient } from "../api/client";
 import type { PluginSummary } from "../api/types";
 import { Icon } from "./icons";
+import { PluginConnections } from "./PluginConnections";
+import { PluginActions } from "./PluginActions";
+
+const pluginKey = (plugin: Pick<PluginSummary, "id" | "version">) => `${plugin.id}@${plugin.version}`;
 
 export function PluginPage({ client }: { client: LookliftClient }) {
   const [plugins, setPlugins] = useState<PluginSummary[]>([]);
   const [projectId, setProjectId] = useState("default-project");
+  const [projectDraft, setProjectDraft] = useState("default-project");
   const [selected, setSelected] = useState<Record<string, string[]>>({});
+  const [connectionTarget, setConnectionTarget] = useState<string | null>(null);
+  const [stateTarget, setStateTarget] = useState<string | null>(null);
   const [status, setStatus] = useState("正在读取插件…");
-  const load = async () => { setPlugins(await client.plugins()); setStatus(""); };
-  useEffect(() => { void load().catch(() => setStatus("插件读取失败")); }, [client]);
+  const load = async () => {
+    const items = await client.plugins(projectId, true);
+    setPlugins(items);
+    setSelected(Object.fromEntries(items.map((plugin) => [pluginKey(plugin), plugin.granted_capabilities])));
+    setStatus("");
+  };
+  useEffect(() => { void load().catch(() => setStatus("插件读取失败")); }, [client, projectId]);
+  useEffect(() => { setConnectionTarget(null); }, [projectId]);
   const toggle = (id: string, capability: string) => setSelected((current) => {
     const values = new Set(current[id] ?? []);
     if (values.has(capability)) values.delete(capability); else values.add(capability);
@@ -18,7 +31,7 @@ export function PluginPage({ client }: { client: LookliftClient }) {
   const grant = async (plugin: PluginSummary) => {
     setStatus("正在保存授权…");
     try {
-      await client.grantPlugin(plugin.id, { project_id: projectId, capabilities: selected[plugin.id] ?? [], scope: "run" });
+      await client.grantPlugin(plugin.id, { project_id: projectId, version: plugin.version, capabilities: selected[pluginKey(plugin)] ?? [], scope: "run" });
       await load();
       setStatus("授权已更新");
     } catch (reason) { setStatus(reason instanceof Error ? reason.message : "授权失败"); }
@@ -26,10 +39,20 @@ export function PluginPage({ client }: { client: LookliftClient }) {
   const revoke = async (plugin: PluginSummary) => {
     setStatus("正在撤销授权…");
     try {
-      await client.revokePlugin(plugin.id, projectId);
+      await client.revokePlugin(plugin.id, plugin.version, projectId);
       await load();
       setStatus("授权已撤销");
     } catch (reason) { setStatus(reason instanceof Error ? reason.message : "撤销失败"); }
+  };
+  const setEnabled = async (plugin: PluginSummary, enabled: boolean) => {
+    setStatus(enabled ? "正在重新启用插件…" : "正在停用插件…");
+    try {
+      await client.setPluginEnabled(plugin.id, plugin.version, enabled);
+      await load();
+      setStateTarget(null);
+      if (!enabled && connectionTarget === pluginKey(plugin)) setConnectionTarget(null);
+      setStatus(enabled ? "插件已重新启用，需要重新授权后才能调用" : "插件已停用，相关授权与在线连接已收敛");
+    } catch (reason) { setStatus(reason instanceof Error ? reason.message : "插件状态更新失败"); }
   };
 
   return (
@@ -40,9 +63,14 @@ export function PluginPage({ client }: { client: LookliftClient }) {
           <h1>插件管理</h1>
           <p>插件只能使用 Manifest 已声明、且你明确授予的最小能力集合。</p>
         </div>
-        <label className="plugin-project">项目范围
-          <input value={projectId} onChange={(event) => setProjectId(event.target.value)} />
-        </label>
+        <form className="plugin-project" onSubmit={(event) => {
+          event.preventDefault();
+          const next = projectDraft.trim();
+          if (next) setProjectId(next);
+        }}>
+          <label>项目范围<input required pattern="[a-z0-9][a-z0-9_-]{0,63}" value={projectDraft} onChange={(event) => setProjectDraft(event.target.value)} /></label>
+          <button type="submit">载入项目</button>
+        </form>
       </header>
 
       {status && <p role="status" className="settings-status">{status}</p>}
@@ -72,8 +100,8 @@ export function PluginPage({ client }: { client: LookliftClient }) {
                 <label key={capability}>
                   <input
                     type="checkbox"
-                    checked={(selected[plugin.id] ?? plugin.granted_capabilities).includes(capability)}
-                    onChange={() => toggle(plugin.id, capability)}
+                    checked={(selected[pluginKey(plugin)] ?? plugin.granted_capabilities).includes(capability)}
+                    onChange={() => toggle(pluginKey(plugin), capability)}
                   />{capability}
                 </label>
               ))}
@@ -81,13 +109,22 @@ export function PluginPage({ client }: { client: LookliftClient }) {
 
             <small>摘要 {plugin.content_hash.slice(0, 12)} · 当前授权：{plugin.granted_capabilities.join("、") || "无"}</small>
 
-            <div>
+            <div className="plugin-card-actions">
               <button type="button" disabled={!plugin.enabled} onClick={() => void grant(plugin)}>
                 <Icon name="shield-check" />保存最小授权
               </button>
               <button type="button" onClick={() => void revoke(plugin)}>
                 <Icon name="shield-off" />撤销授权
               </button>
+              {plugin.enabled && plugin.services.length > 0 && (
+                <button type="button" onClick={() => setConnectionTarget(pluginKey(plugin))}>连接账号</button>
+              )}
+              {plugin.source !== "builtin" && (plugin.enabled ? (
+                stateTarget === pluginKey(plugin) ? <>
+                  <button type="button" className="danger" onClick={() => void setEnabled(plugin, false)}>确认停用</button>
+                  <button type="button" onClick={() => setStateTarget(null)}>取消</button>
+                </> : <button type="button" className="quiet-danger" onClick={() => setStateTarget(pluginKey(plugin))}>停用</button>
+              ) : <button type="button" onClick={() => void setEnabled(plugin, true)}>重新启用</button>)}
             </div>
           </article>
         ))}
@@ -100,6 +137,15 @@ export function PluginPage({ client }: { client: LookliftClient }) {
           </div>
         )}
       </div>
+
+      <PluginConnections
+        client={client}
+        projectId={projectId}
+        plugins={plugins}
+        targetId={connectionTarget}
+        onTargetChange={setConnectionTarget}
+      />
+      <PluginActions client={client} projectId={projectId} />
     </main>
   );
 }

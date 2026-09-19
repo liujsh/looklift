@@ -5,12 +5,27 @@ import pytest
 from looklift.capabilities import CapabilityGrant
 from looklift.plugin_registry import PluginManifest, PluginRegistry
 from looklift.plugin_tools import (
+    PluginConfirmationField,
     ExposureBudget,
     PluginTool,
     PluginToolCatalog,
     PluginToolError,
     PluginToolGateway,
 )
+
+
+def test_confirmation_field_must_reference_declared_top_level_argument():
+    digest = "a" * 64
+
+    with pytest.raises(PluginToolError, match="确认字段"):
+        PluginTool(
+            "redbook", "1.0.0", digest, "main", "publish", "发布",
+            {"type": "object", "properties": {"title": {"type": "string"}}},
+            frozenset({"social.publish"}), "external_write",
+            confirmation_fields=(
+                PluginConfirmationField("unknown", "未知", "text"),
+            ),
+        )
 
 
 def _manifest(name: str, digest: str, *, aliases: tuple[str, ...] = ()) -> PluginManifest:

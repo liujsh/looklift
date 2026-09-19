@@ -82,6 +82,23 @@ class PluginAction:
         encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
+    def public_dict(self) -> dict[str, Any]:
+        """返回确认界面所需事实，不暴露内部摘要或确认凭证。"""
+        return {
+            "action_id": self.action_id,
+            "project_id": self.project_id,
+            "plugin_identity": self.plugin_identity,
+            "account_id": self.account_id,
+            "arguments": dict(self.arguments),
+            "asset_hashes": list(self.asset_hashes),
+            "state": self.state.value,
+            "revision": self.revision,
+            "expires_at": self.expires_at,
+            "result": None if self.result is None else dict(self.result),
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
 
 class PluginActionStore:
     """每个 Action 独立原子快照；确认只在宿主保存且仅消费一次。"""
@@ -152,9 +169,37 @@ class PluginActionStore:
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise ActionError("Action 快照损坏") from exc
 
-    def revise(self, action_id: str, *, arguments: Mapping[str, Any]) -> PluginAction:
+    def list(self, *, project_id: str) -> tuple[PluginAction, ...]:
+        """按项目返回 Action，并在读取时收敛已过期的待确认项。"""
+        if not isinstance(project_id, str) or not project_id.strip():
+            raise ActionError("Action 项目不能为空")
+        with self._lock:
+            actions: list[PluginAction] = []
+            for path in sorted(self._root.glob("*.json")):
+                try:
+                    action = self.get(path.stem)
+                    if action.project_id != project_id:
+                        continue
+                    try:
+                        action = self._expire(action)
+                    except ActionError:
+                        action = self.get(path.stem)
+                    actions.append(action)
+                except ActionError:
+                    continue
+            return tuple(actions)
+
+    def revise(
+        self,
+        action_id: str,
+        *,
+        arguments: Mapping[str, Any],
+        expected_revision: int | None = None,
+    ) -> PluginAction:
         with self._lock:
             action = self.get(action_id)
+            if expected_revision is not None and action.revision != expected_revision:
+                raise ActionError("Action revision 已变化")
             if action.state not in {ActionState.PENDING_CONFIRMATION, ActionState.CONFIRMED}:
                 raise ActionError("Action 当前状态不能修改")
             return self._save(

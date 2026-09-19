@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from looklift.capabilities import CapabilityGrant, CapabilityGrantStore, ScopedTokenStore
-from looklift.plugin_registry import PluginManifest, PluginManifestError, PluginRegistry
+from looklift.plugin_registry import PluginManifest, PluginManifestError, PluginRegistry, PluginService
 from looklift.skill_staging import SkillStagingError, stage_skill_snapshot
 
 
@@ -29,6 +29,8 @@ def test_registry_resolves_semver_and_uninstall_preserves_history():
     registry.uninstall("catalog-tools", "1.10.0")
     assert registry.resolve("catalog-tools").version == "1.9.0"
     assert registry.resolve("catalog-tools", "1.10.0", include_disabled=True).enabled is False
+    registry.set_enabled("catalog-tools", "1.10.0", enabled=True)
+    assert registry.resolve("catalog-tools").version == "1.10.0"
 
 
 def test_manifest_rejects_bad_digest_and_privileged_capability():
@@ -78,6 +80,37 @@ def test_registry_lists_versions_without_exposing_disabled_as_active():
     assert listed[0]["name"] == "catalog-tools"
     assert listed[0]["version"] == "1.0.0"
     assert registry.list(include_disabled=True)[-1]["enabled"] is False
+
+
+def test_registry_list_projects_only_safe_service_metadata():
+    registry = PluginRegistry()
+    registry.install(
+        PluginManifest(
+            2,
+            "notes",
+            "1.0.0",
+            "connector",
+            "notes",
+            "sidecar",
+            ("text",),
+            frozenset({"notes.read"}),
+            "a" * 64,
+            services=(
+                PluginService(
+                    "main",
+                    "stdio",
+                    "runtime/notes.exe",
+                    "b" * 64,
+                    arguments=("--mcp",),
+                    credential_env="NOTES_TOKEN",
+                ),
+            ),
+        )
+    )
+
+    assert registry.list()[0]["services"] == [
+        {"name": "main", "transport": "stdio", "requires_credential": True}
+    ]
 
 
 def test_grant_store_persists_project_scope_and_revocation(tmp_path):

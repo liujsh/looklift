@@ -140,12 +140,18 @@ class PluginRegistry:
         return max(candidates, key=lambda item: _version_key(item.version))
 
     def uninstall(self, name: str, version: str) -> None:
+        self.set_enabled(name, version, enabled=False)
+
+    def set_enabled(self, name: str, version: str, *, enabled: bool) -> PluginManifest:
+        if not isinstance(enabled, bool):
+            raise PluginManifestError("Plugin 启用状态无效")
         key = (name, version)
         try:
-            self._items[key] = replace(self._items[key], enabled=False)
+            self._items[key] = replace(self._items[key], enabled=enabled)
         except KeyError as exc:
             raise PluginManifestError("未知 Plugin") from exc
         self._save()
+        return self._items[key]
 
     def tools_for(self, name: str, version: str | None = None) -> tuple["PluginTool", ...]:
         manifest = self.resolve(name, version)
@@ -191,10 +197,7 @@ class PluginRegistry:
                     {
                         "name": service.name,
                         "transport": service.transport,
-                        "entrypoint": service.entrypoint,
-                        "entrypoint_sha256": service.entrypoint_sha256,
-                        "arguments": list(service.arguments),
-                        "credential_env": service.credential_env,
+                        "requires_credential": service.credential_env is not None,
                     }
                     for service in item.services
                 ],

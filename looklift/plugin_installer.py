@@ -218,6 +218,7 @@ class PluginPackageInstaller:
                 aliases=tuple(item.get("aliases", ())),
                 task_tags=tuple(item.get("task_tags", ())),
                 requires_account=bool(item.get("requires_account", False)),
+                confirmation_fields=tuple(item.get("confirmation_fields", ())),
             )
             for item in raw_tools
         )

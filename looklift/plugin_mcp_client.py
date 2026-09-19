@@ -147,6 +147,7 @@ class ManagedMcpClient:
                 aliases=tuple(metadata.get("aliases", ())),
                 task_tags=tuple(metadata.get("task_tags", ())),
                 requires_account=bool(metadata.get("requires_account", False)),
+                confirmation_fields=tuple(metadata.get("confirmation_fields", ())),
             )
         except (TypeError, PluginToolError) as exc:
             raise McpClientError("MCP 工具 Schema 与审核元数据无效") from exc

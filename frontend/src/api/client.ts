@@ -39,6 +39,9 @@ import type {
   RuntimeSummary,
   ProviderSettings,
   PluginSummary,
+  PluginConnectorSummary,
+  CreatePluginConnectorRequest,
+  PluginActionSummary,
   ContextConfig,
   ContextEntryType,
   ContextEntryView,
@@ -148,17 +151,76 @@ export class LookliftClient {
     return this.json("/api/diagnostics/export", { method: "POST" });
   }
 
-  async plugins(): Promise<PluginSummary[]> {
-    const result = await this.json<{ plugins: PluginSummary[] }>("/api/plugins");
+  async plugins(projectId?: string, includeDisabled = false): Promise<PluginSummary[]> {
+    const params = new URLSearchParams();
+    if (projectId) params.set("project_id", projectId);
+    if (includeDisabled) params.set("include_disabled", "true");
+    const query = params.size ? `?${params.toString()}` : "";
+    const result = await this.json<{ plugins: PluginSummary[] }>(`/api/plugins${query}`);
     return result.plugins;
   }
 
-  grantPlugin(id: string, payload: { project_id: string; capabilities: string[]; scope: "run" | "attempt" | "call" }): Promise<PluginSummary> {
+  grantPlugin(id: string, payload: { project_id: string; version: string; capabilities: string[]; scope: "run" | "attempt" | "call" }): Promise<PluginSummary> {
     return this.json(`/api/plugins/${encodeURIComponent(id)}/grant`, { method: "POST", body: JSON.stringify(payload) });
   }
 
-  revokePlugin(id: string, projectId: string): Promise<PluginSummary> {
-    return this.json(`/api/plugins/${encodeURIComponent(id)}/grant?project_id=${encodeURIComponent(projectId)}`, { method: "DELETE" });
+  revokePlugin(id: string, version: string, projectId: string): Promise<PluginSummary> {
+    return this.json(`/api/plugins/${encodeURIComponent(id)}/grant?project_id=${encodeURIComponent(projectId)}&version=${encodeURIComponent(version)}`, { method: "DELETE" });
+  }
+
+  setPluginEnabled(id: string, version: string, enabled: boolean): Promise<{ ok: true }> {
+    return this.json(`/api/plugins/${encodeURIComponent(id)}/state`, {
+      method: "POST",
+      body: JSON.stringify({ version, enabled, confirmed: true }),
+    });
+  }
+
+  async pluginConnectors(projectId: string): Promise<PluginConnectorSummary[]> {
+    const result = await this.json<{ connectors: PluginConnectorSummary[] }>(`/api/plugin-connectors?project_id=${encodeURIComponent(projectId)}`);
+    return result.connectors;
+  }
+
+  createPluginConnector(payload: CreatePluginConnectorRequest): Promise<PluginConnectorSummary> {
+    return this.json("/api/plugin-connectors", { method: "POST", body: JSON.stringify(payload) });
+  }
+
+  connectPluginConnector(id: string, projectId: string): Promise<{ connector_id: string; connected: true; tools: number }> {
+    return this.json(`/api/plugin-connectors/${encodeURIComponent(id)}/connect`, {
+      method: "POST",
+      body: JSON.stringify({ project_id: projectId }),
+    });
+  }
+
+  disconnectPluginConnector(id: string, projectId: string): Promise<PluginConnectorSummary> {
+    return this.json(`/api/plugin-connectors/${encodeURIComponent(id)}/connection?project_id=${encodeURIComponent(projectId)}`, { method: "DELETE" });
+  }
+
+  forgetPluginConnector(id: string, projectId: string): Promise<PluginConnectorSummary> {
+    return this.json(`/api/plugin-connectors/${encodeURIComponent(id)}/account?project_id=${encodeURIComponent(projectId)}`, { method: "DELETE" });
+  }
+
+  async pluginActions(projectId: string): Promise<PluginActionSummary[]> {
+    const result = await this.json<{ actions: PluginActionSummary[] }>(`/api/plugin-actions?project_id=${encodeURIComponent(projectId)}`);
+    return result.actions;
+  }
+
+  revisePluginAction(id: string, projectId: string, expectedRevision: number, arguments_: Record<string, unknown>): Promise<PluginActionSummary> {
+    return this.json(`/api/plugin-actions/${encodeURIComponent(id)}/revise`, {
+      method: "POST",
+      body: JSON.stringify({ project_id: projectId, expected_revision: expectedRevision, arguments: arguments_ }),
+    });
+  }
+
+  confirmPluginAction(id: string, projectId: string, expectedRevision: number): Promise<PluginActionSummary> {
+    return this.pluginActionCommand(id, "confirm", { project_id: projectId, expected_revision: expectedRevision });
+  }
+
+  rejectPluginAction(id: string, projectId: string): Promise<PluginActionSummary> {
+    return this.pluginActionCommand(id, "reject", { project_id: projectId });
+  }
+
+  cancelPluginAction(id: string, projectId: string): Promise<PluginActionSummary> {
+    return this.pluginActionCommand(id, "cancel", { project_id: projectId });
   }
 
   async recoverableAgentRuns(): Promise<AgentRunManifest[]> {
@@ -221,6 +283,13 @@ export class LookliftClient {
 
   private proposalAction(id: string, action: "confirm" | "reject" | "apply"): Promise<ProposalView> {
     return this.json(`/api/proposals/${encodeURIComponent(id)}/${action}`, { method: "POST" });
+  }
+
+  private pluginActionCommand(id: string, action: "confirm" | "reject" | "cancel", body: Record<string, unknown>): Promise<PluginActionSummary> {
+    return this.json(`/api/plugin-actions/${encodeURIComponent(id)}/${action}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
   }
 
   analyze(payload: AnalyzeRequest): Promise<{ task_id: string }> {

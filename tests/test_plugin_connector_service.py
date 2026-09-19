@@ -33,6 +33,10 @@ class FakeHost:
     def disconnect(self, connector_id):
         self.calls.append(("disconnect", connector_id))
 
+    def call(self, connector_id, *, workspace_id, name, arguments):
+        self.calls.append(("call", connector_id, workspace_id, name, arguments))
+        return {"ok": True}
+
     def forget_account(self, connector_id, *, credential_delete, profile_delete):
         self.calls.append(("forget", connector_id))
         credential_delete(f"dpapi://{connector_id}")
@@ -129,3 +133,65 @@ def test_connector_service_rejects_cross_project_operations(tmp_path):
     )
     with pytest.raises(PluginConnectorError, match="项目"):
         service.connect(created["connector_id"], project_id="project-b")
+
+
+def test_connector_service_calls_only_online_bound_account(tmp_path):
+    service, registry, _, host, _ = _service(tmp_path)
+    created = service.create(
+        plugin_name="notes",
+        version="1.0.0",
+        service_name="main",
+        project_id="project-a",
+        account_id="account-main",
+        credential="secret",
+        confirmed=True,
+    )
+    with pytest.raises(PluginConnectorError, match="在线"):
+        service.call_tool(
+            plugin_name="notes",
+            plugin_version="1.0.0",
+            service_name="main",
+            tool_name="publish",
+            project_id="project-a",
+            account_id="account-main",
+            arguments={"title": "草稿"},
+        )
+
+    service.connect(created["connector_id"], project_id="project-a")
+    registry.connect(created["connector_id"])
+    result = service.call_tool(
+        plugin_name="notes",
+        plugin_version="1.0.0",
+        service_name="main",
+        tool_name="publish",
+        project_id="project-a",
+        account_id="account-main",
+        arguments={"title": "草稿"},
+    )
+
+    assert result == {"ok": True}
+    assert host.calls[-1] == (
+        "call",
+        "pc-notes-001",
+        "project-a",
+        "publish",
+        {"title": "草稿"},
+    )
+
+
+def test_connector_service_disconnects_all_online_accounts_for_plugin_version(tmp_path):
+    service, registry, *_rest = _service(tmp_path)
+    created = service.create(
+        plugin_name="notes",
+        version="1.0.0",
+        service_name="main",
+        project_id="project-a",
+        account_id="account-main",
+        credential="secret",
+        confirmed=True,
+    )
+    service.connect(created["connector_id"], project_id="project-a")
+    registry.connect(created["connector_id"])
+
+    assert service.disconnect_plugin("notes", "1.0.0") == 1
+    assert registry.get(created["connector_id"]).connected is False

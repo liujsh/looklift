@@ -40,6 +40,69 @@ def test_plugin_api_lists_declared_capabilities_and_grants_subset():
     assert other["plugins"][0]["granted_capabilities"] == []
 
 
+def test_plugin_api_lists_disabled_versions_and_changes_exact_state(monkeypatch):
+    calls = []
+
+    class FakeLifecycle:
+        def set_enabled(self, name, version, *, enabled, confirmed):
+            calls.append((name, version, enabled, confirmed))
+            return {"name": name, "version": version, "enabled": enabled}
+
+    monkeypatch.setattr(api, "_plugin_lifecycle_service", lambda: FakeLifecycle())
+    status, changed = api.ROUTES[("POST", "/api/plugins/<id>/state")](
+        _ctx({"version": "1.2.3", "enabled": False, "confirmed": True}, plugin_id="notes")
+    )
+
+    assert status == 200
+    assert changed == {"ok": True}
+    assert calls == [("notes", "1.2.3", False, True)]
+
+    status, body = api.ROUTES[("POST", "/api/plugins/<id>/state")](
+        _ctx({"version": "1.2.3", "enabled": False}, plugin_id="notes")
+    )
+    assert status == 400
+    assert "字段" in body["error"]
+
+
+def test_plugin_api_scopes_grant_to_exact_version_and_lists_disabled(monkeypatch):
+    registry = PluginRegistry()
+    registry.install(
+        PluginManifest(
+            2, "notes", "1.0.0", "connector", "notes", "sidecar", ("text",),
+            frozenset({"notes.read"}), "a" * 64,
+        )
+    )
+    registry.install(
+        PluginManifest(
+            2, "notes", "2.0.0", "connector", "notes", "sidecar", ("text",),
+            frozenset({"notes.read"}), "b" * 64,
+        )
+    )
+    registry.set_enabled("notes", "2.0.0", enabled=False)
+    grants = CapabilityGrantStore()
+    monkeypatch.setattr(api, "_plugin_stores", lambda: (registry, grants))
+    monkeypatch.setattr(api, "_seed_plugin_registry", lambda: None)
+
+    status, _ = api.ROUTES[("POST", "/api/plugins/<id>/grant")](
+        _ctx({
+            "project_id": "project-a",
+            "version": "1.0.0",
+            "capabilities": ["notes.read"],
+            "scope": "run",
+        }, plugin_id="notes")
+    )
+    assert status == 200
+
+    status, payload = api.ROUTES[("GET", "/api/plugins")](
+        {"query": {"project_id": "project-a", "include_disabled": "true"}}
+    )
+    assert status == 200
+    by_version = {item["version"]: item for item in payload["plugins"]}
+    assert by_version["1.0.0"]["granted_capabilities"] == ["notes.read"]
+    assert by_version["2.0.0"]["granted_capabilities"] == []
+    assert by_version["2.0.0"]["enabled"] is False
+
+
 def test_plugin_api_rejects_capability_escalation_and_revokes():
     _, grants = api._plugin_stores()
     grants.clear()

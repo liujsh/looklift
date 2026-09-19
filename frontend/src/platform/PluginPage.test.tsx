@@ -1,0 +1,164 @@
+// @vitest-environment happy-dom
+import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { LookliftClient } from "../api/client";
+import { PluginPage } from "./PluginPage";
+
+const plugin = {
+  id: "notes",
+  version: "1.0.0",
+  kind: "connector",
+  task_kind: "notes",
+  mode: "sidecar",
+  inputs: ["text"],
+  capabilities: ["notes.read"],
+  granted_capabilities: [],
+  content_hash: "a".repeat(64),
+  source: "catalog",
+  enabled: true,
+  services: [{
+    name: "main",
+    transport: "stdio",
+    requires_credential: true,
+  }],
+};
+
+const connection = {
+  connector_id: "pc-notes",
+  protocol: "mcp",
+  receiver: "notes",
+  capabilities: ["notes.read"],
+  workspace_id: "default-project",
+  account_id: "work",
+  authorized: true,
+  connected: false,
+  plugin_name: "notes",
+  plugin_version: "1.0.0",
+  service: "main",
+};
+
+describe("PluginPage", () => {
+  let container: HTMLDivElement;
+  let root: ReturnType<typeof createRoot>;
+
+  beforeEach(() => {
+    (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
+  function client(overrides = {}) {
+    return {
+      plugins: vi.fn().mockResolvedValue([plugin]),
+      pluginConnectors: vi.fn().mockResolvedValue([connection]),
+      pluginActions: vi.fn().mockResolvedValue([]),
+      grantPlugin: vi.fn().mockResolvedValue(plugin),
+      revokePlugin: vi.fn().mockResolvedValue(plugin),
+      setPluginEnabled: vi.fn().mockResolvedValue({ ok: true }),
+      createPluginConnector: vi.fn().mockResolvedValue(connection),
+      connectPluginConnector: vi.fn().mockResolvedValue({ ...connection, connected: true, tools: 1 }),
+      disconnectPluginConnector: vi.fn().mockResolvedValue(connection),
+      forgetPluginConnector: vi.fn().mockResolvedValue({ ...connection, authorized: false }),
+      ...overrides,
+    } as unknown as LookliftClient;
+  }
+
+  async function fill(input: HTMLInputElement, value: string) {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  it("按项目同时加载授权与账号连接", async () => {
+    const current = client();
+    await act(async () => root.render(<PluginPage client={current} />));
+
+    await vi.waitFor(() => expect(container.textContent).toContain("账号连接"));
+    expect(current.plugins).toHaveBeenCalledWith("default-project", true);
+    expect(current.pluginConnectors).toHaveBeenCalledWith("default-project");
+    expect(current.pluginActions).toHaveBeenCalledWith("default-project");
+    expect(container.textContent).toContain("work");
+    expect(container.textContent).toContain("未连接");
+  });
+
+  it("只有显式确认后才创建连接，且不回显凭据", async () => {
+    const createPluginConnector = vi.fn().mockResolvedValue(connection);
+    const current = client({ createPluginConnector });
+    await act(async () => root.render(<PluginPage client={current} />));
+    await vi.waitFor(() => expect(container.textContent).toContain("notes"));
+
+    const open = [...container.querySelectorAll("button")].find((item) => item.textContent === "连接账号")!;
+    await act(async () => open.click());
+    await fill(container.querySelector('input[name="account_id"]') as HTMLInputElement, "work-account");
+    await fill(container.querySelector('input[name="credential"]') as HTMLInputElement, "top-secret");
+    const confirm = container.querySelector('input[name="confirmed"]') as HTMLInputElement;
+    await act(async () => confirm.click());
+    const submit = [...container.querySelectorAll("button")].find((item) => item.textContent === "保存连接")!;
+    await act(async () => submit.click());
+
+    await vi.waitFor(() => expect(createPluginConnector).toHaveBeenCalledWith({
+      plugin_name: "notes",
+      version: "1.0.0",
+      service_name: "main",
+      project_id: "default-project",
+      account_id: "work-account",
+      credential: "top-secret",
+      confirmed: true,
+    }));
+    expect(container.querySelector('input[name="credential"]')).toBeNull();
+    expect(container.textContent).not.toContain("top-secret");
+  });
+
+  it("连接生命周期始终携带当前项目", async () => {
+    const connectPluginConnector = vi.fn().mockResolvedValue({ ...connection, connected: true, tools: 1 });
+    const forgetPluginConnector = vi.fn().mockResolvedValue({ ...connection, authorized: false });
+    const current = client({ connectPluginConnector, forgetPluginConnector });
+    await act(async () => root.render(<PluginPage client={current} />));
+    await vi.waitFor(() => expect(container.textContent).toContain("未连接"));
+
+    const connect = [...container.querySelectorAll("button")].find((item) => item.textContent === "连接")!;
+    await act(async () => connect.click());
+    await vi.waitFor(() => expect(connectPluginConnector).toHaveBeenCalledWith("pc-notes", "default-project"));
+
+    const forget = [...container.querySelectorAll("button")].find((item) => item.textContent === "忘记账号")!;
+    await act(async () => forget.click());
+    expect(forgetPluginConnector).not.toHaveBeenCalled();
+    const confirmForget = [...container.querySelectorAll("button")].find((item) => item.textContent === "确认忘记")!;
+    await act(async () => confirmForget.click());
+    await vi.waitFor(() => expect(forgetPluginConnector).toHaveBeenCalledWith("pc-notes", "default-project"));
+  });
+
+  it("停用精确版本前要求二次确认", async () => {
+    const setPluginEnabled = vi.fn().mockResolvedValue({ ok: true });
+    const current = client({ setPluginEnabled });
+    await act(async () => root.render(<PluginPage client={current} />));
+    await vi.waitFor(() => expect(container.textContent).toContain("停用"));
+
+    const disable = [...container.querySelectorAll("button")].find((item) => item.textContent === "停用")!;
+    await act(async () => disable.click());
+    expect(setPluginEnabled).not.toHaveBeenCalled();
+    const confirm = [...container.querySelectorAll("button")].find((item) => item.textContent === "确认停用")!;
+    await act(async () => confirm.click());
+
+    await vi.waitFor(() => expect(setPluginEnabled).toHaveBeenCalledWith("notes", "1.0.0", false));
+  });
+
+  it("已停用版本保留账号审计但不能重新连接", async () => {
+    const current = client({ plugins: vi.fn().mockResolvedValue([{ ...plugin, enabled: false }]) });
+    await act(async () => root.render(<PluginPage client={current} />));
+    await vi.waitFor(() => expect(container.textContent).toContain("已禁用"));
+
+    const connect = [...container.querySelectorAll("button")].find((item) => item.textContent === "连接")!;
+    expect(connect.disabled).toBe(true);
+    expect(connect.title).toBe("对应插件版本已停用");
+    expect(container.textContent).toContain("work");
+  });
+});
