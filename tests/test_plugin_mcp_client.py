@@ -287,6 +287,53 @@ def test_streamable_http_transport_limits_resume_attempts_and_event_id():
     asyncio.run(unsafe.close())
 
 
+def test_streamable_http_transport_explicitly_rejects_server_requests():
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        seen.append(payload)
+        if "method" not in payload:
+            assert payload == {
+                "jsonrpc": "2.0",
+                "id": "server-1",
+                "error": {
+                    "code": -32601,
+                    "message": "客户端未启用 MCP 服务端反向请求",
+                },
+            }
+            return httpx.Response(202)
+        body = (
+            "event: message\ndata: "
+            + json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "server-1",
+                    "method": "sampling/createMessage",
+                    "params": {},
+                }
+            )
+            + "\n\nevent: message\ndata: "
+            + json.dumps(
+                {"jsonrpc": "2.0", "id": payload["id"], "result": {"ok": True}}
+            )
+            + "\n\n"
+        )
+        return httpx.Response(
+            200, headers={"Content-Type": "text/event-stream"}, text=body
+        )
+
+    transport = StreamableHttpMcpTransport(
+        "http://127.0.0.1:43123/mcp",
+        bearer_token="local-secret",
+        http_transport=httpx.MockTransport(handler),
+    )
+
+    assert asyncio.run(transport.request("ping", {})) == {"ok": True}
+    assert len(seen) == 2
+    asyncio.run(transport.close())
+
+
 def test_streamable_http_transport_stops_reading_when_response_exceeds_limit():
     class OversizedStream(httpx.AsyncByteStream):
         def __init__(self):

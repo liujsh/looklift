@@ -435,7 +435,10 @@ class StreamableHttpMcpTransport:
         if content_type != "text/event-stream":
             raise McpClientError("MCP HTTP 响应 Content-Type 不受支持")
         remaining = self._max_response_bytes - len(response.content)
-        result, event_id, retry_ms = self._parse_sse(response, request_id)
+        result, event_id, retry_ms, server_messages = self._parse_sse(
+            response, request_id
+        )
+        await self._reject_server_requests(server_messages)
         if result is not None:
             return result
         if event_id is None:
@@ -452,7 +455,10 @@ class StreamableHttpMcpTransport:
             content_type = resumed.headers.get("Content-Type", "").split(";", 1)[0].strip().casefold()
             if content_type != "text/event-stream":
                 raise McpClientError("MCP HTTP SSE 恢复响应类型无效")
-            result, next_event_id, retry_ms = self._parse_sse(resumed, request_id)
+            result, next_event_id, retry_ms, server_messages = self._parse_sse(
+                resumed, request_id
+            )
+            await self._reject_server_requests(server_messages)
             if result is not None:
                 return result
             if next_event_id is not None:
@@ -462,13 +468,15 @@ class StreamableHttpMcpTransport:
     @staticmethod
     def _parse_sse(
         response: httpx.Response, request_id: int
-    ) -> tuple[dict[str, Any] | None, str | None, int]:
+    ) -> tuple[dict[str, Any] | None, str | None, int, tuple[Mapping[str, Any], ...]]:
         try:
             text = response.content.decode("utf-8")
         except UnicodeDecodeError as exc:
             raise McpClientError("MCP HTTP SSE 不是 UTF-8") from exc
         last_event_id: str | None = None
         retry_ms = 0
+        result: dict[str, Any] | None = None
+        server_messages: list[Mapping[str, Any]] = []
         for block in text.replace("\r\n", "\n").split("\n\n"):
             lines = block.splitlines()
             for line in lines:
@@ -495,8 +503,33 @@ class StreamableHttpMcpTransport:
             except json.JSONDecodeError as exc:
                 raise McpClientError("MCP HTTP SSE data 无效") from exc
             if isinstance(message, Mapping) and message.get("id") == request_id:
-                return _jsonrpc_result(message, request_id), last_event_id, retry_ms
-        return None, last_event_id, retry_ms
+                result = _jsonrpc_result(message, request_id)
+            elif (
+                isinstance(message, Mapping)
+                and message.get("jsonrpc") == "2.0"
+                and isinstance(message.get("method"), str)
+            ):
+                server_messages.append(message)
+        return result, last_event_id, retry_ms, tuple(server_messages)
+
+    async def _reject_server_requests(
+        self, messages: tuple[Mapping[str, Any], ...]
+    ) -> None:
+        for message in messages:
+            if "id" not in message:
+                continue
+            response = await self._post(
+                {
+                    "jsonrpc": "2.0",
+                    "id": message["id"],
+                    "error": {
+                        "code": -32601,
+                        "message": "客户端未启用 MCP 服务端反向请求",
+                    },
+                }
+            )
+            if response.status_code != 202:
+                raise McpClientError("MCP HTTP 服务端反向请求拒绝未被接受")
 
 
 def _jsonrpc_result(message: Any, request_id: int) -> dict[str, Any]:
