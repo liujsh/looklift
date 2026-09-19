@@ -612,6 +612,7 @@ def _runtime_payload(definition, detection=None) -> dict:
         "capabilities": sorted(definition.capabilities),
         "supports_resume": definition.supports_resume,
         "supports_mcp": definition.supports_mcp,
+        "plugin_task_support": definition.plugin_task_support.value,
         "models": list(definition.models),
         "display_name": definition.display_name,
         "support_level": definition.support_level.value,

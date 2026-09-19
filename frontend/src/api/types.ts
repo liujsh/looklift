@@ -343,6 +343,7 @@ export type RuntimeSummary = {
   capabilities: string[];
   supports_resume: boolean;
   supports_mcp: boolean;
+  plugin_task_support: "verified" | "unverified" | "unsupported";
   models: string[];
   display_name: string;
   support_level: "stable" | "experimental";

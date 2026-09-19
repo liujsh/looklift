@@ -36,6 +36,7 @@
 - [x] 实现 2025-11-25 Streamable HTTP SSE 有界续传：解析事件 ID/retry，经 GET + Last-Event-ID 恢复原流，并限制事件 ID、重连次数、等待时间和累计响应大小。
 - [x] 收紧 HTTP 服务端反向消息：未声明 sampling/elicitation/roots 能力，反向请求显式返回 JSON-RPC -32601，通知无副作用消费且不能覆盖调用结果。
 - [x] 实现 OpenAI-compatible 统一上下文预算：每轮共同计量消息、活动 Schema、Skill/Reference、结果、图片和输出预留；保留当前目标与调用配对，必需 Schema 超限则在请求 Provider 前明确失败。
+- [x] 分离 Runtime 的 MCP 声明与插件任务契约状态：OpenAI-compatible/Pi 标记已验证，Claude Code/Codex 标记待验证，DeepSeek 标记不支持；未验证 Runtime 在创建 Adapter 前拒绝插件任务，设置页显示逐项状态。
 
 仍未完成：应用内正式目录公钥及轮换发布、真实目录服务、其他 CLI 契约验证、独立小红书包及真实平台人工验收。因此未完整收口的下方阶段任务保持未勾选，不能把本轮 Fake/契约通过等同最小演示完成。
 

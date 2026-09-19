@@ -7,6 +7,7 @@ import pytest
 from looklift.agent_adapter import (
     AgentImage,
     AgentRunInput,
+    AgentTaskKind,
     ScriptedAgentEvent,
     AgentEventKind,
 )
@@ -14,7 +15,11 @@ from looklift.domain_pack import compile_domain_pack
 from looklift.domain_pack_types import DomainPackRequest, VersionedJson, VersionedText
 from looklift.fake_agent_adapter import FakeAgentAdapter
 from looklift.runtime_lifecycle import RuntimeCapabilityError, RuntimeLifecycleEngine
-from looklift.runtime_registry import RuntimeDefinition, RuntimeRegistry
+from looklift.runtime_registry import (
+    PluginTaskSupport,
+    RuntimeDefinition,
+    RuntimeRegistry,
+)
 from looklift.builtin_runtimes import builtin_runtime_registry
 
 
@@ -95,6 +100,42 @@ def test_lifecycle_rejects_unknown_runtime_instead_of_selecting_another():
         asyncio.run(exercise())
 
 
+def test_lifecycle_rejects_unverified_plugin_runtime_before_factory() -> None:
+    registry = RuntimeRegistry()
+    registry.register(
+        RuntimeDefinition(
+            "codex-cli",
+            "cli",
+            command="codex",
+            plugin_task_support=PluginTaskSupport.UNVERIFIED,
+        )
+    )
+    factory_called = False
+
+    def factory():
+        nonlocal factory_called
+        factory_called = True
+        return FakeAgentAdapter([])
+
+    engine = RuntimeLifecycleEngine(registry, factories={"codex-cli": factory})
+    base = _run_input()
+    plugin_input = AgentRunInput(
+        base.run_id,
+        base.attempt_id,
+        base.domain_pack,
+        None,
+        base.model,
+        task_kind=AgentTaskKind.PLUGIN_TASK,
+    )
+
+    async def exercise():
+        return [event async for event in engine.start("codex-cli", plugin_input)]
+
+    with pytest.raises(RuntimeCapabilityError, match="未通过插件任务契约"):
+        asyncio.run(exercise())
+    assert factory_called is False
+
+
 def test_builtin_registry_keeps_user_and_compatibility_harnesses():
     registry = builtin_runtime_registry()
     assert [item.runtime_id for item in registry.list()] == [
@@ -106,3 +147,8 @@ def test_builtin_registry_keeps_user_and_compatibility_harnesses():
         "fake",
     ]
     assert registry.get("pi-cli").supports_resume is True
+    assert registry.get("pi-cli").plugin_task_support is PluginTaskSupport.VERIFIED
+    assert registry.get("openai-api").plugin_task_support is PluginTaskSupport.VERIFIED
+    assert registry.get("claude-code").plugin_task_support is PluginTaskSupport.UNVERIFIED
+    assert registry.get("codex-cli").plugin_task_support is PluginTaskSupport.UNVERIFIED
+    assert registry.get("deepseek-cli").plugin_task_support is PluginTaskSupport.UNSUPPORTED

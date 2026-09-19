@@ -539,6 +539,8 @@ finish_candidate（模型终态）→ 内存候选，等待未来 UI 人工确�
 
 `RuntimeLifecycleEngine` 根据用户明确选择的 Definition 创建 Adapter，校验所需能力与事件身份/序号，统一附加 Runtime 能力快照并负责取消和回收。内置目录声明 Pydantic API、Pi CLI 和 Fake 三种 Runtime；`GET /api/runtimes` 只暴露选择器所需的安全字段，不返回命令、端点、环境或凭据。
 
+Runtime 额外以 `plugin_task_support` 记录已验证/待验证/不支持，不从 `supports_mcp` 或品牌名推断插件执行能力。当前 OpenAI-compatible 与 Pi 通过离线契约；Claude Code/Codex 仍待会话级隔离、网关禁绕过、确认等待和历史预算验证，DeepSeek 当前不支持。`RuntimeLifecycleEngine` 在 Adapter Factory 之前拒绝未通过契约的插件任务，Runtime API 和设置页投影同一状态。
+
 ### Plugin Registry、Scoped Token 与 Skill staging
 
 Plugin Manifest 校验稳定语义版本、内容 SHA-256、类型、模式和能力红线；Registry 保留所有历史版本，卸载只禁用当前选择，不删除历史运行引用。`ScopedTokenStore` 将 Grant 绑定项目、版本和 Attempt，撤销主体后现有令牌立即失效。Skill staging 只接受 `SKILL.md` 和一层 Markdown Reference，将规范化内容冻结到项目私有 Hash 目录并阻断路径穿越。

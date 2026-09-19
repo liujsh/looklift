@@ -28,6 +28,12 @@ const CAPABILITY_LABELS: Record<string, string> = {
   mcp: "MCP",
 };
 
+const PLUGIN_TASK_LABELS: Record<RuntimeSummary["plugin_task_support"], string> = {
+  verified: "插件任务已验证",
+  unverified: "插件任务待契约验证",
+  unsupported: "不支持插件任务",
+};
+
 type SettingsSection = "providers" | "privacy" | "memory";
 
 export function SettingsPage({ client, onBack }: { client: LookliftClient; onBack?(): void }) {
@@ -221,7 +227,7 @@ function RuntimeCard({ runtime, primary, onToggle, onModels, onDefault }: { runt
   const state = runtime.available === false ? "未检测到" : runtime.authenticated === false ? "需要认证" : "可用";
   return <article className="runtime-card" data-primary={primary} data-available={runtime.available !== false}>
     <div className="runtime-mark" aria-hidden="true">{runtime.display_name.slice(0, 2)}</div>
-    <div className="runtime-card-main"><header><div><strong>{runtime.display_name}</strong><small>{runtime.version ?? runtime.id}</small></div><div className="runtime-badges"><span data-state={runtime.available === false ? "missing" : "ready"}>{state}</span><span data-level={runtime.support_level}>{runtime.support_level === "stable" ? "正式" : "实验性"}</span><label><input type="checkbox" checked={runtime.enabled !== false} onChange={(event) => onToggle(event.target.checked)} />启用</label></div></header>
+    <div className="runtime-card-main"><header><div><strong>{runtime.display_name}</strong><small>{runtime.version ?? runtime.id}</small></div><div className="runtime-badges"><span data-state={runtime.available === false ? "missing" : "ready"}>{state}</span><span data-level={runtime.support_level}>{runtime.support_level === "stable" ? "正式" : "实验性"}</span><span data-plugin-support={runtime.plugin_task_support}>{PLUGIN_TASK_LABELS[runtime.plugin_task_support]}</span><label><input type="checkbox" checked={runtime.enabled !== false} onChange={(event) => onToggle(event.target.checked)} />启用</label></div></header>
       {primary && <><div className="runtime-capabilities">{runtime.capabilities.map((capability) => <span key={capability}>{CAPABILITY_LABELS[capability] ?? capability}</span>)}</div><p>{runtime.available === false ? runtime.error ?? "未找到可执行文件" : `${runtime.supports_mcp ? "支持 MCP" : "不支持 MCP"} · ${runtime.supports_resume ? "支持原生续接" : "使用事实恢复"}${runtime.models.length ? ` · ${runtime.models.length} 个模型` : ""}`}</p></>}
       <div className="runtime-card-actions"><button type="button" onClick={onModels}>查看模型</button>{runtime.models.length > 0 && <button type="button" onClick={() => onDefault(runtime.models[0])}>{runtime.is_default ? `默认：${runtime.default_model ?? runtime.models[0]}` : "设为默认"}</button>}</div>
     </div>

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from .runtime_registry import (
+    PluginTaskSupport,
     RuntimeDefinition,
     RuntimeRegistry,
     RuntimeSupportLevel,
@@ -22,6 +23,7 @@ _DEFINITIONS = (
         supports_mcp=True,
         contract_version=2,
         display_name="Claude Code",
+        plugin_task_support=PluginTaskSupport.UNVERIFIED,
         version_probe="claude-version",
         model_probe="claude-models",
         event_parser="claude-json-events",
@@ -39,6 +41,7 @@ _DEFINITIONS = (
         supports_mcp=True,
         contract_version=2,
         display_name="Codex",
+        plugin_task_support=PluginTaskSupport.UNVERIFIED,
         version_probe="codex-version",
         model_probe="codex-models",
         event_parser="codex-json-events",
@@ -59,6 +62,7 @@ _DEFINITIONS = (
         supports_mcp=True,
         contract_version=2,
         display_name="Pi",
+        plugin_task_support=PluginTaskSupport.VERIFIED,
         version_probe="pi-version",
         model_probe="pi-models",
         event_parser="pi-rpc-events",
@@ -88,6 +92,7 @@ _DEFINITIONS = (
         stream_format="sse",
         contract_version=2,
         display_name="OpenAI API",
+        plugin_task_support=PluginTaskSupport.VERIFIED,
         version_probe="openai-api-version",
         model_probe="openai-models",
         event_parser="openai-sse-events",

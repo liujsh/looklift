@@ -38,8 +38,8 @@ describe("AgentRunsPage", () => {
     const client = {
       recoverableAgentRuns: vi.fn().mockResolvedValueOnce([interrupted]).mockResolvedValueOnce([]),
       runtimes: vi.fn().mockResolvedValue([
-        { id: "openai-api", kind: "api", capabilities: [], supports_resume: false, supports_mcp: false, models: [] },
-        { id: "pi-cli", kind: "cli", capabilities: [], supports_resume: true, supports_mcp: true, models: [] },
+        { id: "openai-api", kind: "api", capabilities: [], supports_resume: false, supports_mcp: false, plugin_task_support: "verified", models: [] },
+        { id: "pi-cli", kind: "cli", capabilities: [], supports_resume: true, supports_mcp: true, plugin_task_support: "verified", models: [] },
       ]),
       resumeAgentRun,
     } as unknown as LookliftClient;
