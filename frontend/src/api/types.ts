@@ -379,6 +379,7 @@ export type PluginSummary = {
   content_hash: string;
   source: string;
   enabled: boolean;
+  installed: boolean;
   aliases: string[];
   description: string;
   services: PluginServiceSummary[];

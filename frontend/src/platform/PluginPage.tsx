@@ -54,6 +54,16 @@ export function PluginPage({ client }: { client: LookliftClient }) {
       setStatus(enabled ? "插件已重新启用，需要重新授权后才能调用" : "插件已停用，相关授权与在线连接已收敛");
     } catch (reason) { setStatus(reason instanceof Error ? reason.message : "插件状态更新失败"); }
   };
+  const cleanup = async (plugin: PluginSummary) => {
+    setStatus("正在安全清理插件包…");
+    try {
+      await client.cleanupPlugin(plugin.id, plugin.version);
+      await load();
+      setStateTarget(null);
+      if (connectionTarget === pluginKey(plugin)) setConnectionTarget(null);
+      setStatus("插件包已清理，Manifest 与审计历史仍保留");
+    } catch (reason) { setStatus(reason instanceof Error ? reason.message : "插件包清理失败"); }
+  };
 
   return (
     <main className="plugin-page" aria-label="插件管理">
@@ -86,7 +96,9 @@ export function PluginPage({ client }: { client: LookliftClient }) {
                   <p>{plugin.source} · v{plugin.version} · {plugin.kind}</p>
                 </div>
               </div>
-              <span className={`pill ${plugin.enabled ? "official" : "missing"}`}>{plugin.enabled ? "可用" : "已禁用"}</span>
+              <span className={`pill ${plugin.enabled ? "official" : "missing"}`}>
+                {plugin.enabled ? "可用" : plugin.installed ? "已禁用" : "包已清理"}
+              </span>
             </header>
 
             <div className="plugin-capsules">
@@ -119,12 +131,21 @@ export function PluginPage({ client }: { client: LookliftClient }) {
               {plugin.enabled && plugin.services.length > 0 && (
                 <button type="button" onClick={() => setConnectionTarget(pluginKey(plugin))}>连接账号</button>
               )}
-              {plugin.source !== "builtin" && (plugin.enabled ? (
+              {plugin.source !== "builtin" && plugin.enabled && (
                 stateTarget === pluginKey(plugin) ? <>
                   <button type="button" className="danger" onClick={() => void setEnabled(plugin, false)}>确认停用</button>
                   <button type="button" onClick={() => setStateTarget(null)}>取消</button>
                 </> : <button type="button" className="quiet-danger" onClick={() => setStateTarget(pluginKey(plugin))}>停用</button>
-              ) : <button type="button" onClick={() => void setEnabled(plugin, true)}>重新启用</button>)}
+              )}
+              {plugin.source !== "builtin" && !plugin.enabled && plugin.installed && (
+                stateTarget === pluginKey(plugin) ? <>
+                  <button type="button" className="danger" onClick={() => void cleanup(plugin)}>确认清理</button>
+                  <button type="button" onClick={() => setStateTarget(null)}>取消</button>
+                </> : <>
+                  <button type="button" onClick={() => void setEnabled(plugin, true)}>重新启用</button>
+                  <button type="button" className="quiet-danger" onClick={() => setStateTarget(pluginKey(plugin))}>清理包</button>
+                </>
+              )}
             </div>
           </article>
         ))}

@@ -72,6 +72,7 @@ class PluginManifest:
     content_hash: str
     source: str = "local"
     enabled: bool = True
+    installed: bool = True
     aliases: tuple[str, ...] = ()
     description: str = ""
     services: tuple[PluginService, ...] = ()
@@ -79,6 +80,12 @@ class PluginManifest:
     def __post_init__(self) -> None:
         if self.spec_version < 1 or not self.name or not _SEMVER.fullmatch(self.version):
             raise PluginManifestError("Plugin Manifest 身份或版本无效")
+        if (
+            not isinstance(self.enabled, bool)
+            or not isinstance(self.installed, bool)
+            or (self.enabled and not self.installed)
+        ):
+            raise PluginManifestError("Plugin 启用与安装状态无效")
         if not _SHA256.fullmatch(self.content_hash):
             raise PluginManifestError("Plugin 内容摘要必须是小写 SHA-256")
         if self.kind not in {"skill", "template", "connector", "provider"}:
@@ -133,7 +140,7 @@ class PluginRegistry:
             for (item_name, item_version), item in self._items.items()
             if item_name == name
             and (version is None or item_version == version)
-            and (include_disabled or item.enabled)
+            and (include_disabled or (item.enabled and item.installed))
         ]
         if not candidates:
             raise PluginManifestError("未知或已禁用 Plugin")
@@ -147,9 +154,27 @@ class PluginRegistry:
             raise PluginManifestError("Plugin 启用状态无效")
         key = (name, version)
         try:
-            self._items[key] = replace(self._items[key], enabled=enabled)
+            current = self._items[key]
         except KeyError as exc:
             raise PluginManifestError("未知 Plugin") from exc
+        if enabled and not current.installed:
+            raise PluginManifestError("Plugin 包已清理，不能重新启用")
+        self._items[key] = replace(current, enabled=enabled)
+        self._save()
+        return self._items[key]
+
+    def set_installed(self, name: str, version: str, *, installed: bool) -> PluginManifest:
+        """记录精确版本的包是否仍在磁盘，历史 Manifest 始终保留。"""
+        if not isinstance(installed, bool):
+            raise PluginManifestError("Plugin 安装状态无效")
+        key = (name, version)
+        try:
+            current = self._items[key]
+        except KeyError as exc:
+            raise PluginManifestError("未知 Plugin") from exc
+        if not installed and current.enabled:
+            raise PluginManifestError("清理 Plugin 包前必须先停用")
+        self._items[key] = replace(current, installed=installed)
         self._save()
         return self._items[key]
 
@@ -160,7 +185,7 @@ class PluginRegistry:
     def all_tools(self) -> tuple["PluginTool", ...]:
         tools: list["PluginTool"] = []
         for manifest in self._items.values():
-            if manifest.enabled:
+            if manifest.enabled and manifest.installed:
                 tools.extend(self._tools.get((manifest.name, manifest.version), ()))
         return tuple(sorted(tools, key=lambda item: item.identity))
 
@@ -191,6 +216,7 @@ class PluginRegistry:
                 "content_hash": item.content_hash,
                 "source": item.source,
                 "enabled": item.enabled,
+                "installed": item.installed,
                 "aliases": list(item.aliases),
                 "description": item.description,
                 "services": [
@@ -252,6 +278,7 @@ class PluginRegistry:
                         "content_hash": manifest.content_hash,
                         "source": manifest.source,
                         "enabled": manifest.enabled,
+                        "installed": manifest.installed,
                         "aliases": list(manifest.aliases),
                         "description": manifest.description,
                         "services": [
@@ -297,6 +324,7 @@ class PluginRegistry:
                     content_hash=raw["content_hash"],
                     source=raw.get("source", "local"),
                     enabled=raw.get("enabled", True),
+                    installed=raw.get("installed", True),
                     aliases=tuple(raw.get("aliases", ())),
                     description=raw.get("description", ""),
                     services=tuple(

@@ -17,6 +17,7 @@ const plugin = {
   content_hash: "a".repeat(64),
   source: "catalog",
   enabled: true,
+  installed: true,
   services: [{
     name: "main",
     transport: "stdio",
@@ -62,6 +63,7 @@ describe("PluginPage", () => {
       grantPlugin: vi.fn().mockResolvedValue(plugin),
       revokePlugin: vi.fn().mockResolvedValue(plugin),
       setPluginEnabled: vi.fn().mockResolvedValue({ ok: true }),
+      cleanupPlugin: vi.fn().mockResolvedValue({ ok: true }),
       createPluginConnector: vi.fn().mockResolvedValue(connection),
       connectPluginConnector: vi.fn().mockResolvedValue({ ...connection, connected: true, tools: 1 }),
       disconnectPluginConnector: vi.fn().mockResolvedValue(connection),
@@ -160,5 +162,34 @@ describe("PluginPage", () => {
     expect(connect.disabled).toBe(true);
     expect(connect.title).toBe("对应插件版本已停用");
     expect(container.textContent).toContain("work");
+  });
+
+  it("已停用版本清理包前要求二次确认", async () => {
+    const cleanupPlugin = vi.fn().mockResolvedValue({ ok: true });
+    const current = client({
+      plugins: vi.fn().mockResolvedValue([{ ...plugin, enabled: false }]),
+      cleanupPlugin,
+    });
+    await act(async () => root.render(<PluginPage client={current} />));
+    await vi.waitFor(() => expect(container.textContent).toContain("清理包"));
+
+    const cleanup = [...container.querySelectorAll("button")].find((item) => item.textContent === "清理包")!;
+    await act(async () => cleanup.click());
+    expect(cleanupPlugin).not.toHaveBeenCalled();
+    const confirm = [...container.querySelectorAll("button")].find((item) => item.textContent === "确认清理")!;
+    await act(async () => confirm.click());
+
+    await vi.waitFor(() => expect(cleanupPlugin).toHaveBeenCalledWith("notes", "1.0.0"));
+  });
+
+  it("包已清理版本只保留历史，不允许重新启用", async () => {
+    const current = client({
+      plugins: vi.fn().mockResolvedValue([{ ...plugin, enabled: false, installed: false }]),
+    });
+    await act(async () => root.render(<PluginPage client={current} />));
+    await vi.waitFor(() => expect(container.textContent).toContain("包已清理"));
+
+    expect([...container.querySelectorAll("button")].some((item) => item.textContent === "重新启用")).toBe(false);
+    expect([...container.querySelectorAll("button")].some((item) => item.textContent === "清理包")).toBe(false);
   });
 });

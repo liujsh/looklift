@@ -175,6 +175,13 @@ export class LookliftClient {
     });
   }
 
+  cleanupPlugin(id: string, version: string): Promise<{ ok: true }> {
+    return this.json(`/api/plugins/${encodeURIComponent(id)}/cleanup`, {
+      method: "POST",
+      body: JSON.stringify({ version, confirmed: true }),
+    });
+  }
+
   async pluginConnectors(projectId: string): Promise<PluginConnectorSummary[]> {
     const result = await this.json<{ connectors: PluginConnectorSummary[] }>(`/api/plugin-connectors?project_id=${encodeURIComponent(projectId)}`);
     return result.connectors;

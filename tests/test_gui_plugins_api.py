@@ -64,6 +64,30 @@ def test_plugin_api_lists_disabled_versions_and_changes_exact_state(monkeypatch)
     assert "字段" in body["error"]
 
 
+def test_plugin_api_cleans_exact_disabled_package_with_confirmation(monkeypatch):
+    calls = []
+
+    class FakeLifecycle:
+        def cleanup(self, name, version, *, confirmed):
+            calls.append((name, version, confirmed))
+            return {"name": name, "version": version, "installed": False}
+
+    monkeypatch.setattr(api, "_plugin_lifecycle_service", lambda: FakeLifecycle())
+    status, cleaned = api.ROUTES[("POST", "/api/plugins/<id>/cleanup")](
+        _ctx({"version": "1.2.3", "confirmed": True}, plugin_id="notes")
+    )
+
+    assert status == 200
+    assert cleaned == {"ok": True}
+    assert calls == [("notes", "1.2.3", True)]
+
+    status, body = api.ROUTES[("POST", "/api/plugins/<id>/cleanup")](
+        _ctx({"version": "1.2.3"}, plugin_id="notes")
+    )
+    assert status == 400
+    assert "字段" in body["error"]
+
+
 def test_plugin_api_scopes_grant_to_exact_version_and_lists_disabled(monkeypatch):
     registry = PluginRegistry()
     registry.install(

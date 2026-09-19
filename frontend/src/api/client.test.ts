@@ -165,22 +165,25 @@ describe("LookliftClient", () => {
     expect(JSON.parse(String(queue.requests[3].init.body))).toEqual({ project_id: "project/a" });
   });
 
-  it("插件版本查询、授权与停用始终携带精确版本", async () => {
-    const queue = responseQueue(Array.from({ length: 4 }, () => Response.json({ plugins: [], ok: true })));
+  it("插件版本查询、授权、停用与清理始终携带精确版本", async () => {
+    const queue = responseQueue(Array.from({ length: 5 }, () => Response.json({ plugins: [], ok: true })));
     const client = new LookliftClient("http://127.0.0.1:9", "token", queue.fetchFn);
 
     await client.plugins("project/a", true);
     await client.grantPlugin("notes", { project_id: "project/a", version: "1.2.3", capabilities: ["notes.read"], scope: "run" });
     await client.revokePlugin("notes", "1.2.3", "project/a");
     await client.setPluginEnabled("notes", "1.2.3", false);
+    await client.cleanupPlugin("notes", "1.2.3");
 
     expect(queue.requests.map((request) => `${request.init.method ?? "GET"} ${request.url}`)).toEqual([
       "GET http://127.0.0.1:9/api/plugins?project_id=project%2Fa&include_disabled=true",
       "POST http://127.0.0.1:9/api/plugins/notes/grant",
       "DELETE http://127.0.0.1:9/api/plugins/notes/grant?project_id=project%2Fa&version=1.2.3",
       "POST http://127.0.0.1:9/api/plugins/notes/state",
+      "POST http://127.0.0.1:9/api/plugins/notes/cleanup",
     ]);
     expect(JSON.parse(String(queue.requests[3].init.body))).toEqual({ version: "1.2.3", enabled: false, confirmed: true });
+    expect(JSON.parse(String(queue.requests[4].init.body))).toEqual({ version: "1.2.3", confirmed: true });
   });
 
   it("覆盖项目 Action 的修改、确认、拒绝与取消端点", async () => {

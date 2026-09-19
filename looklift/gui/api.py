@@ -160,7 +160,10 @@ def _plugin_lifecycle_service() -> PluginLifecycleService:
     if _PLUGIN_LIFECYCLE_SERVICE is None or _PLUGIN_LIFECYCLE_ROOT != root:
         registry, grants = _plugin_stores()
         _PLUGIN_LIFECYCLE_SERVICE = PluginLifecycleService(
-            registry, grants, _plugin_connector_service()
+            registry,
+            grants,
+            _plugin_connector_service(),
+            package_root=root / "plugins",
         )
         _PLUGIN_LIFECYCLE_ROOT = root
     return _PLUGIN_LIFECYCLE_SERVICE
@@ -364,6 +367,23 @@ def _set_plugin_state(ctx: dict) -> tuple[int, dict]:
             ctx["params"]["id"],
             payload["version"],
             enabled=payload["enabled"],
+            confirmed=payload["confirmed"],
+        )
+    except (KeyError, TypeError, PluginLifecycleError) as exc:
+        return 400, {"error": str(exc)}
+    return 200, {"ok": True}
+
+
+def _cleanup_plugin(ctx: dict) -> tuple[int, dict]:
+    payload, err = _json_body(ctx)
+    if err is not None:
+        return err
+    if set(payload) != {"version", "confirmed"}:
+        return 400, {"error": "Plugin 清理请求字段无效"}
+    try:
+        _plugin_lifecycle_service().cleanup(
+            ctx["params"]["id"],
+            payload["version"],
             confirmed=payload["confirmed"],
         )
     except (KeyError, TypeError, PluginLifecycleError) as exc:
@@ -2058,6 +2078,7 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("POST", "/api/plugins/<id>/grant"): _grant_plugin,
     ("DELETE", "/api/plugins/<id>/grant"): _revoke_plugin,
     ("POST", "/api/plugins/<id>/state"): _set_plugin_state,
+    ("POST", "/api/plugins/<id>/cleanup"): _cleanup_plugin,
     ("POST", "/api/plugins/tools/discover"): _discover_plugin_tools,
     ("POST", "/api/plugins/tools/describe"): _describe_plugin_tools,
     ("GET", "/api/plugin-connectors"): _get_plugin_connectors,

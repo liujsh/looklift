@@ -33,6 +33,35 @@ def test_registry_resolves_semver_and_uninstall_preserves_history():
     assert registry.resolve("catalog-tools").version == "1.10.0"
 
 
+def test_registry_preserves_cleaned_package_state(tmp_path):
+    registry = PluginRegistry(tmp_path)
+    registry.install(_manifest("1.0.0"))
+    registry.set_enabled("catalog-tools", "1.0.0", enabled=False)
+
+    cleaned = registry.set_installed("catalog-tools", "1.0.0", installed=False)
+
+    assert cleaned.enabled is False
+    assert cleaned.installed is False
+    assert PluginRegistry(tmp_path).resolve(
+        "catalog-tools", "1.0.0", include_disabled=True
+    ).installed is False
+
+    with pytest.raises(PluginManifestError, match="安装状态"):
+        PluginManifest(
+            1,
+            "catalog-tools",
+            "2.0.0",
+            "connector",
+            "catalog",
+            "declarative",
+            ("catalog",),
+            frozenset({"connector.read_catalog"}),
+            "b" * 64,
+            enabled=True,
+            installed=False,
+        )
+
+
 def test_manifest_rejects_bad_digest_and_privileged_capability():
     with pytest.raises(PluginManifestError, match="摘要"):
         _manifest("1.0.0", "bad")
