@@ -15,3 +15,13 @@ def test_runtime_list_api_exposes_safe_picker_data():
     assert next(item for item in body["runtimes"] if item["id"] == "pi-cli")[
         "support_level"
     ] == "stable"
+    plugin_support = {
+        item["id"]: item["plugin_task_support"] for item in body["runtimes"]
+    }
+    assert plugin_support == {
+        "claude-code": "unverified",
+        "codex-cli": "unverified",
+        "pi-cli": "verified",
+        "deepseek-cli": "unsupported",
+        "openai-api": "verified",
+    }

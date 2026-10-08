@@ -418,3 +418,38 @@
 - OpenAI-compatible 已由自研 `OpenAiApiAdapter`、HTTP 传输和 SSE/JSON Parser 承载，删除不可选择的 `pydantic-api` Runtime、Pydantic Adapter/模型构造、依赖、打包元数据和专属测试。
 - Anthropic 官方 SDK Provider 独立保留；旧 Run Manifest 中的 Runtime ID 继续按普通字符串读取，不要求对应 Runtime 注册。
 - 验证证据：后端全量 `727 passed, 1 skipped`；前端全量 `177 passed`，TypeScript 与 production build 通过。
+
+## 2026-09-12：Plugin MCP 工具发现与确认执行基础
+
+- 现有 Plugin Registry 增加版本化工具目录和原子持久化；Grant Store 按项目隔离，修复插件 API 把不同项目授权合并展示的问题。
+- 新增受控 stdio MCP Client、本地字段加权发现、分页短摘要、完整 Schema 激活、唯一工具别名和活动集 revision；桥接调用用 `jsonschema` Draft 2020-12 校验完整约束，目录变化使旧激活失效。
+- `PLUGIN_TASK` 支持无图/多张安全图，CLI Workspace 与 OpenAI-compatible 请求投影保持原 PHOTO_EDITING 单图 ABI；上下文压缩不再拆散 Tool Call/Result。
+- 新增匿名 Asset Broker 和持久化 Action Gate。外部写入首次调用不上传，确认后执行冻结参数；项目授权、账号、Plugin/Schema 或 revision 变化均阻止执行，超时进入结果未知且禁止自动重试。
+- 离线定向测试覆盖两个 Fake 插件、中文发现、预算、组合 Schema、MCP 分页、跨项目授权、确认消费、素材隔离和多图输入；最终后端全量基线为 `780 passed, 1 skipped`，受影响文件 Ruff 全部通过。
+- 当时待后续的本地安装与 API/Pi 通用任务循环已由下方阶段补齐；签名目录、受管 Streamable HTTP MCP、插件页确认卡、独立小红书包、登录及真实发布仍未完成，不宣称平台可用。
+
+### 后续阶段：本地安装与 API/Pi 通用任务循环
+
+- 新增只读本地 ZIP 安装链路，要求用户确认及目录给出的 SHA-256，校验许可、平台、固定依赖和逐文件摘要；路径穿越、大小写重复、Windows 保留名、符号链接、超量解压和异常压缩比均在解压前拒绝。
+- Connector Registry 可重启恢复配置和授权，但不会恢复旧进程的 connected 状态；Plugin Action 增加有效期、取消和启动恢复，遗留执行中写入统一标记结果未知。
+- OpenAI-compatible 与 Pi Adapter 在原有循环中增加 PLUGIN_TASK 策略。API 每轮可刷新激活工具的原生 Schema；Pi Extension 使用任务级固定桥接表，二者调用同一 Plugin Bridge/Gateway，待确认不再触发候选终态错误。
+- GUI/SSE 输入支持纯文字或最多 20 张、总计 40 MiB 的安全代理图；PHOTO_EDITING 的单图候选契约保持不变。
+- 受管 Streamable HTTP MCP Client 仅允许显式回环地址，强制 Bearer/Origin、无代理与无重定向，支持 JSON/SSE、协议版本、Session ID、响应上限和 DELETE 会话关闭；SSE 断线续传与服务端反向消息仍待后续。
+- 定向验证 `55 passed`（加入 HTTP Client 前）；安全自审补齐会话级活动集隔离与 HTTP 响应流式限额后，阶段收口后端全量基线为 `798 passed, 1 skipped`，受影响 Python 文件 Ruff 与 Pi Extension Node 语法检查通过。签名目录、其他 CLI、插件 UI 和真实平台仍未验收。
+- 后续供应链切片新增 Ed25519 签名目录、公钥撤销、有效期、防 revision 回滚、离线缓存和固定 HTTPS/SHA-256 包下载；目录名称、版本和许可证会在本地 ZIP 落盘前再次比对。离线定向测试 `11 passed`，最终后端全量基线 `805 passed, 1 skipped`；正式公钥/目录服务、真实 HTTPS 传输、插件 UI 与 Release 仍未接入，不宣称目录上线。
+- 目录网络层新增显式主机白名单、公网 DNS 校验、无环境代理/重定向及流式限额。Connector 会话管理器在握手和目录刷新后才上线，失败会回收 Transport，撤销先失效权威连接再关闭会话；`ManagedMcpClient` 修复了真实 stdio 进程从未启动的阻断。连接配置新增 Workspace 内账号 ID，仍不把凭据引用暴露给模型/UI。相关定向测试 `30 passed`，最终后端全量基线 `815 passed, 1 skipped`。生产目录、公钥、Connector 工厂、凭据/profile 清理和 GUI 接线继续保持未完成。
+- stdio 生产工厂把 Connector 固定到已安装 Plugin 版本与 Service，启动前复核包内入口 SHA-256，并以最小环境注入 DPAPI 凭据和账号独立 Profile；调用请求不能提交命令、入口或环境。普通断开保留长期状态，显式忘记账号才在撤权和进程回收后删除凭据/Profile。相关定向测试 `36 passed`，最终后端全量基线 `821 passed, 1 skipped`；GUI/API 生产接线仍未完成。
+- 为同步 GUI/API 增加长期 `ConnectorRuntimeHost`：MCP 连接、后续工具调用和回收固定在同一后台事件循环，禁止用请求级临时循环承载长连接。生产 `PluginConnectorService` 与五个 HTTP 操作完成项目隔离、显式确认创建、DPAPI 凭据写入、连接/断开和撤权后忘记账号，应用退出统一关闭 Host。随后把全局 Plugin Registry/Grant 惰性绑定到隔离配置目录并支持进程重启恢复，修复已有第三方 Plugin 时漏种内置目录插件的边界；定向测试 `26 passed`，最终后端全量基线 `829 passed, 1 skipped`。React 控件和真实账号登录仍待后续。
+- React 插件页新增项目级账号连接区，复用宿主脱敏 Service 元数据创建账号，公开投影只保留名称、传输类型和是否需要凭据，不暴露入口、参数、摘要或凭据环境变量。凭据使用 password 输入且成功后清空；连接、断开和忘记账号均携带当前项目，忘记账号采用两步确认。客户端与页面定向测试 `19 passed`、TypeScript 与 production build 通过，最终后端全量基线 `830 passed, 1 skipped`；本地 Mock 渲染完成桌面和 `390×844` 窄屏视觉检查。前端全量为 `188 passed, 6 failed`，失败来自当前 HEAD 已存在的 EditorShell/PanelPane/主题结构断言漂移，本轮插件页 diff 未触及对应组件和既有十六进制色值。目录安装/升级、Action 确认卡和真实账号登录仍待后续。
+- 新增生产 `PluginActionService` 与五个 HTTP 操作：项目查询只投影确认界面所需事实，不返回 Plugin/Schema/确认内部摘要；修改参数重新校验完整 Schema 和期望 revision，确认后再次核对 Grant，并只经 Plugin 版本、Service、项目、账号完全匹配的唯一在线 Connector 执行。拒绝、取消、过期和结果未知沿用同一持久化状态机，前端客户端同步冻结路由与数据契约。相关定向后端测试 `21 passed`、前端测试 `20 passed`、TypeScript 与 production build 通过，最终后端全量基线 `835 passed, 1 skipped`；前端全量为 `189 passed, 6 failed`，仍是当前 HEAD 已有的 EditorShell/PanelPane/主题断言漂移。声明式确认卡界面仍待后续。
+- 工具审核元数据新增受限确认字段映射，只允许引用完整输入 Schema 的顶层参数，并随安装目录和 MCP 实时工具恢复；Action Query 将映射与宿主可信的账号、素材顺序、有效期、revision 一起投影。React 插件页新增通用外写确认卡、声明式编辑控件、冻结参数/结果查看、保存修改、确认执行、两步拒绝和取消；存在未保存修改时禁止执行旧 revision。定向后端测试 `29 passed`、前端测试 `23 passed`，最终后端全量基线 `836 passed, 1 skipped`，production build 通过；前端全量为 `192 passed, 6 failed`，仍是当前 HEAD 已有的 EditorShell/PanelPane/主题断言漂移。当前会话没有可用浏览器，桌面和窄屏截图式视觉验收待人工完成。
+- 新增已安装 Plugin 精确版本生命周期。停用要求二次确认，先断开该版本全部在线账号，再撤销匹配内容摘要的跨项目 Grant，最后持久化 disabled；重新启用不恢复授权或连接，内置版本不可停用。插件 API 可显式列出停用历史，授权与撤销都携带精确版本，修复多版本并存时错误投影其他版本 Grant 的问题。React 保留停用账号审计但禁止重连，历史 Action 仍可查询且不能执行。定向后端测试 `25 passed`、前端测试 `26 passed`，最终后端全量基线 `843 passed, 1 skipped`，production build 通过；前端全量为 `195 passed, 6 failed`，仍是当前 HEAD 已有的 EditorShell/PanelPane/主题断言漂移。正式目录安装、升级和安全清理仍等待生产公钥与目录服务。
+- 安全清理与正式目录解耦：已停用的精确版本可在二次确认后先移出固定运行路径，再删除可执行包；Registry 以 `installed=false` 保留 Manifest、工具快照及 Action/账号审计事实，并拒绝重新启用。删除残留失败时仍保持隔离和不可运行，避免回滚成可能不完整的安装；账号凭据/Profile 继续通过“忘记账号”独立清除。插件相关后端测试 `79 passed`、前端插件测试 `28 passed`，最终后端全量基线为 `848 passed, 1 skipped`，production build 通过；前端全量为 `197 passed, 6 failed`，仍是当前 HEAD 已有的 EditorShell/PanelPane/主题断言漂移。正式目录公钥、真实目录服务和在线安装/升级仍未完成。
+- 新增目录分发业务层，使用已验签缓存投影精确版本的撤销、平台兼容、已安装、包存在和升级来源；过期缓存仅可浏览，安装必须重新读取有效快照，且在下载前拒绝撤销、不兼容和已有历史版本。目录版本收紧为 Registry 可执行的稳定三段语义版本，避免验签后仍无法登记。目录/分发定向测试 `13 passed`，插件相关测试 `83 passed`，最终后端全量基线为 `852 passed, 1 skipped`；正式公钥、真实目录服务和 GUI/API 接线仍未完成。
+- 新增严格目录信任配置：固定打包 JSON 的目录 URL、HTTPS 主机白名单与 Ed25519 active/revoked 公钥，不允许用户配置替换；缺少真实信任文件时目录 API 明确返回 503。GUI API 接入缓存浏览、刷新和精确版本安装，React 插件页展示 revision、过期/撤销/兼容/许可/能力与升级来源，安装需二次确认且不会自动授权。配置/目录/API 后端定向测试 `21 passed`、前端插件定向测试 `30 passed`，最终后端全量基线为 `862 passed, 1 skipped`，production build 通过；前端全量为 `199 passed, 6 failed`，仍是既有 EditorShell/PanelPane/主题断言漂移。正式公钥文件和真实目录服务仍待发布。
+- 受管 Streamable HTTP 增加 2025-11-25 SSE 有界续传：POST 流带事件 ID 后提前关闭时，通过同端点 GET 和 `Last-Event-ID` 恢复；遵守有限 `retry`，继承 Session/协议/Auth/Origin header，并限制事件 ID、重连次数与原请求累计响应大小。相关传输测试 `9 passed`、Connector/Runtime 联合定向测试 `18 passed`，最终后端全量基线为 `864 passed, 1 skipped`；服务端反向请求仍未启用。
+- HTTP SSE 不再静默丢弃服务端反向请求：由于宿主未声明 sampling/elicitation/roots 能力，收到带 ID 的反向请求会 POST 标准 JSON-RPC `-32601`，通知只作无副作用消费，二者都不能替代原调用结果。传输定向测试更新为 `10 passed`，插件相关测试 `96 passed`。
+- OpenAI-compatible Adapter 每轮在动态 Schema 刷新后执行统一上下文预算，共同计量消息、Skill/Reference、工具结果、Schema、图片成本和真实输出预留；未配 Provider tokenizer 时用 UTF-8 字节作保守上界并记录方法。旧历史按完整调用组压缩，必需 Schema 超限会在传输前返回 `context_budget_exceeded`。定向测试 `11 passed`，最终后端全量基线为 `870 passed, 1 skipped`，受影响文件 Ruff 与 diff check 通过。
+- Runtime Definition 新增独立插件任务契约状态，不再把 MCP 连接能力当作插件已可用。OpenAI-compatible/Pi 标记已通过，Claude Code/Codex 保持待验证，DeepSeek 明确不支持；生命周期引擎在创建 Adapter 前拒绝未验证的插件任务，设置页逐 Runtime 显示相同状态。后端全量 `871 passed, 1 skipped`，前端定向 `9 passed`、TypeScript 与 production build 通过；前端全量 `199 passed, 6 failed`，失败仍仅为既有 EditorShell/PanelPane/主题结构断言漂移。当前环境无可用浏览器控制入口，状态标签的实际视觉验收保留为人工门禁。
+- 新增确定性插件暴露评估器，对 10/100/1000 个合成工具分别计量全量 Schema、任务预选与渐进暴露的上下文成本，并固定中文召回、参数 Schema 和无命中失败方向。未配 tokenizer 时仍使用 UTF-8 字节保守上界，可注入 Provider 计数器；报告将真实模型任务完成率标记为 `pending_manual`。评估定向测试 `3 passed`，最终后端全量基线为 `874 passed, 1 skipped`，Ruff 与 diff check 通过。
+- 完成一轮规格—实现收口审计：宿主端仍可离线验证的 Runtime、预算、供应链、确认与评估契约已提交。正式目录信任文件和真实目录服务缺失，独立小红书包/Release 未发布，Claude Code/Codex 仍未获真实会话契约验证，也没有真实账号发布或浏览器视觉证据；这些项目保持阻塞而不以 Fake、测试密钥或推测状态伪造完成。

@@ -81,7 +81,7 @@ docs/
 | v2.5 | 自动化实现完成，待人工验收 | 显式可预览、可取消和可恢复的白盒批量成片 |
 | v2.6 | A 与最小 B 已实现，真实模型/照片待验收 | Domain Pack、声明式 API/CLI Harness、受控候选 Runtime；CLI/UI/恢复与领域评测待后续阶段 |
 
-尚未进入规格阶段的后续版本只存在于产品路线图和平台总体设计中。v2.7 受控插件需等待 v2.6 Tool、Domain Pack 与权限边界稳定后再建立规格。
+尚未归属版本的功能方案先保存在 `docs/specs/`。受控插件的跨版本方案见 [插件 MCP 工具发现与社媒工作流](specs/260912-plugin-mcp-tool-discovery/design.md)（[需求](specs/260912-plugin-mcp-tool-discovery/requirements.md)、[任务](specs/260912-plugin-mcp-tool-discovery/tasks.md)）；当前已开始实现通用宿主切片，v2.7 正式收口仍依赖 v2.6 Tool、Domain Pack 与权限边界稳定。
 
 ## 5. 迁移映射
 

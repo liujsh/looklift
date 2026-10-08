@@ -343,6 +343,7 @@ export type RuntimeSummary = {
   capabilities: string[];
   supports_resume: boolean;
   supports_mcp: boolean;
+  plugin_task_support: "verified" | "unverified" | "unsupported";
   models: string[];
   display_name: string;
   support_level: "stable" | "experimental";
@@ -379,6 +380,97 @@ export type PluginSummary = {
   content_hash: string;
   source: string;
   enabled: boolean;
+  installed: boolean;
+  aliases: string[];
+  description: string;
+  services: PluginServiceSummary[];
+};
+
+export type PluginCatalogItem = {
+  name: string;
+  version: string;
+  license: string;
+  capabilities: string[];
+  platforms: string[];
+  compatible: boolean;
+  installed: boolean;
+  enabled: boolean;
+  package_present: boolean;
+  revoked: boolean;
+  installable: boolean;
+  upgrade_from: string | null;
+};
+
+export type PluginCatalogSnapshot = {
+  revision: number;
+  issued_at: number;
+  expires_at: number;
+  stale: boolean;
+  plugins: PluginCatalogItem[];
+};
+
+export type PluginServiceSummary = {
+  name: string;
+  transport: "stdio";
+  requires_credential: boolean;
+};
+
+export type PluginConnectorSummary = {
+  connector_id: string;
+  protocol: "mcp";
+  receiver: string;
+  capabilities: string[];
+  workspace_id: string;
+  account_id: string;
+  authorized: boolean;
+  connected: boolean;
+  plugin_name: string | null;
+  plugin_version: string | null;
+  service: string | null;
+};
+
+export type CreatePluginConnectorRequest = {
+  plugin_name: string;
+  version: string;
+  service_name: string;
+  project_id: string;
+  account_id: string;
+  credential?: string;
+  confirmed: true;
+};
+
+export type PluginActionState =
+  | "pending_confirmation"
+  | "confirmed"
+  | "executing"
+  | "succeeded"
+  | "failed"
+  | "unknown"
+  | "rejected"
+  | "cancelled"
+  | "expired";
+
+export type PluginConfirmationField = {
+  key: string;
+  label: string;
+  control: "text" | "textarea" | "select" | "datetime-local" | "number" | "readonly";
+  options: string[];
+};
+
+export type PluginActionSummary = {
+  action_id: string;
+  project_id: string;
+  plugin_identity: string;
+  account_id: string;
+  arguments: Record<string, unknown>;
+  asset_hashes: string[];
+  state: PluginActionState;
+  revision: number;
+  expires_at: number | null;
+  result: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  confirmation_fields: PluginConfirmationField[];
 };
 
 export type AgentRunManifest = {

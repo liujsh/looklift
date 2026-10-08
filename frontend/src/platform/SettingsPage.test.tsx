@@ -42,8 +42,9 @@ describe("SettingsPage", () => {
       detectProvider: vi.fn().mockResolvedValue({ available: true, models: ["gpt-5"] }),
       exportDiagnostics: vi.fn().mockResolvedValue({ ok: true, path: "C:/诊断/diagnostics.json", event_count: 2 }),
       runtimes: vi.fn().mockResolvedValue([
-        { id: "pi-cli", kind: "cli", display_name: "Pi", support_level: "stable", capabilities: ["proxy_image"], supports_resume: true, supports_mcp: true, models: [] },
-        { id: "openai-api", kind: "api", display_name: "OpenAI API", support_level: "experimental", capabilities: ["proxy_image"], supports_resume: false, supports_mcp: false, models: [] },
+        { id: "claude-code", kind: "cli", display_name: "Claude Code", support_level: "experimental", plugin_task_support: "unverified", capabilities: ["mcp"], supports_resume: false, supports_mcp: true, models: [] },
+        { id: "pi-cli", kind: "cli", display_name: "Pi", support_level: "stable", plugin_task_support: "verified", capabilities: ["proxy_image"], supports_resume: true, supports_mcp: true, models: [] },
+        { id: "openai-api", kind: "api", display_name: "OpenAI API", support_level: "experimental", plugin_task_support: "verified", capabilities: ["proxy_image"], supports_resume: false, supports_mcp: false, models: [] },
       ]),
       detectRuntimes: vi.fn().mockResolvedValue([]),
       saveConfig: vi.fn().mockResolvedValue({ ok: true }),
@@ -113,6 +114,8 @@ describe("SettingsPage", () => {
     await act(async () => root.render(<SettingsPage client={client()} />));
     await vi.waitFor(() => expect(container.textContent).toContain("Pi"));
     expect(container.textContent).toContain("正式");
+    expect(container.textContent).toContain("插件任务已验证");
+    expect(container.textContent).toContain("插件任务待契约验证");
 
     const apiMode = [...container.querySelectorAll("button")].find((button) => button.textContent === "API 提供商")!;
     await act(async () => apiMode.click());

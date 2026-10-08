@@ -13,8 +13,9 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
-from .agent_adapter import AgentRunInput
+from .agent_adapter import AgentRunInput, AgentTaskKind
 from .cli_workspace import CliWorkspace, sanitized_cli_environment
+from .plugin_bridge import bridge_tool_definitions
 from .scoped_tool_gateway import agent_tool_definitions
 
 
@@ -80,6 +81,7 @@ def prepare_pi_launch(
     gateway_url: str,
     token: str,
     source_environment: Mapping[str, str],
+    tool_definitions: Sequence[Mapping[str, object]] | None = None,
 ) -> PiLaunchSpec:
     """生成不依赖用户项目资源的 Pi 单次 JSON 运行规格。"""
     extension = extension_path.resolve()
@@ -92,8 +94,17 @@ def prepare_pi_launch(
         raise ValueError("Scoped Tool Token 不能为空")
 
     schema_path = workspace.path / "tool-schema.json"
+    if tool_definitions is None:
+        tool_definitions = (
+            agent_tool_definitions()
+            if run_input.task_kind is AgentTaskKind.PHOTO_EDITING
+            else bridge_tool_definitions()
+        )
+    definitions = tuple(tool_definitions)
+    if not definitions:
+        raise ValueError("Pi 至少需要一个受控工具")
     schema_path.write_text(
-        json.dumps(agent_tool_definitions(), ensure_ascii=False, separators=(",", ":")),
+        json.dumps(definitions, ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",
     )
     command = (

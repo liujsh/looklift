@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import json
 import threading
 from collections.abc import Callable, Mapping
 from typing import Any
@@ -26,6 +25,7 @@ from ..agent_adapter import (
     AgentEventKind,
     AgentImage,
     AgentRunInput,
+    AgentTaskKind,
 )
 from ..builtin_runtimes import builtin_runtime_registry
 from ..domain_pack import compile_domain_pack
@@ -101,27 +101,71 @@ def build_run_input(
         model = str(payload["model"])
         instructions = str(payload["domain_pack"]["instructions"])
         user_message = str(payload["domain_pack"]["user_message"])
-        if proxy_jpeg is None:
-            encoded = payload.get("proxy_jpeg")
-            proxy_jpeg = base64.b64decode(str(encoded), validate=False) if encoded else b""
+        task_kind = AgentTaskKind(payload.get("task_kind", "photo_editing"))
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError("Attempt 输入缺少必要字段") from exc
-    if not proxy_jpeg:
-        raise ValueError("proxy_jpeg 不能为空")
+    images: list[bytes] = []
+    if task_kind is AgentTaskKind.PLUGIN_TASK:
+        encoded_images = payload.get("proxy_jpegs", [])
+        if not isinstance(encoded_images, list) or len(encoded_images) > 20:
+            raise ValueError("proxy_jpegs 必须是不超过 20 项的数组")
+        if any(not isinstance(value, str) or not value for value in encoded_images):
+            raise ValueError("proxy_jpegs 必须只包含非空 Base64 字符串")
+        try:
+            images.extend(
+                base64.b64decode(value, validate=True)
+                for value in encoded_images
+            )
+        except ValueError as exc:
+            raise ValueError("proxy_jpegs 包含无效图片编码") from exc
+        if proxy_jpeg:
+            images.insert(0, proxy_jpeg)
+    else:
+        if proxy_jpeg is None:
+            encoded = payload.get("proxy_jpeg")
+            try:
+                proxy_jpeg = base64.b64decode(str(encoded), validate=True) if encoded else b""
+            except ValueError as exc:
+                raise ValueError("proxy_jpeg 编码无效") from exc
+        if not proxy_jpeg:
+            raise ValueError("proxy_jpeg 不能为空")
+        images.append(proxy_jpeg)
+    if any(not image for image in images):
+        raise ValueError("代理图不能为空")
+    if sum(len(image) for image in images) > 40 * 1024 * 1024:
+        raise ValueError("代理图集合超过 40 MiB 上限")
+    tool_names = (
+        ["render_candidate", "finish_candidate"]
+        if task_kind is AgentTaskKind.PHOTO_EDITING
+        else ["discover_tools", "describe_tools", "invoke_tool", "read_plugin_resource"]
+    )
     pack = compile_domain_pack(
         DomainPackRequest(
-            system_contract=VersionedText("system", 1, "禁止正式提交。"),
+            system_contract=VersionedText(
+                "system",
+                1,
+                "禁止未经用户确认的正式提交。",
+            ),
             domain_contract=VersionedText("domain", 1, instructions),
             tool_contract=VersionedJson(
                 "tools",
                 1,
-                {"tools": ["render_candidate", "finish_candidate"]},
+                {"tools": tool_names},
             ),
             user_goal=user_message,
-            run_context={"transport": "daemon-sse"},
+            run_context={"transport": "daemon-sse", "task_kind": task_kind.value},
         )
     )
-    return AgentRunInput(run_id, attempt_id, pack, AgentImage("image/jpeg", proxy_jpeg), model)
+    proxy_images = tuple(AgentImage("image/jpeg", image) for image in images)
+    return AgentRunInput(
+        run_id,
+        attempt_id,
+        pack,
+        proxy_images[0] if proxy_images else None,
+        model,
+        task_kind=task_kind,
+        additional_proxy_images=proxy_images[1:],
+    )
 
 
 def _terminal_failed(

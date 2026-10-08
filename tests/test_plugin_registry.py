@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from looklift.capabilities import CapabilityGrant, ScopedTokenStore
-from looklift.plugin_registry import PluginManifest, PluginManifestError, PluginRegistry
+from looklift.capabilities import CapabilityGrant, CapabilityGrantStore, ScopedTokenStore
+from looklift.plugin_registry import PluginManifest, PluginManifestError, PluginRegistry, PluginService
 from looklift.skill_staging import SkillStagingError, stage_skill_snapshot
 
 
@@ -29,6 +29,37 @@ def test_registry_resolves_semver_and_uninstall_preserves_history():
     registry.uninstall("catalog-tools", "1.10.0")
     assert registry.resolve("catalog-tools").version == "1.9.0"
     assert registry.resolve("catalog-tools", "1.10.0", include_disabled=True).enabled is False
+    registry.set_enabled("catalog-tools", "1.10.0", enabled=True)
+    assert registry.resolve("catalog-tools").version == "1.10.0"
+
+
+def test_registry_preserves_cleaned_package_state(tmp_path):
+    registry = PluginRegistry(tmp_path)
+    registry.install(_manifest("1.0.0"))
+    registry.set_enabled("catalog-tools", "1.0.0", enabled=False)
+
+    cleaned = registry.set_installed("catalog-tools", "1.0.0", installed=False)
+
+    assert cleaned.enabled is False
+    assert cleaned.installed is False
+    assert PluginRegistry(tmp_path).resolve(
+        "catalog-tools", "1.0.0", include_disabled=True
+    ).installed is False
+
+    with pytest.raises(PluginManifestError, match="安装状态"):
+        PluginManifest(
+            1,
+            "catalog-tools",
+            "2.0.0",
+            "connector",
+            "catalog",
+            "declarative",
+            ("catalog",),
+            frozenset({"connector.read_catalog"}),
+            "b" * 64,
+            enabled=True,
+            installed=False,
+        )
 
 
 def test_manifest_rejects_bad_digest_and_privileged_capability():
@@ -78,3 +109,46 @@ def test_registry_lists_versions_without_exposing_disabled_as_active():
     assert listed[0]["name"] == "catalog-tools"
     assert listed[0]["version"] == "1.0.0"
     assert registry.list(include_disabled=True)[-1]["enabled"] is False
+
+
+def test_registry_list_projects_only_safe_service_metadata():
+    registry = PluginRegistry()
+    registry.install(
+        PluginManifest(
+            2,
+            "notes",
+            "1.0.0",
+            "connector",
+            "notes",
+            "sidecar",
+            ("text",),
+            frozenset({"notes.read"}),
+            "a" * 64,
+            services=(
+                PluginService(
+                    "main",
+                    "stdio",
+                    "runtime/notes.exe",
+                    "b" * 64,
+                    arguments=("--mcp",),
+                    credential_env="NOTES_TOKEN",
+                ),
+            ),
+        )
+    )
+
+    assert registry.list()[0]["services"] == [
+        {"name": "main", "transport": "stdio", "requires_credential": True}
+    ]
+
+
+def test_grant_store_persists_project_scope_and_revocation(tmp_path):
+    store = CapabilityGrantStore(tmp_path)
+    grant = CapabilityGrant("plugin", frozenset({"social.publish"}), "project-a", "a" * 64)
+    store.put(grant)
+
+    restored = CapabilityGrantStore(tmp_path)
+    assert restored.active_for("plugin", project_id="project-a") == grant
+    assert restored.active_for("plugin", project_id="project-b") is None
+    restored.revoke("plugin", project_id="project-a")
+    assert CapabilityGrantStore(tmp_path).active_for("plugin", project_id="project-a") is None

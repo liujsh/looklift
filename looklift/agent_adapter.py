@@ -37,6 +37,13 @@ class AgentEventKind(StrEnum):
         return self in {self.RUN_FINISHED, self.RUN_FAILED}
 
 
+class AgentTaskKind(StrEnum):
+    """共享 Agent Loop 上的任务策略类型。"""
+
+    PHOTO_EDITING = "photo_editing"
+    PLUGIN_TASK = "plugin_task"
+
+
 @dataclass(frozen=True)
 class AgentImage:
     """已脱敏的代理图；Adapter 不接收原图路径。"""
@@ -58,8 +65,10 @@ class AgentRunInput:
     run_id: str
     attempt_id: str
     domain_pack: CompiledDomainPack
-    proxy_image: AgentImage
+    proxy_image: AgentImage | None
     model: str
+    task_kind: AgentTaskKind = AgentTaskKind.PHOTO_EDITING
+    additional_proxy_images: tuple[AgentImage, ...] = ()
 
     def __post_init__(self) -> None:
         _require_text(self.run_id, "run_id")
@@ -74,6 +83,19 @@ class AgentRunInput:
         if not _SHA256_PATTERN.fullmatch(self.domain_pack.content_hash):
             raise ValueError("Domain Pack Hash 必须是小写 SHA-256")
         _require_text(self.model, "model")
+        if not isinstance(self.task_kind, AgentTaskKind):
+            raise ValueError("Agent 任务类型无效")
+        if self.task_kind is AgentTaskKind.PHOTO_EDITING and self.proxy_image is None:
+            raise ValueError("修图任务必须包含代理图")
+        images = self.proxy_images
+        if any(not isinstance(image, AgentImage) for image in images):
+            raise ValueError("代理图集合无效")
+
+    @property
+    def proxy_images(self) -> tuple[AgentImage, ...]:
+        """插件任务可无图或多图；修图任务仍保持单图 ABI。"""
+        head = () if self.proxy_image is None else (self.proxy_image,)
+        return head + tuple(self.additional_proxy_images)
 
 
 @dataclass(frozen=True)

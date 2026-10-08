@@ -6,7 +6,7 @@ import http.client
 import json
 import threading
 
-from looklift.agent_adapter import AgentEvent, AgentEventKind, ScriptedAgentEvent
+from looklift.agent_adapter import AgentEvent, AgentEventKind, AgentTaskKind, ScriptedAgentEvent
 from looklift.agent_assembly import make_openai_adapter_factory
 from looklift import config
 from looklift.fake_agent_adapter import FakeAgentAdapter
@@ -39,6 +39,24 @@ def _collect(streamer):
 
 def _sse(value: dict) -> bytes:
     return f"data: {json.dumps(value)}\n\n".encode()
+
+
+def test_build_run_input_supports_plugin_task_with_multiple_or_no_images():
+    payload = _body(
+        task_kind="plugin_task",
+        proxy_jpeg=None,
+        proxy_jpegs=[
+            base64.b64encode(b"jpeg-one").decode(),
+            base64.b64encode(b"jpeg-two").decode(),
+        ],
+    )
+    run_input = agent_stream.build_run_input(payload)
+    assert run_input.task_kind is AgentTaskKind.PLUGIN_TASK
+    assert [image.content for image in run_input.proxy_images] == [b"jpeg-one", b"jpeg-two"]
+    assert run_input.domain_pack.source_hashes
+
+    payload["proxy_jpegs"] = []
+    assert agent_stream.build_run_input(payload).proxy_images == ()
 
 
 def test_stream_route_emits_unique_terminal_via_sse(tmp_path, monkeypatch):

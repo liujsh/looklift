@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import re
 from typing import Any
 
-from .agent_adapter import AgentRunInput
+from .agent_adapter import AgentRunInput, AgentTaskKind
 
 
 _TOOL_NAMES = frozenset({"render_candidate", "finish_candidate"})
@@ -17,18 +18,20 @@ def pi_prompt_command(run_input: AgentRunInput) -> dict[str, Any]:
     """生成不含 Runtime 身份与私有路径的 Pi RPC 首轮消息。"""
     message = (
         f"{run_input.domain_pack.instructions}\n\n"
-        f"# 本轮目标\n\n{run_input.domain_pack.user_message}\n\n"
-        "依据领域契约生成候选，并以 finish_candidate 结束。"
+        f"# 本轮目标\n\n{run_input.domain_pack.user_message}"
     )
+    if run_input.task_kind is AgentTaskKind.PHOTO_EDITING:
+        message += "\n\n依据领域契约生成候选，并以 finish_candidate 结束。"
     return {
         "type": "prompt",
         "message": message,
         "images": [
             {
                 "type": "image",
-                "data": base64.b64encode(run_input.proxy_image.content).decode("ascii"),
-                "mimeType": run_input.proxy_image.media_type,
+                "data": base64.b64encode(image.content).decode("ascii"),
+                "mimeType": image.media_type,
             }
+            for image in run_input.proxy_images
         ],
     }
 
@@ -46,10 +49,20 @@ async def send_pi_rpc_command(
     await process.stdin.drain()
 
 
-def pi_tool_identity(source: dict[str, Any]) -> tuple[str, str]:
+def pi_tool_identity(
+    source: dict[str, Any],
+    *,
+    allowed_tools: frozenset[str] = _TOOL_NAMES,
+) -> tuple[str, str]:
     name = source.get("toolName")
     call_id = source.get("toolCallId")
-    if name not in _TOOL_NAMES or not isinstance(call_id, str) or not call_id:
+    if (
+        not isinstance(name, str)
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", name)
+        or name not in allowed_tools
+        or not isinstance(call_id, str)
+        or not call_id
+    ):
         raise ValueError("Pi 工具事件身份无效")
     return name, call_id
 

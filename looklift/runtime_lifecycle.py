@@ -4,8 +4,8 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Callable, Mapping
 
-from .agent_adapter import AgentAdapter, AgentEvent, AgentRunInput
-from .runtime_registry import RuntimeRegistry
+from .agent_adapter import AgentAdapter, AgentEvent, AgentRunInput, AgentTaskKind
+from .runtime_registry import PluginTaskSupport, RuntimeRegistry
 
 
 class RuntimeLifecycleError(RuntimeError):
@@ -45,6 +45,11 @@ class RuntimeLifecycleEngine:
         timeout_seconds: float | None = None,
     ) -> AsyncIterator[AgentEvent]:
         definition = self._registry.get(runtime_id)
+        if (
+            run_input.task_kind is AgentTaskKind.PLUGIN_TASK
+            and definition.plugin_task_support is not PluginTaskSupport.VERIFIED
+        ):
+            raise RuntimeCapabilityError("Runtime 未通过插件任务契约验证")
         missing = set(required_capabilities) - set(definition.permission_profile)
         if missing:
             raise RuntimeCapabilityError(
@@ -79,6 +84,7 @@ class RuntimeLifecycleEngine:
                         "runtime_id": runtime_id,
                         "capabilities": sorted(definition.capabilities),
                         "supports_resume": definition.supports_resume,
+                        "plugin_task_support": definition.plugin_task_support.value,
                     }
                     yield AgentEvent(
                         kind=event.kind,

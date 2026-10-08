@@ -11,8 +11,18 @@ if (!gatewayUrl || !token || !schemaFile) {
 const definitions = JSON.parse(readFileSync(schemaFile, "utf8"));
 if (
   !Array.isArray(definitions) ||
-  definitions.length !== 2 ||
-  definitions.some((item) => !["render_candidate", "finish_candidate"].includes(item.name))
+  definitions.length < 1 ||
+  definitions.length > 32 ||
+  new Set(definitions.map((item) => item?.name)).size !== definitions.length ||
+  definitions.some(
+    (item) =>
+      !item ||
+      typeof item.name !== "string" ||
+      !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(item.name) ||
+      typeof item.description !== "string" ||
+      !item.inputSchema ||
+      item.inputSchema.type !== "object"
+  )
 ) {
   throw new Error("LookLift Tool Schema 不合法");
 }
@@ -53,7 +63,7 @@ export default function (pi) {
         return {
           content,
           details: value.result,
-          terminate: definition.name === "finish_candidate" && value.result.ok === true,
+          terminate: definition.terminal === true && value.result.ok === true,
         };
       },
     });

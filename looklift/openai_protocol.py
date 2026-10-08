@@ -26,26 +26,42 @@ def build_openai_request(
     *,
     instructions: str,
     user_message: str,
-    proxy_jpeg: bytes,
+    proxy_jpeg: bytes | None,
+    proxy_jpegs: Sequence[bytes] | None = None,
     tools: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
-    image = base64.b64encode(proxy_jpeg).decode("ascii")
+    images = tuple(proxy_jpegs) if proxy_jpegs is not None else (() if proxy_jpeg is None else (proxy_jpeg,))
+    user_content: list[dict[str, Any]] = [{"type": "text", "text": user_message}]
+    for content in images:
+        image = base64.b64encode(content).decode("ascii")
+        user_content.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{image}"},
+            }
+        )
     return {
         "model": snapshot.model,
         "messages": [
             {"role": "system", "content": instructions},
             {
                 "role": "user",
-                "content": [
-                    {"type": "text", "text": user_message},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{image}"},
-                    },
-                ],
+                "content": user_content,
             },
         ],
-        "tools": [
+        "tools": project_openai_tools(tools),
+        "tool_choice": "auto",
+        "max_tokens": snapshot.max_tokens,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+
+
+def project_openai_tools(
+    tools: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """将传输无关工具定义完整投影为 OpenAI-compatible tools。"""
+    return [
             {
                 "type": "function",
                 "function": {
@@ -55,12 +71,7 @@ def build_openai_request(
                 },
             }
             for tool in tools
-        ],
-        "tool_choice": "auto",
-        "max_tokens": snapshot.max_tokens,
-        "stream": True,
-        "stream_options": {"include_usage": True},
-    }
+        ]
 
 
 class OpenAiSseParser:

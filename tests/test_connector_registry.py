@@ -78,3 +78,61 @@ def test_config_does_not_expose_credential_reference() -> None:
     public = config.public_dict()
     assert public["connector_id"] == "catalog"
     assert "credential_ref" not in public
+
+
+def test_registry_persists_connection_state_without_exposing_secret(tmp_path) -> None:
+    registry = ConnectorRegistry(root=tmp_path)
+    registry.register(
+        _manifest(), credential_ref="keyring://looklift/catalog", workspace_id="project-a", authorized=True
+    )
+    registry.connect("catalog")
+
+    restored = ConnectorRegistry(root=tmp_path)
+    assert restored.workspace_snapshot("project-a") == ()
+    assert restored.get("catalog").authorized is True
+    assert restored.get("catalog").connected is False
+    assert "credential_ref" not in restored.public_list()[0]
+    assert "keyring://looklift/catalog" in (tmp_path / "connectors.json").read_text(encoding="utf-8")
+
+
+def test_registry_keeps_accounts_isolated_by_connection(tmp_path) -> None:
+    registry = ConnectorRegistry(root=tmp_path)
+    registry.register(
+        _manifest("notes-main"),
+        credential_ref="dpapi://notes-main",
+        workspace_id="project-a",
+        account_id="account-main",
+        authorized=True,
+        plugin_name="notes",
+        plugin_version="1.2.3",
+        service="main",
+    )
+    registry.register(
+        _manifest("notes-work"),
+        credential_ref="keyring://notes/work",
+        workspace_id="project-a",
+        account_id="account-work",
+        authorized=True,
+    )
+    registry.connect("notes-main")
+    registry.connect("notes-work")
+
+    assert registry.account_snapshot("project-a", receiver="catalog.example") == (
+        ("notes-main", "account-main"),
+        ("notes-work", "account-work"),
+    )
+    assert registry.get("notes-main").account_id == "account-main"
+    restored = ConnectorRegistry(root=tmp_path)
+    assert restored.get("notes-work").account_id == "account-work"
+    assert restored.get("notes-main").plugin_version == "1.2.3"
+    assert "credential_ref" not in restored.get("notes-main").public_dict()
+
+
+def test_registry_rejects_unsafe_account_id() -> None:
+    registry = ConnectorRegistry()
+    with pytest.raises(ConnectorRegistryError, match="账号"):
+        registry.register(
+            _manifest(),
+            credential_ref="keyring://catalog",
+            account_id="../cookie-profile",
+        )

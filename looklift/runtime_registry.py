@@ -23,6 +23,14 @@ class RuntimeSupportLevel(StrEnum):
     EXPERIMENTAL = "experimental"
 
 
+class PluginTaskSupport(StrEnum):
+    """Runtime 的插件任务契约验证状态，与 MCP 声明分离。"""
+
+    VERIFIED = "verified"
+    UNVERIFIED = "unverified"
+    UNSUPPORTED = "unsupported"
+
+
 @dataclass(frozen=True)
 class RuntimeDefinition:
     runtime_id: str
@@ -45,6 +53,7 @@ class RuntimeDefinition:
     supports_cancel: bool = True
     supports_timeout: bool = True
     selectable: bool = True
+    plugin_task_support: PluginTaskSupport = PluginTaskSupport.UNSUPPORTED
 
     def __post_init__(self) -> None:
         if not self.runtime_id or self.kind not in {"api", "cli", "fake"}:
@@ -85,6 +94,11 @@ class RuntimeDefinition:
             raise RuntimeDefinitionError("Runtime 取消或超时能力声明无效")
         if not isinstance(self.selectable, bool):
             raise RuntimeDefinitionError("Runtime 可选择状态无效")
+        try:
+            plugin_task_support = PluginTaskSupport(self.plugin_task_support)
+        except ValueError as exc:
+            raise RuntimeDefinitionError("插件任务支持状态无效") from exc
+        object.__setattr__(self, "plugin_task_support", plugin_task_support)
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from looklift.agent_adapter import AgentImage, AgentRunInput
+from looklift.agent_adapter import AgentImage, AgentRunInput, AgentTaskKind
 from looklift.cli_workspace import CliWorkspaceManager, sanitized_cli_environment
 from looklift.domain_pack_types import CompiledDomainPack
 
@@ -65,3 +65,27 @@ def test_cli_environment_keeps_operational_values_but_removes_secrets() -> None:
     assert cleaned["PYTHONIOENCODING"] == "utf-8"
     assert not {"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "LOOKLIFT_SECRET", "DATABASE_URL"} & cleaned.keys()
     assert "UNRELATED" not in cleaned
+
+
+def test_plugin_workspace_supports_multiple_or_no_proxy_images(tmp_path: Path) -> None:
+    base = _run_input()
+    plugin_input = AgentRunInput(
+        base.run_id,
+        base.attempt_id,
+        base.domain_pack,
+        AgentImage("image/jpeg", b"first"),
+        base.model,
+        task_kind=AgentTaskKind.PLUGIN_TASK,
+        additional_proxy_images=(AgentImage("image/jpeg", b"second"),),
+    )
+    manager = CliWorkspaceManager(tmp_path)
+    lease = manager.create(plugin_input)
+    assert [path.read_bytes() for path in lease.proxy_paths] == [b"first", b"second"]
+
+    text_only = AgentRunInput(
+        "run-text", "attempt-text", base.domain_pack, None, base.model,
+        task_kind=AgentTaskKind.PLUGIN_TASK,
+    )
+    empty = manager.create(text_only)
+    assert empty.proxy_path is None
+    assert empty.proxy_paths == ()
