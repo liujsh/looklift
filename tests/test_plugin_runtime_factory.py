@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
 import pytest
 
@@ -104,7 +105,9 @@ def test_stdio_factory_binds_reviewed_entrypoint_profile_and_credential(tmp_path
     transport = captured[0]
     assert transport.command == (str(executable.resolve()), "--mcp")
     assert transport.environment["NOTES_TOKEN"] == "secret-value"
-    assert transport.environment["LOOKLIFT_PLUGIN_PROFILE"].endswith("plugin-state\\notes-main")
+    assert Path(transport.environment["LOOKLIFT_PLUGIN_PROFILE"]) == (
+        tmp_path / "plugin-state" / "notes-main"
+    ).resolve()
     assert transport.environment["SYSTEMROOT"] == "C:\\Windows"
     assert "LEAK_ME" not in transport.environment
 
